@@ -1,0 +1,7 @@
+# Character registry and discord tokens
+characters.yaml
+
+# SillyTavern submodule
+sillytavern/node_modules/
+sillytavern/data/
+sillytavern/public/extensions/
