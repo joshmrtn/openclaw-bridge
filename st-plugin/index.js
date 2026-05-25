@@ -38,6 +38,18 @@ async function init(router) {
             plugin: PLUGIN_ID,
         });
     });
+
+    // Characters listing endpoint
+    const charLoader = require('./character-loader');
+
+    router.get('/characters', (request, response) => {
+        try {
+            const chars = charLoader.listCharacters();
+            response.json(chars);
+        } catch (err) {
+            response.status(500).json({ error: err.message });
+        }
+    });
 }
 
 module.exports = {
