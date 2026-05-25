@@ -1,5 +1,12 @@
 # Character registry and discord tokens
 characters.yaml
+*.env
+
+# Python
+__pycache__/
+
+# OS files
+.DS_Store
 
 # SillyTavern submodule
 sillytavern/node_modules/
