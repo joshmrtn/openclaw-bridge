@@ -1,3 +1,4 @@
 [submodule "sillytavern"]
 	path = sillytavern
 	url = https://github.com/SillyTavern/SillyTavern.git
+	ignore = dirty
