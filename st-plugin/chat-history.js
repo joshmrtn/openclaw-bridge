@@ -81,10 +81,42 @@ function constructStMessage({ role = 'user', content = '', name = null, user_id 
     };
 }
 
+function buildDiscordMessageContent(message, images = []) {
+    if (!Array.isArray(images) || images.length === 0) {
+        return message;
+    }
+
+    return [
+        { type: 'text', text: message },
+        ...images.map(image => ({
+            type: 'image_url',
+            image_url: { url: image },
+        })),
+    ];
+}
+
+async function appendDiscordMessageToHistory(characterName, userMessage, response, baseDir = DEFAULT_CHATS_DIR, targetFile = null) {
+    const userContent = buildDiscordMessageContent(userMessage.message || '', userMessage.images || []);
+    const userEntry = constructStMessage({
+        role: 'user',
+        content: userContent,
+        user_id: userMessage.user_id || null,
+    });
+    const assistantEntry = constructStMessage({
+        role: 'assistant',
+        content: response,
+    });
+
+    await appendMessage(characterName, userEntry, baseDir, targetFile);
+    await appendMessage(characterName, assistantEntry, baseDir, targetFile);
+}
+
 module.exports = {
     listChatFiles,
     readLatestChat,
     appendMessage,
     constructStMessage,
+    buildDiscordMessageContent,
+    appendDiscordMessageToHistory,
     DEFAULT_CHATS_DIR,
 };

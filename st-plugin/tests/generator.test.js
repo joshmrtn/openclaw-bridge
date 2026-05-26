@@ -15,11 +15,9 @@ describe('generator (mock)', () => {
         const sample = { name: 'Gerard', description: 'Gerard is warm and likes tea.' };
         fs.writeFileSync(path.join(chars, 'Gerard.json'), JSON.stringify(sample));
 
-        // lorebooks
+        // lorebooks (no-op here; lore is handled by ST Generate in the extension)
         const loreDir = path.join(tmpDir, 'lorebooks', 'Gerard');
         fs.mkdirSync(loreDir, { recursive: true });
-        const lore = [{ id: 'l1', text: 'Gerard loves tea.', triggers: ['tea'] }];
-        fs.writeFileSync(path.join(loreDir, 'lorebook.json'), JSON.stringify(lore));
 
         // chats
         const chats = path.join(tmpDir, 'chats', 'Gerard');
@@ -37,7 +35,7 @@ describe('generator (mock)', () => {
         expect(assembled[0].role).toBe('system');
         const contents = assembled.map(m => m.content).join(' ');
         expect(contents).toMatch(/Gerard is warm/);
-        expect(contents).toMatch(/Gerard loves tea/);
+        // lore is injected by ST Generate; plugin no longer includes lorebook text here
         expect(contents).toMatch(/Hi/);
         expect(assembled[assembled.length - 1].content).toMatch(/tea\?/);
     });

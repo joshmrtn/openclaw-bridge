@@ -1,6 +1,5 @@
 const path = require('path');
 const characterLoader = require('./character-loader');
-const lore = require('./lorebook-loader');
 const chatHistory = require('./chat-history');
 
 async function _findCharacterMeta(name, charDir) {
@@ -47,9 +46,9 @@ async function assembleMessages(characterName, incomingText, opts = {}) {
     // system prompt
     const systemMsg = { role: 'system', content: `Character: ${charDescription}` };
 
-    // lorebook entries
-    const matchedLore = await lore.matchLorebookEntries(incomingText, characterName, { baseDir: loreDir });
-    const loreMsgs = matchedLore.map(e => ({ role: 'system', content: `Lore: ${e.text || e.content || ''}` }));
+    // lorebook entries are applied by SillyTavern's Generate() in the extension
+    const matchedLore = [];
+    const loreMsgs = [];
 
     // chat history
     const history = await chatHistory.readLatestChat(characterName, chatsDir);

@@ -1,5 +1,12 @@
 const PLUGIN_ID = 'openclaw-bridge';
 const PLUGIN_VERSION = '0.1.0';
+const charLoader = require('./character-loader');
+const chatHistory = require('./chat-history');
+const generator = require('./generator');
+const sessionManager = require('./session-manager');
+const { startWebSocketServer } = require('./ws-server');
+
+let wsBundle = null;
 
 function getAuthToken() {
     return process.env.OPENCLAW_BRIDGE_AUTH_TOKEN || process.env.OPENCLAW_BRIDGE_TOKEN || '';
@@ -39,16 +46,21 @@ function parseDebugFlag(request) {
 async function init(router) {
     router.use(requireBearerToken);
 
+    if (!wsBundle) {
+        wsBundle = startWebSocketServer({
+            port: Number(process.env.OPENCLAW_BRIDGE_WS_PORT || 8765),
+            sessionManager,
+        });
+    }
+
     router.get('/status', (request, response) => {
         response.json({
             status: 'ok',
             version: PLUGIN_VERSION,
             plugin: PLUGIN_ID,
+            connected_ws_clients: sessionManager.getConnectedClientCount(),
         });
     });
-
-    // Characters listing endpoint
-    const charLoader = require('./character-loader');
 
     router.get('/characters', async (request, response) => {
         try {
@@ -59,11 +71,8 @@ async function init(router) {
         }
     });
 
-    const generator = require('./generator');
-
     router.post('/generate', async (request, response) => {
         const { character, message, images = [], channel = null, user_id = null } = request.body || {};
-        const debug = parseDebugFlag(request);
 
         if (!character || !message) {
             response.status(400).json({
@@ -73,21 +82,45 @@ async function init(router) {
         }
 
         try {
-            const result = await generator.generate(character, message, {
-                images,
-                channel,
-                user_id,
-            });
-            const payload = {
-                character,
-                response: result.response,
-            };
+            let generatedText;
+            let shouldWriteHistory = true;
 
-            if (debug) {
-                payload.assembled = result.assembled;
+            try {
+                generatedText = await sessionManager.requestGenerate({
+                    character,
+                    message,
+                    images,
+                    channel,
+                    user_id,
+                });
+            } catch (wsError) {
+                const result = await generator.generate(character, message, {
+                    images,
+                    channel,
+                    user_id,
+                });
+                generatedText = result.response;
+                shouldWriteHistory = false;
             }
 
-            response.json(payload);
+            if (shouldWriteHistory) {
+                await chatHistory.appendDiscordMessageToHistory(
+                    character,
+                    {
+                        message,
+                        images,
+                        user_id,
+                    },
+                    generatedText,
+                );
+            }
+
+            const result = {
+                character,
+                response: generatedText,
+            };
+
+            response.json(result);
         } catch (err) {
             response.status(500).json({ error: err.message });
         }
