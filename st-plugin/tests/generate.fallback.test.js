@@ -12,13 +12,13 @@ describe('plugin generate fallback behavior', () => {
         jest.doMock('../generator', () => mockGenerator);
 
         // mock ws-server to avoid real socket bind
-        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => {} })) };
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
         jest.doMock('../ws-server', () => mockWsServer);
 
         const plugin = require('..');
         const chatHistory = require('../chat-history');
 
-        const router = { use() {}, get() {}, post(path, handler) { this.postHandler = handler; } };
+        const router = { use() { }, get() { }, post(path, handler) { this.postHandler = handler; } };
         await plugin.init(router);
 
         const appendSpy = jest.spyOn(chatHistory, 'appendDiscordMessageToHistory').mockResolvedValue();
