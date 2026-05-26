@@ -15,3 +15,6 @@ node_modules
 sillytavern/node_modules/
 sillytavern/data/
 sillytavern/public/extensions/
+
+# Playwright artifacts
+st-plugin/test-results/

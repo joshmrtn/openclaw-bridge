@@ -5,9 +5,11 @@
     "type": "commonjs",
     "scripts": {
         "test": "jest --runInBand --colors",
-        "test:js": "jest --runInBand --colors"
+        "test:js": "jest --runInBand --colors",
+        "test:e2e": "playwright test -c st-plugin/tests/e2e/playwright.config.js"
     },
     "devDependencies": {
+        "@playwright/test": "^1.56.1",
         "jest": "^29.7.0"
     }
 }
