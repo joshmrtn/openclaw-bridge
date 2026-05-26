@@ -50,6 +50,33 @@ async function init(router) {
             response.status(500).json({ error: err.message });
         }
     });
+
+    const generator = require('./generator');
+
+    router.post('/generate', async (request, response) => {
+        const { character, message, images = [], channel = null, user_id = null } = request.body || {};
+
+        if (!character || !message) {
+            response.status(400).json({
+                error: 'character and message are required',
+            });
+            return;
+        }
+
+        try {
+            const result = await generator.generate(character, message, {
+                images,
+                channel,
+                user_id,
+            });
+            response.json({
+                character,
+                response: result.response,
+            });
+        } catch (err) {
+            response.status(500).json({ error: err.message });
+        }
+    });
 }
 
 module.exports = {
