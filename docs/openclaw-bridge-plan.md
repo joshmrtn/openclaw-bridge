@@ -632,28 +632,26 @@ curl http://localhost:8000/api/plugins/openclaw-bridge/status
 ```
 
 #### Phase 2.2 — Character card reading
-**Deliverable:** Plugin can read and parse ST's PNG character card format.
+**Deliverable:** Plugin can read ST's character list and expose name → chid mapping for the extension.
 
 Tasks:
-- Write `character-loader.js`: reads PNG from `data/default-user/characters/{name}.png`
-- Extract `tEXt/chara` chunk, base64-decode, parse TavernAI V2 JSON
-- Register `GET /api/plugins/openclaw-bridge/characters` endpoint
-- Add `pngjs` to plugin's own `package.json` if not in ST's `node_modules`
+- Write `character-loader.js`: reads character list from ST's data directory
+- Extract name → chid index mapping for use by the extension
+- Register `GET /api/plugins/openclaw-bridge/characters` endpoint returning
+  character names and indices
+- Deep PNG parsing (character card JSON extraction) is NOT needed here —
+  ST's Generate() handles all character data internally. The parser work
+  done during investigation is useful reference but not required in the plugin.
 
 Unit tests (mock filesystem):
-- Parse a known-good character card PNG → correct JSON fields
-- Handle missing character gracefully → 404
-- Handle malformed PNG → error with message, not crash
+- Character list endpoint returns correct names and count
+- Handle missing ST data directory gracefully → empty array, no crash
 
 Gate checks:
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" \
   http://localhost:8000/api/plugins/openclaw-bridge/characters
-# Expected: JSON array with at least one character, name/description fields present
-
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  "http://localhost:8000/api/plugins/openclaw-bridge/characters/NonExistent"
-# Expected: 404 with error message
+# Expected: JSON array with character names and chid indices
 ```
 
 #### Phase 2.3 — Chat history reading and writing
@@ -663,6 +661,12 @@ Tasks:
 - Write `chat-history.js`: list chat files for a character, read latest, append message
 - Implement file-level locking (simple lockfile or async-mutex) for concurrent access safety
 - Write a helper to construct ST message objects in the correct JSONL format
+- Implement appendDiscordMessageToHistory(characterName, userMessage, response):
+  writes both the incoming message and the generated response to the
+  character's ST chat history file after generation completes.
+  This is now an explicit separate step since Generate('quiet') does not
+  save to history automatically. Without this, Discord conversations will
+  not appear in ST's chat UI.
 
 Unit tests:
 - Read a captured real ST chat file → correct message array
@@ -675,27 +679,12 @@ Gate checks:
 # After writing: open the chat file in ST's UI and verify the message appears
 ```
 
-#### Phase 2.4 — Lorebook loading
-**Deliverable:** Plugin loads a character's active lorebook and applies keyword matching.
+Additional gate checks:
+- After a full generate round-trip via WebSocket, open ST and verify the
+  Discord message and Gerard's response appear in chat history
 
-Tasks:
-- Write `lorebook-loader.js`: find and parse lorebook JSON for a character
-- Implement keyword matching (case-insensitive, whole-word option)
-- Return matched entries sorted by insertion order/depth
-- v1 scope: keyword matching + ordering only. Token budget management deferred to v2.
-
-Unit tests (all with mock data, no LLM):
-- Lorebook with 5 entries, message triggers 2 → correct 2 returned
-- Case-insensitive match works
-- No match → empty array, no error
-- Malformed lorebook file → graceful error, not crash
-
-Gate checks:
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  "http://localhost:8000/api/plugins/openclaw-bridge/characters/Gerard/lorebook?message=hello"
-# Expected: JSON array of matched lorebook entries
-```
+Note: Lorebook injection is handled internally by ST's Generate() function.
+No lorebook implementation is required in the plugin or extension.
 
 ---
 
@@ -734,38 +723,70 @@ curl -X POST "http://localhost:8000/api/plugins/openclaw-bridge/generate?debug=t
 # Expected: response plus assembled payload for debugging
 ```
 
-#### Phase 3.2 — Real generation (live LLM)
-**Deliverable:** `/generate` returns a real in-character response using ST's LLM pipeline.
+#### Phase 3.2 — Real generation via ST's `Generate()` function
+
+**Architecture change from original plan:** Generation does not happen in
+the server plugin via mock req/res. It happens in the UI extension, which
+has access to ST's internal Generate() function via getContext(). The plugin
+receives a Discord message, forwards it to the extension via WebSocket, the
+extension calls Generate() and returns the result via WebSocket, the plugin
+returns the response to the bridge.
+
+**Deliverable:** Incoming messages routed through ST's full generation
+pipeline using Generate('quiet', { force_chid }) with zero UI disruption.
 
 Tasks:
-- Replace stub with real call: construct mock `req`/`res`, call `sendClaudeRequest` (or configured provider)
-- Resolve `request.user.directories` from ST's user system
-- Capture browser DevTools network request to get exact body shape ST uses
-- Handle streaming: ensure `stream: false` in mock request body
+- Verify Generate is exported from ST's context API:
+    const { Generate, characters } = SillyTavern.getContext();
+- Implement generateForCharacter() in the extension:
+    async function generateForCharacter(characterName, message) {
+        const { Generate, characters } = SillyTavern.getContext();
+        const chid = characters.findIndex(c => c.name === characterName);
+        if (chid === -1) throw new Error(`Character not found: ${characterName}`);
+        return await Generate('quiet', {
+            quiet_prompt: message,
+            force_chid: chid,
+            skipWIAN: false
+        });
+    }
+- Wire WebSocket message flow:
+    plugin receives POST /generate
+    → plugin sends {type: "generate", character, message, requestId} via WS
+    → extension calls generateForCharacter()
+    → extension sends {type: "generate_response", requestId, response} via WS
+    → plugin resolves pending request, returns response to bridge
+- Implement requestId correlation in plugin (Map<requestId, resolve fn>)
+  so concurrent requests for different characters don't cross
 
 Integration tests (requires Google AI Studio or Ollama):
 - Response is non-empty string
 - Response is in character (subjective, manual check)
-- Response appears in ST chat UI
-- Chat history file updated with both message and response
+- ST UI shows no disruption during generation
+- Chat history is NOT modified by quiet generation (verify manually)
 
 Gate checks:
 ```bash
-curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/generate \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"character": "Gerard", "message": "What is your favourite colour?", "channel": "test", "user_id": "u001"}'
-# Expected: real in-character response, not "[MOCK RESPONSE]"
-# Open ST: message + response visible in Gerard's chat
-# Open chat file on disk: both messages present in JSONL
+# Send test generate request via curl to plugin
+# Expected: real in-character response returned
+# Open ST UI: active chat unchanged, no new messages appeared
+# Repeat with a different character than the one active in ST UI:
+#   Expected: response is in the correct character's voice
 ```
 
 #### Phase 3.3 — Per-character session mutex
+Architecture note: The generation mutex lives in the UI extension, not the
+server plugin. The plugin needs a separate requestId correlation map for
+WebSocket request/response matching, but generation serialization is the
+extension's responsibility since that's where Generate() is called.
+
 **Deliverable:** Concurrent `/generate` calls for the same character queue correctly, not race.
 
 Tasks:
-- Write `session-manager.js`: `Map<characterName, AsyncMutex>`
-- Wrap generation in mutex acquire/release
+- Write mutex logic in the extension (not session-manager.js):
+  one AsyncMutex equivalent per character, acquired before Generate(),
+  released after response is captured
+- session-manager.js in the plugin handles requestId → resolve fn mapping
+  and WebSocket client tracking only
 - Add session state tracking: last generation timestamp, pending count
 
 Unit tests (stub LLM with artificial delay):
@@ -823,6 +844,29 @@ Gate checks:
 - Expected: `[openclaw-bridge] WebSocket connected` log line
 - Plugin status endpoint shows `connected_ws_clients: 1`
 - Send a test message from plugin → extension logs it in console
+
+#### Phase 4.2b — Generation wired into extension (CRITICAL GATE)
+
+This phase must pass before 4.3 or any subsequent work. Everything
+downstream depends on generation working correctly from the extension.
+
+Tasks:
+- Confirm Generate and characters are accessible via SillyTavern.getContext()
+- Implement generateForCharacter() as specified in Phase 3.2
+- Implement per-character async mutex in extension
+- Handle Generate() errors gracefully (character not found, API error,
+  timeout) — return error payload over WebSocket rather than hanging
+- Test with hardcoded character name and message before wiring to WebSocket
+
+Gate checks:
+- Call generateForCharacter('Gerard', 'Hello') from browser console
+  Expected: response string returned, no UI changes
+- Call with non-existent character name
+  Expected: clean error, no crash
+- Call twice concurrently for same character
+  Expected: both succeed, second waits for first
+- Call for a character who is NOT currently active in ST UI
+  Expected: response is in that character's voice, active chat undisturbed
 
 #### Phase 4.3 — Notification injection
 **Deliverable:** When plugin sends a notification over WebSocket, extension displays it in ST's UI.
