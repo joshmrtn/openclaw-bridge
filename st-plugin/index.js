@@ -42,9 +42,9 @@ async function init(router) {
     // Characters listing endpoint
     const charLoader = require('./character-loader');
 
-    router.get('/characters', (request, response) => {
+    router.get('/characters', async (request, response) => {
         try {
-            const chars = charLoader.listCharacters();
+            const chars = await charLoader.listCharacters();
             response.json(chars);
         } catch (err) {
             response.status(500).json({ error: err.message });

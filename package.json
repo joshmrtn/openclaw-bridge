@@ -1,0 +1,13 @@
+{
+    "name": "openclaw-bridge",
+    "version": "0.1.0",
+    "private": true,
+    "type": "commonjs",
+    "scripts": {
+        "test": "jest --runInBand --colors",
+        "test:js": "jest --runInBand --colors"
+    },
+    "devDependencies": {
+        "jest": "^29.7.0"
+    }
+}

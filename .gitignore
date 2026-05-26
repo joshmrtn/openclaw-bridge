@@ -8,6 +8,9 @@ __pycache__/
 # OS files
 .DS_Store
 
+# Node modules
+node_modules
+
 # SillyTavern submodule
 sillytavern/node_modules/
 sillytavern/data/
