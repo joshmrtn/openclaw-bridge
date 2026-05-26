@@ -43,4 +43,45 @@ describe('session-manager behavior', () => {
 
         sessionManager.unregisterClient(fakeClient);
     });
+
+    test('handleMessage rejects pending request when generate_error arrives', async () => {
+        const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
+        sessionManager.registerClient(fakeClient);
+
+        const promise = sessionManager.requestGenerate({ character: 'Err' }, 1000);
+        expect(fakeClient.send).toHaveBeenCalled();
+
+        const requestId = JSON.parse(fakeClient.send.mock.calls[0][0]).requestId;
+        sessionManager.handleMessage(Buffer.from(JSON.stringify({
+            type: 'generate_error',
+            requestId,
+            error: 'boom',
+        })));
+
+        await expect(promise).rejects.toThrow('boom');
+
+        sessionManager.unregisterClient(fakeClient);
+    });
+
+    test('handleMessage ignores malformed or unrelated messages', async () => {
+        const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
+        sessionManager.registerClient(fakeClient);
+
+        const promise = sessionManager.requestGenerate({ character: 'Keep' }, 1000);
+        expect(fakeClient.send).toHaveBeenCalled();
+
+        sessionManager.handleMessage(Buffer.from('not-json'));
+        sessionManager.handleMessage(Buffer.from(JSON.stringify({ type: 'something_else' })));
+
+        const requestId = JSON.parse(fakeClient.send.mock.calls[0][0]).requestId;
+        sessionManager.handleMessage(Buffer.from(JSON.stringify({
+            type: 'generate_response',
+            requestId,
+            response: 'still-works',
+        })));
+
+        await expect(promise).resolves.toBe('still-works');
+
+        sessionManager.unregisterClient(fakeClient);
+    });
 });
