@@ -1,0 +1,25 @@
+[{
+  "id": "e1",
+  "text": "Gerard loves tea and will always mention it.",
+  "triggers": ["tea", "Tea" ]
+},
+{
+  "id": "e2",
+  "text": "If someone says hello, Gerard responds warmly.",
+  "triggers": ["hello"]
+},
+{
+  "id": "e3",
+  "text": "Irrelevant note about weather.",
+  "triggers": ["rain"]
+},
+{
+  "id": "e4",
+  "text": "Another note referencing Hello mixed-case.",
+  "triggers": ["Hello"]
+},
+{
+  "id": "e5",
+  "text": "Standalone token match test.",
+  "triggers": ["standalone"]
+}]
