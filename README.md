@@ -12,14 +12,19 @@ git clone https://github.com/joshmrtn/openclaw-bridge.git
 
 ## Install for development
 > [!IMPORTANT]  
-> Only necessary for development or contributors.
+> Use this workflow for active development. Do not rely on the ST plugin installer for a working tree that changes often.
 
-Clone with `recurse-submodules`:
+If SillyTavern is checked out in this repo at `./sillytavern`, run:
 ```
-git clone --recurse-submodules git@github.com:joshmrtn/openclaw-bridge.git
-./dev-setup.sh
+bash ./dev-setup.sh
 ```
-This clones SillyTavern into a subdirectory for development purposes. `dev-setup.sh` sets up the development environment with SillyTavern. 
+
+If ST lives somewhere else, point the script at it:
+```
+ST_DIR=/path/to/SillyTavern bash ./dev-setup.sh
+```
+
+The script symlinks `./st-plugin` into ST's `plugins/openclaw-bridge` directory. That means you can edit this repo, restart ST, and immediately test the new code without reinstalling the plugin from Git each time.
 
 
 ## Status: Early Development

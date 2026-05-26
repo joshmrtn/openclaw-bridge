@@ -725,7 +725,7 @@ curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/generate \
   -H "Content-Type: application/json" \
   -d '{"character": "Gerard", "message": "Hello!", "channel": "test", "user_id": "u001"}'
 # Expected: { "response": "[MOCK RESPONSE]", "character": "Gerard" }
-# Also: open ST, check Gerard's chat shows the message and mock response
+# Also: refresh or reopen Gerard's chat in ST so the UI rereads the appended JSONL file
 
 curl -X POST "http://localhost:8000/api/plugins/openclaw-bridge/generate?debug=true" \
   -H "Authorization: Bearer YOUR_TOKEN" \
