@@ -19,7 +19,9 @@ function loadExtensionModule() {
     );
 }
 
-test('extension round-trip uses Generate(quiet) and returns plugin response', async ({ page, request, baseURL }) => {
+async function bootExtension(page, { characterName, generateImpl }) {
+    await page.exposeFunction('__openclawBridgeGenerateImpl', generateImpl);
+
     await page.goto('/');
     await page.waitForFunction(() => document.getElementById('preloader') === null, null, { timeout: 30000 });
 
@@ -32,12 +34,9 @@ test('extension round-trip uses Generate(quiet) and returns plugin response', as
         window.SillyTavern = window.SillyTavern || {};
         window.SillyTavern.getContext = () => ({
             characters: [{ name: characterName }],
-            Generate: async (mode, params) => {
-                window.__openclawBridgeTest.calls.push({ mode, params });
-                return responseText;
-            },
+            Generate: async (mode, params) => window.__openclawBridgeGenerateImpl(mode, params),
         });
-    }, { characterName: CHARACTER_NAME, responseText: MOCK_RESPONSE });
+    }, { characterName, responseText: MOCK_RESPONSE });
 
     await page.evaluate(async code => {
         const blob = new Blob([code], { type: 'text/javascript' });
@@ -56,6 +55,18 @@ test('extension round-trip uses Generate(quiet) and returns plugin response', as
     await expect.poll(async () => {
         return page.evaluate(() => Boolean(window.openclawBridge?.state?.connected));
     }, { timeout: 30000 }).toBeTruthy();
+}
+
+test('extension round-trip uses Generate(quiet) and returns plugin response', async ({ page, request, baseURL }) => {
+    const calls = [];
+
+    await bootExtension(page, {
+        characterName: CHARACTER_NAME,
+        generateImpl: async (mode, params) => {
+            calls.push({ mode, params });
+            return MOCK_RESPONSE;
+        },
+    });
 
     const statusResponse = await request.get(`${baseURL}/api/plugins/openclaw-bridge/status`, {
         headers: {
@@ -84,7 +95,6 @@ test('extension round-trip uses Generate(quiet) and returns plugin response', as
         response: MOCK_RESPONSE,
     });
 
-    const calls = await page.evaluate(() => window.__openclawBridgeTest.calls);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
         mode: 'quiet',
@@ -94,4 +104,67 @@ test('extension round-trip uses Generate(quiet) and returns plugin response', as
             skipWIAN: false,
         },
     });
+});
+
+test('extension serializes same-character Generate() calls', async ({ page, request, baseURL }) => {
+    const events = [];
+    let releaseFirst;
+    const firstCall = new Promise(resolve => {
+        releaseFirst = resolve;
+    });
+
+    await bootExtension(page, {
+        characterName: CHARACTER_NAME,
+        generateImpl: async (mode, params) => {
+            events.push({ type: 'start', mode, params, at: Date.now() });
+            if (events.filter(event => event.type === 'start').length === 1) {
+                await firstCall;
+            }
+            events.push({ type: 'end', mode, params, at: Date.now() });
+            return MOCK_RESPONSE;
+        },
+    });
+
+    const baseUrl = baseURL || process.env.OPENCLAW_BRIDGE_ST_URL || 'http://127.0.0.1:8000';
+
+    const first = request.post(`${baseUrl}/api/plugins/openclaw-bridge/generate`, {
+        headers: {
+            Authorization: `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+        },
+        data: {
+            character: CHARACTER_NAME,
+            message: `${MESSAGE} 1`,
+            channel: 'playwright-e2e',
+            user_id: 'playwright-user',
+        },
+    });
+
+    const second = request.post(`${baseUrl}/api/plugins/openclaw-bridge/generate`, {
+        headers: {
+            Authorization: `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+        },
+        data: {
+            character: CHARACTER_NAME,
+            message: `${MESSAGE} 2`,
+            channel: 'playwright-e2e',
+            user_id: 'playwright-user',
+        },
+    });
+
+    await page.waitForTimeout(300);
+    expect(events.filter(event => event.type === 'start')).toHaveLength(1);
+
+    releaseFirst();
+
+    const [firstResponse, secondResponse] = await Promise.all([first, second]);
+    expect(firstResponse.ok()).toBeTruthy();
+    expect(secondResponse.ok()).toBeTruthy();
+
+    const started = events.filter(event => event.type === 'start');
+    const ended = events.filter(event => event.type === 'end');
+    expect(started).toHaveLength(2);
+    expect(ended).toHaveLength(2);
+    expect(started[1].at).toBeGreaterThanOrEqual(ended[0].at);
 });
