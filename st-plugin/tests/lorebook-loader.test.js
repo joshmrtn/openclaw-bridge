@@ -29,7 +29,7 @@ describe('lorebook-loader', () => {
         // should match e2 (hello) and e1 (tea) in insertion order
         expect(matches.length).toBeGreaterThanOrEqual(2);
         const ids = matches.map(m => m.id);
-        expect(ids).toEqual(expect.arrayContaining(['e2','e1']));
+        expect(ids).toEqual(expect.arrayContaining(['e2', 'e1']));
     });
 
     test('case-insensitive matching works', async () => {
