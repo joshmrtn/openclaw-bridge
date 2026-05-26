@@ -28,6 +28,14 @@ function requireBearerToken(request, response, next) {
     next();
 }
 
+function parseDebugFlag(request) {
+    const debugValue = request?.body?.debug ?? request?.query?.debug;
+    if (debugValue === true || debugValue === 'true' || debugValue === '1' || debugValue === 1) {
+        return true;
+    }
+    return false;
+}
+
 async function init(router) {
     router.use(requireBearerToken);
 
@@ -55,6 +63,7 @@ async function init(router) {
 
     router.post('/generate', async (request, response) => {
         const { character, message, images = [], channel = null, user_id = null } = request.body || {};
+        const debug = parseDebugFlag(request);
 
         if (!character || !message) {
             response.status(400).json({
@@ -69,10 +78,16 @@ async function init(router) {
                 channel,
                 user_id,
             });
-            response.json({
+            const payload = {
                 character,
                 response: result.response,
-            });
+            };
+
+            if (debug) {
+                payload.assembled = result.assembled;
+            }
+
+            response.json(payload);
         } catch (err) {
             response.status(500).json({ error: err.message });
         }

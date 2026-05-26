@@ -709,6 +709,7 @@ Tasks:
 - Stub the actual LLM call to return `"[MOCK RESPONSE]"` always
 - Register `POST /api/plugins/openclaw-bridge/generate` endpoint
 - Write assembled message to chat history on disk
+- Keep the assembled payload opt-in behind a `debug=true` flag so normal responses stay compact
 
 Unit tests (stub LLM):
 - Character card description appears in system prompt
@@ -725,6 +726,12 @@ curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/generate \
   -d '{"character": "Gerard", "message": "Hello!", "channel": "test", "user_id": "u001"}'
 # Expected: { "response": "[MOCK RESPONSE]", "character": "Gerard" }
 # Also: open ST, check Gerard's chat shows the message and mock response
+
+curl -X POST "http://localhost:8000/api/plugins/openclaw-bridge/generate?debug=true" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"character": "Gerard", "message": "Hello!", "channel": "test", "user_id": "u001"}'
+# Expected: response plus assembled payload for debugging
 ```
 
 #### Phase 3.2 — Real generation (live LLM)

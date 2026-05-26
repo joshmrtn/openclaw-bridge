@@ -21,10 +21,25 @@ function _toStMessages(historyArray) {
     });
 }
 
+function _buildIncomingContent(incomingText, images = []) {
+    if (!Array.isArray(images) || images.length === 0) {
+        return incomingText;
+    }
+
+    return [
+        { type: 'text', text: incomingText },
+        ...images.map(image => ({
+            type: 'image_url',
+            image_url: { url: image },
+        })),
+    ];
+}
+
 async function assembleMessages(characterName, incomingText, opts = {}) {
     const charDir = opts.charDir;
     const loreDir = opts.loreDir;
     const chatsDir = opts.chatsDir;
+    const images = Array.isArray(opts.images) ? opts.images : [];
 
     const meta = await _findCharacterMeta(characterName, charDir);
     const charDescription = meta.description || meta.meta?.description || meta.name || '';
@@ -41,7 +56,7 @@ async function assembleMessages(characterName, incomingText, opts = {}) {
     const historyMsgs = _toStMessages(history);
 
     // incoming message as the last user message
-    const incomingMsg = { role: 'user', content: incomingText };
+    const incomingMsg = { role: 'user', content: _buildIncomingContent(incomingText, images) };
 
     const assembled = [systemMsg, ...loreMsgs, ...historyMsgs, incomingMsg];
     return assembled;
@@ -50,9 +65,10 @@ async function assembleMessages(characterName, incomingText, opts = {}) {
 async function generate(characterName, incomingText, opts = {}) {
     // assemble
     const assembled = await assembleMessages(characterName, incomingText, opts);
+    const incomingContent = _buildIncomingContent(incomingText, Array.isArray(opts.images) ? opts.images : []);
 
     // write incoming message to chat history
-    const incomingSt = chatHistory.constructStMessage({ role: 'user', content: incomingText });
+    const incomingSt = chatHistory.constructStMessage({ role: 'user', content: incomingContent });
     await chatHistory.appendMessage(characterName, incomingSt, opts.chatsDir);
 
     // stubbed LLM response

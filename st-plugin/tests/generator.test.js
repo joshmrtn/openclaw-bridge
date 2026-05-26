@@ -42,6 +42,24 @@ describe('generator (mock)', () => {
         expect(assembled[assembled.length - 1].content).toMatch(/tea\?/);
     });
 
+    test('assembleMessages passes through images as multimodal content', async () => {
+        const assembled = await gen.assembleMessages('Gerard', 'Look at this', {
+            charDir: path.join(tmpDir, 'characters'),
+            loreDir: path.join(tmpDir, 'lorebooks'),
+            chatsDir: path.join(tmpDir, 'chats'),
+            images: ['data:image/jpeg;base64,abc123'],
+        });
+
+        const last = assembled[assembled.length - 1];
+        expect(last.role).toBe('user');
+        expect(Array.isArray(last.content)).toBe(true);
+        expect(last.content[0]).toEqual({ type: 'text', text: 'Look at this' });
+        expect(last.content[1]).toEqual({
+            type: 'image_url',
+            image_url: { url: 'data:image/jpeg;base64,abc123' },
+        });
+    });
+
     test('generate appends incoming and mock response to chat history', async () => {
         const opts = { charDir: path.join(tmpDir, 'characters'), loreDir: path.join(tmpDir, 'lorebooks'), chatsDir: path.join(tmpDir, 'chats') };
         const result = await gen.generate('Gerard', 'Do you like tea?', opts);
@@ -50,6 +68,27 @@ describe('generator (mock)', () => {
         const msgs = await chatHistory.readLatestChat('Gerard', opts.chatsDir);
         const last = msgs.slice(-2);
         expect(last[0].content).toBe('Do you like tea?');
+        expect(last[1].content).toBe('[MOCK RESPONSE]');
+    });
+
+    test('generate preserves multimodal incoming content in chat history', async () => {
+        const opts = {
+            charDir: path.join(tmpDir, 'characters'),
+            loreDir: path.join(tmpDir, 'lorebooks'),
+            chatsDir: path.join(tmpDir, 'chats'),
+            images: ['data:image/jpeg;base64,abc123'],
+        };
+
+        await gen.generate('Gerard', 'Look at this', opts);
+
+        const msgs = await chatHistory.readLatestChat('Gerard', opts.chatsDir);
+        const last = msgs.slice(-2);
+        expect(Array.isArray(last[0].content)).toBe(true);
+        expect(last[0].content[0]).toEqual({ type: 'text', text: 'Look at this' });
+        expect(last[0].content[1]).toEqual({
+            type: 'image_url',
+            image_url: { url: 'data:image/jpeg;base64,abc123' },
+        });
         expect(last[1].content).toBe('[MOCK RESPONSE]');
     });
 });
