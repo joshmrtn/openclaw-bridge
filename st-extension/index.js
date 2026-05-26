@@ -25,6 +25,29 @@ function findCharacterIndex(characterName) {
     return getCharacters().findIndex(character => character?.name === characterName);
 }
 
+function getCurrentCharacterIndex(context) {
+    const currentChatId = typeof context?.getCurrentChatId === 'function' ? context.getCurrentChatId() : null;
+    if (!currentChatId || !Array.isArray(context?.characters)) {
+        return -1;
+    }
+
+    return context.characters.findIndex(character => character?.chat === currentChatId);
+}
+
+async function waitForCharacterChat(context, characterIndex, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+        if (getCurrentCharacterIndex(context) === characterIndex) {
+            return;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    throw new Error(`Timed out waiting for character chat to load: ${characterIndex}`);
+}
+
 function normalizeGenerationResult(result) {
     if (typeof result === 'string') {
         return result;
@@ -42,22 +65,67 @@ function withCharacterLock(characterName, task) {
 
 async function generateForCharacter(characterName, message) {
     const context = getStContext();
-    const { Generate } = context;
+    const { generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = context;
     const chid = findCharacterIndex(characterName);
 
     if (chid === -1) {
         throw new Error(`Character not found: ${characterName}`);
     }
 
-    if (typeof Generate !== 'function') {
-        throw new Error('Generate() is not available in the SillyTavern context');
+    const previousChid = getCurrentCharacterIndex(context);
+    const shouldRestorePreviousCharacter = previousChid !== -1 && previousChid !== chid;
+
+    if (shouldRestorePreviousCharacter && typeof selectCharacterById === 'function') {
+        await selectCharacterById(chid, { switchMenu: false });
+        await waitForCharacterChat(context, chid);
     }
 
-    const result = await Generate('quiet', {
-        quiet_prompt: message,
-        force_chid: chid,
-        skipWIAN: false,
-    });
+    let result;
+
+    if (typeof generate === 'function') {
+        result = await generate('quiet', {
+            quiet_prompt: message,
+            force_chid: chid,
+            skipWIAN: false,
+        });
+    } else if (typeof generateQuietPrompt === 'function') {
+        try {
+            result = await generateQuietPrompt({
+                quietPrompt: message,
+                forceChId: chid,
+                skipWIAN: false,
+            });
+        } catch (e) {
+            result = await generateQuietPrompt({ quietPrompt: message });
+        }
+    } else if (typeof Generate === 'function') {
+        result = await Generate('quiet', {
+            quiet_prompt: message,
+            force_chid: chid,
+            skipWIAN: false,
+        });
+    } else if (typeof sendGenerationRequest === 'function') {
+        result = await sendGenerationRequest('quiet', {
+            prompt: message,
+            force_chid: chid,
+            quiet_prompt: message,
+            stream: false,
+        });
+        if (result && typeof result === 'object' && 'text' in result && typeof result.text === 'string') {
+            result = result.text;
+        }
+    } else {
+        throw new Error('No Generate API available in the SillyTavern context');
+    }
+
+    if (shouldRestorePreviousCharacter && typeof selectCharacterById === 'function') {
+        try {
+            await selectCharacterById(previousChid, { switchMenu: false });
+            await waitForCharacterChat(context, previousChid);
+        } catch (restoreError) {
+            console.warn('[openclaw-bridge] Failed to restore previous character chat', restoreError);
+        }
+    }
 
     return normalizeGenerationResult(result);
 }

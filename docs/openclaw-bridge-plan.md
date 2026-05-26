@@ -568,6 +568,8 @@ Each phase has a clear deliverable, a set of unit/integration tests, and a gate 
 
 Use mocks for speed during development. Switch to Ollama or Google AI Studio when you need to verify the actual generation pipeline works end-to-end.
 
+SillyTavern should be launched from its own checkout directory so its active `config.yaml` stays under `./sillytavern/` instead of the bridge repo root. That file is ST's server config, not bridge config, and it is where localhost-only settings, plugin enablement, and the selected provider/model live during live integration testing.
+
 ---
 
 ### Stage 1: Repository and Dev Environment
