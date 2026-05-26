@@ -47,7 +47,10 @@ async function listCharacters(charDir = DEFAULT_CHAR_DIR) {
     const out = [];
     let files = [];
     try {
-        files = fs.readdirSync(charDir).filter(f => f.toLowerCase().endsWith('.png'));
+        files = fs.readdirSync(charDir).filter(f => {
+            const low = f.toLowerCase();
+            return low.endsWith('.png') || low.endsWith('.json');
+        });
     } catch (err) {
         return out;
     }
@@ -55,6 +58,15 @@ async function listCharacters(charDir = DEFAULT_CHAR_DIR) {
     for (const f of files) {
         const name = f.replace(/\.png$/i, '');
         try {
+            const low = f.toLowerCase();
+            if (low.endsWith('.json')) {
+                const filePath = path.join(charDir, f);
+                const txt = fs.readFileSync(filePath, 'utf8');
+                const meta = JSON.parse(txt);
+                out.push({ name, meta });
+                continue;
+            }
+
             const jsonText = await loadCharacterRawJson(f, charDir);
             let meta = null;
             try { meta = JSON.parse(jsonText); } catch (e) { meta = jsonText; }

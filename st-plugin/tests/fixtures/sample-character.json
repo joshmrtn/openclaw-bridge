@@ -1,0 +1,9 @@
+{
+    "name": "Sample",
+    "description": "A committed sample character used for tests. Not a real person's work.",
+    "personality": "Friendly, helpful, neutral",
+    "tags": [
+        "sample",
+        "test"
+    ]
+}

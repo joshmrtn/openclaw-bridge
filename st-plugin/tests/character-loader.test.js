@@ -1,11 +1,10 @@
 const loader = require('../character-loader');
 
-test('listCharacters returns parsed Rowan', async () => {
-    const chars = await loader.listCharacters();
+test('listCharacters returns sample character from fixtures', async () => {
+    const fixturesDir = require('path').join(__dirname, 'fixtures');
+    const chars = await loader.listCharacters(fixturesDir);
     expect(Array.isArray(chars)).toBe(true);
-
-    const rowan = chars.find(c => c && (c.name === 'Rowan' || (c.meta && c.meta.name === 'Rowan')));
-    expect(rowan).toBeDefined();
-    // rowan may expose name at top-level or under meta.name depending on loader
-    expect((rowan.name === 'Rowan') || (rowan.meta && rowan.meta.name === 'Rowan')).toBeTruthy();
+    const sample = chars.find(c => c && (c.name === 'Sample' || (c.meta && c.meta.name === 'Sample')));
+    expect(sample).toBeDefined();
+    expect((sample.name === 'Sample') || (sample.meta && sample.meta.name === 'Sample')).toBeTruthy();
 });
