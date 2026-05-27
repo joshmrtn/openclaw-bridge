@@ -3,6 +3,7 @@ const PLUGIN_VERSION = '0.1.0';
 const charLoader = require('./character-loader');
 const chatHistory = require('./chat-history');
 const generator = require('./generator');
+const linkState = require('./link-state');
 const sessionManager = require('./session-manager');
 const { startWebSocketServer } = require('./ws-server');
 
@@ -43,6 +44,28 @@ function parseDebugFlag(request) {
     return false;
 }
 
+function parseActiveFlag(value, defaultValue) {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (value === 'true' || value === '1' || value === 1) {
+        return true;
+    }
+    if (value === 'false' || value === '0' || value === 0) {
+        return false;
+    }
+    return defaultValue;
+}
+
+function normalizeCharacterName(rawName = '') {
+    return decodeURIComponent(String(rawName || '')).trim();
+}
+
+async function ensureCharacterExists(characterName) {
+    const chars = await charLoader.listCharacters();
+    return chars.some(entry => entry && entry.name === characterName);
+}
+
 async function init(router) {
     router.use(requireBearerToken);
 
@@ -65,7 +88,80 @@ async function init(router) {
     router.get('/characters', async (request, response) => {
         try {
             const chars = await charLoader.listCharacters();
-            response.json(chars);
+            const activeOnly = parseActiveFlag(request?.query?.active_only, false);
+            const merged = chars
+                .map(entry => {
+                    const link = linkState.getLink(entry.name);
+                    return {
+                        ...entry,
+                        link,
+                        active: Boolean(link?.active),
+                    };
+                })
+                .filter(entry => !activeOnly || entry.active);
+
+            response.json(merged);
+        } catch (err) {
+            response.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/characters/:name/link', async (request, response) => {
+        const characterName = normalizeCharacterName(request?.params?.name);
+        const { oc_agent_id = null } = request.body || {};
+
+        if (!characterName) {
+            response.status(400).json({ error: 'Character name is required' });
+            return;
+        }
+
+        if (typeof oc_agent_id !== 'string' || !oc_agent_id.trim()) {
+            response.status(400).json({ error: 'oc_agent_id is required' });
+            return;
+        }
+
+        try {
+            const exists = await ensureCharacterExists(characterName);
+            if (!exists) {
+                response.status(404).json({ error: `Character not found: ${characterName}` });
+                return;
+            }
+
+            const current = linkState.getLink(characterName);
+            const requestedActive = parseActiveFlag(request?.body?.active, current?.active ?? true);
+            const link = linkState.upsertLink(characterName, {
+                oc_agent_id,
+                active: requestedActive,
+            });
+
+            response.json({
+                character: characterName,
+                link,
+            });
+        } catch (err) {
+            response.status(500).json({ error: err.message });
+        }
+    });
+
+    router.delete('/characters/:name/link', async (request, response) => {
+        const characterName = normalizeCharacterName(request?.params?.name);
+
+        if (!characterName) {
+            response.status(400).json({ error: 'Character name is required' });
+            return;
+        }
+
+        try {
+            const removed = linkState.removeLink(characterName);
+            if (!removed) {
+                response.status(404).json({ error: `No link found for character: ${characterName}` });
+                return;
+            }
+
+            response.json({
+                character: characterName,
+                removed: true,
+            });
         } catch (err) {
             response.status(500).json({ error: err.message });
         }

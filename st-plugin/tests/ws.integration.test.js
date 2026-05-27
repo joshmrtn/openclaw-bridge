@@ -22,7 +22,12 @@ describe('ws integration (mocked)', () => {
         const plugin = require('..');
         const chatHistory = require('../chat-history');
 
-        const router = { use() { }, get() { }, post(path, handler) { this.postHandler = handler; } };
+        const router = {
+            use() { },
+            get() { },
+            post(path, handler) { this.postHandler = handler; },
+            delete() { },
+        };
         await plugin.init(router);
 
         const appendSpy = jest.spyOn(chatHistory, 'appendDiscordMessageToHistory').mockResolvedValue();

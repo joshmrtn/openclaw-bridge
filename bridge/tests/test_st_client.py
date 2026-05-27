@@ -72,3 +72,38 @@ def test_generate_connection_retries_then_fails(monkeypatch: pytest.MonkeyPatch)
     with pytest.raises(STClientError, match="3 attempts"):
         asyncio.run(client.generate(character="Gerard", message="Hi"))
     assert attempts["count"] == 3
+
+
+def test_extract_character_entries_supports_list_and_mapping() -> None:
+    list_payload = ["Gerard", {"name": "Edward"}]
+    dict_payload = {"characters": [{"name": "Gerard"}]}
+
+    assert STClient._extract_character_entries(list_payload) == list_payload
+    assert STClient._extract_character_entries(dict_payload) == [{"name": "Gerard"}]
+
+
+def test_extract_character_entries_rejects_invalid_payload() -> None:
+    with pytest.raises(STClientError, match="Unexpected /characters response format"):
+        STClient._extract_character_entries("invalid")
+
+
+def test_parse_links_from_entries_prefers_nested_link_fields() -> None:
+    entries = [
+        {
+            "name": "Gerard",
+            "active": False,
+            "link": {
+                "active": True,
+                "oc_agent_id": "gerard",
+            },
+        },
+        {
+            "name": "Edward",
+            "active": True,
+        },
+        "ignored",
+    ]
+
+    parsed = STClient._parse_links_from_entries(entries)
+    assert parsed["Gerard"] == {"active": True, "oc_agent_id": "gerard"}
+    assert parsed["Edward"] == {"active": True, "oc_agent_id": None}

@@ -14,6 +14,7 @@ from lib.st_client import STClient, STClientError
 LOG_FORMAT = "%(asctime)s %(levelname)s [bridge] %(message)s"
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "characters.yaml"
 DEFAULT_ST_BASE_URL = "http://localhost:8000/api/plugins/openclaw-bridge"
+DEFAULT_LINK_REFRESH_SECONDS = 45
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,44 @@ def _loaded_characters_message(registry: dict[str, CharacterConfig]) -> str:
     return f"{len(registry)} characters loaded: {names}"
 
 
+def resolve_active_characters(
+    registry: dict[str, CharacterConfig], links: dict[str, dict[str, object]]
+) -> set[str]:
+    active: set[str] = set()
+    if not links:
+        # Fail-open to legacy local active flags when plugin state is unavailable.
+        return {name for name, cfg in registry.items() if cfg.active}
+
+    for name, link in links.items():
+        if not bool(link.get("active", False)):
+            continue
+        if name not in registry:
+            logger.warning(
+                "Character '%s' is active in plugin link state but missing bridge credentials",
+                name,
+            )
+            continue
+
+        cfg = registry[name]
+        if not cfg.discord_bot_token or not cfg.discord_channel_id:
+            logger.warning(
+                "Character '%s' is active in plugin link state but missing Discord credentials",
+                name,
+            )
+            continue
+
+        active.add(name)
+
+    for name, cfg in registry.items():
+        if not cfg.discord_bot_token or not cfg.discord_channel_id:
+            continue
+        link = links.get(name)
+        if not link or not bool(link.get("active", False)):
+            logger.info("Character '%s' has credentials but is inactive in plugin link state", name)
+
+    return active
+
+
 async def validate_characters_against_st(
     st_client: STClient, registry: dict[str, CharacterConfig]
 ) -> list[str]:
@@ -52,6 +91,21 @@ async def validate_characters_against_st(
     for name in unknown:
         logger.warning("Character '%s' not found in ST; bridge will still start", name)
     return unknown
+
+
+async def fetch_active_characters(
+    st_client: STClient, registry: dict[str, CharacterConfig]
+) -> set[str]:
+    try:
+        links = await st_client.list_character_links()
+    except STClientError as exc:
+        logger.warning(
+            "Failed to fetch plugin link state; using local active flags: %s",
+            exc,
+        )
+        return resolve_active_characters(registry, {})
+
+    return resolve_active_characters(registry, links)
 
 
 async def run(argv: Sequence[str] | None = None) -> int:
@@ -101,11 +155,9 @@ async def run(argv: Sequence[str] | None = None) -> int:
         print(response)
         return 0
 
-    active_characters = [name for name, cfg in registry.items() if cfg.active]
-    logger.info("Starting runtime mode for active characters: %s", ", ".join(active_characters) or "none")
-
     queue_manager: QueueManager | None = None
     discord_adapter: DiscordAdapter | None = None
+    refresh_task: asyncio.Task[None] | None = None
 
     async def dispatch_to_discord(character: str, text: str) -> None:
         if discord_adapter is None:
@@ -113,20 +165,49 @@ async def run(argv: Sequence[str] | None = None) -> int:
             return
         await discord_adapter.send_message(character, text)
 
+    async def refresh_active_loop() -> None:
+        assert discord_adapter is not None
+        while True:
+            await asyncio.sleep(DEFAULT_LINK_REFRESH_SECONDS)
+            active_now = await fetch_active_characters(st_client, registry)
+            previous = discord_adapter.get_active_characters()
+            if active_now == previous:
+                continue
+
+            discord_adapter.set_active_characters(active_now)
+            enabled = sorted(active_now - previous)
+            disabled = sorted(previous - active_now)
+            if enabled:
+                logger.info("Activated characters from plugin link state: %s", ", ".join(enabled))
+            if disabled:
+                logger.info("Deactivated characters from plugin link state: %s", ", ".join(disabled))
+
     try:
+        active_characters = await fetch_active_characters(st_client, registry)
+        logger.info(
+            "Starting runtime mode for active characters: %s",
+            ", ".join(sorted(active_characters)) or "none",
+        )
+
         queue_manager = QueueManager(
             st_client=st_client,
             on_response=dispatch_to_discord,
         )
-        queue_manager.start(active_characters)
+        queue_manager.start(sorted(active_characters))
 
         discord_adapter = DiscordAdapter(queue_manager=queue_manager)
         await discord_adapter.start(registry)
+        discord_adapter.set_active_characters(active_characters)
+
+        refresh_task = asyncio.create_task(refresh_active_loop(), name="link-state-refresh")
 
         await asyncio.Event().wait()
     except KeyboardInterrupt:
         logger.info("Shutdown requested")
     finally:
+        if refresh_task is not None:
+            refresh_task.cancel()
+            await asyncio.gather(refresh_task, return_exceptions=True)
         if discord_adapter is not None:
             await discord_adapter.stop()
         if queue_manager is not None:

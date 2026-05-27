@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from lib.normalized import NormalizedAttachment, NormalizedMessage
 from lib.queue_manager import QueueManager
 from lib.registry import CharacterConfig
 
@@ -38,13 +39,14 @@ class DiscordAdapter:
         self._bindings_by_channel: dict[int, DiscordBinding] = {}
         self._client_factory = client_factory
         self._run_tasks: list[asyncio.Task[None]] = []
+        self._active_characters: set[str] = set()
 
     async def start(self, registry: dict[str, CharacterConfig]) -> None:
         if discord is None and self._client_factory is None:
             raise RuntimeError("discord.py is not installed")
 
         for character, config in registry.items():
-            if not config.active or not config.discord_bot_token or not config.discord_channel_id:
+            if not config.discord_bot_token or not config.discord_channel_id:
                 continue
 
             channel_id = int(config.discord_channel_id)
@@ -68,6 +70,12 @@ class DiscordAdapter:
             self._bindings_by_character[character] = binding
             self._bindings_by_channel[channel_id] = binding
             self._run_tasks.append(asyncio.create_task(client.start(binding.token)))
+
+    def set_active_characters(self, active_characters: set[str]) -> None:
+        self._active_characters = set(active_characters)
+
+    def get_active_characters(self) -> set[str]:
+        return set(self._active_characters)
 
     async def stop(self) -> None:
         for binding in self._bindings_by_character.values():
@@ -96,6 +104,39 @@ class DiscordAdapter:
 
         await channel.send(text)
 
+    @staticmethod
+    def _normalize_attachments(message: Any) -> list[NormalizedAttachment]:
+        raw_attachments = getattr(message, "attachments", None) or []
+        normalized: list[NormalizedAttachment] = []
+        for attachment in raw_attachments:
+            content_type = getattr(attachment, "content_type", None)
+            if not isinstance(content_type, str) or not content_type:
+                content_type = "application/octet-stream"
+
+            size_bytes = getattr(attachment, "size", 0)
+            if not isinstance(size_bytes, int) or size_bytes < 0:
+                size_bytes = 0
+
+            filename = getattr(attachment, "filename", "attachment")
+            if not isinstance(filename, str) or not filename:
+                filename = "attachment"
+
+            url = getattr(attachment, "url", None)
+            if not isinstance(url, str) or not url:
+                url = None
+
+            normalized.append(
+                NormalizedAttachment(
+                    url=url,
+                    fetch_fn=None,
+                    content_type=content_type,
+                    size_bytes=size_bytes,
+                    filename=filename,
+                )
+            )
+
+        return normalized
+
     def _register_handlers(self, binding: DiscordBinding) -> None:
         client = binding.client
 
@@ -113,10 +154,19 @@ class DiscordAdapter:
                 return
             if getattr(message.channel, "id", None) != binding.channel_id:
                 return
-            await self._queue_manager.enqueue(
+            if binding.character not in self._active_characters:
+                return
+
+            async def reply_callback(text: str) -> None:
+                await self.send_message(binding.character, text)
+
+            normalized_message = NormalizedMessage(
                 character=binding.character,
-                message=getattr(message, "content", ""),
-                images=[],
-                channel="discord",
-                user_id=f"discord:{getattr(message.author, 'id', 'unknown')}",
+                text=getattr(message, "content", ""),
+                sender_id=f"discord:{getattr(message.author, 'id', 'unknown')}",
+                channel_type="discord",
+                attachments=self._normalize_attachments(message),
+                reply_callback=reply_callback,
             )
+
+            await self._queue_manager.enqueue_normalized(normalized_message)

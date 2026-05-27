@@ -41,6 +41,43 @@ class STClient:
             headers["Authorization"] = "Bearer " + self.auth_token
         return headers
 
+    @staticmethod
+    def _extract_character_entries(payload: Any) -> list[Any]:
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            raw_characters = payload.get("characters")
+            if isinstance(raw_characters, list):
+                return raw_characters
+        raise STClientError("Unexpected /characters response format")
+
+    @staticmethod
+    def _parse_links_from_entries(entries: list[Any]) -> dict[str, dict[str, Any]]:
+        links: dict[str, dict[str, Any]] = {}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+
+            raw_link = entry.get("link")
+            active = bool(entry.get("active", False))
+            oc_agent_id: str | None = None
+            if isinstance(raw_link, dict):
+                if isinstance(raw_link.get("active"), bool):
+                    active = raw_link["active"]
+                if isinstance(raw_link.get("oc_agent_id"), str) and raw_link["oc_agent_id"].strip():
+                    oc_agent_id = raw_link["oc_agent_id"].strip()
+
+            links[name] = {
+                "active": active,
+                "oc_agent_id": oc_agent_id,
+            }
+
+        return links
+
     async def list_characters(self) -> list[str]:
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
         async with aiohttp.ClientSession(timeout=timeout, headers=self._headers) as session:
@@ -54,20 +91,30 @@ class STClient:
 
                 payload = await response.json()
 
-        if isinstance(payload, list):
-            return [str(item) for item in payload]
+        entries = self._extract_character_entries(payload)
+        names: list[str] = []
+        for entry in entries:
+            if isinstance(entry, str):
+                names.append(entry)
+            elif isinstance(entry, dict) and isinstance(entry.get("name"), str):
+                names.append(entry["name"])
+        return names
 
-        if isinstance(payload, dict):
-            raw_characters = payload.get("characters", [])
-            names: list[str] = []
-            for entry in raw_characters:
-                if isinstance(entry, str):
-                    names.append(entry)
-                elif isinstance(entry, dict) and isinstance(entry.get("name"), str):
-                    names.append(entry["name"])
-            return names
+    async def list_character_links(self) -> dict[str, dict[str, Any]]:
+        timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
+        async with aiohttp.ClientSession(timeout=timeout, headers=self._headers) as session:
+            async with session.get(f"{self.base_url}/characters") as response:
+                if response.status == 401:
+                    raise AuthError("Unauthorized while listing character links")
+                if response.status >= 400:
+                    raise STClientError(
+                        f"Failed to list character links: HTTP {response.status}"
+                    )
 
-        raise STClientError("Unexpected /characters response format")
+                payload = await response.json()
+
+        entries = self._extract_character_entries(payload)
+        return self._parse_links_from_entries(entries)
 
     async def generate(
         self,
