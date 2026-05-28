@@ -614,7 +614,7 @@ Tasks:
 - Write `chat-history.js`: list chat files for a character, read latest, append message
 - Implement file-level locking (simple lockfile or async-mutex) for concurrent access safety
 - Write a helper to construct ST message objects in the correct JSONL format
-- Implement appendDiscordMessageToHistory(characterName, userMessage, response):
+- Implement appendExternalChatToHistory(characterName, userMessage, response):
   writes both the incoming message and the generated response to the
   character's ST chat history file after generation completes.
   This is now an explicit separate step since Generate('quiet') does not

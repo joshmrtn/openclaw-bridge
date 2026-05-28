@@ -30,7 +30,7 @@ describe('ws integration (mocked)', () => {
         };
         await plugin.init(router);
 
-        const appendSpy = jest.spyOn(chatHistory, 'appendDiscordMessageToHistory').mockResolvedValue();
+        const appendSpy = jest.spyOn(chatHistory, 'appendExternalChatToHistory').mockResolvedValue();
 
         const req = { get() { return 'Bearer token'; }, body: { character: 'Gerard', message: 'Hello from test' }, query: {} };
         const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };

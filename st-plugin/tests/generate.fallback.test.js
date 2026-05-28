@@ -26,7 +26,7 @@ describe('plugin generate fallback behavior', () => {
         };
         await plugin.init(router);
 
-        const appendSpy = jest.spyOn(chatHistory, 'appendDiscordMessageToHistory').mockResolvedValue();
+        const appendSpy = jest.spyOn(chatHistory, 'appendExternalChatToHistory').mockResolvedValue();
 
         const req = { get() { return 'Bearer token'; }, body: { character: 'Gerard', message: 'Fallback test' }, query: {} };
         const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
@@ -34,7 +34,7 @@ describe('plugin generate fallback behavior', () => {
         await router.postHandler(req, res);
 
         expect(res.body.response).toBe('[MOCK FALLBACK]');
-        // generator.generate appends history itself; plugin should NOT call appendDiscordMessageToHistory
+        // generator.generate appends history itself; plugin should NOT call appendExternalChatToHistory
         expect(appendSpy).not.toHaveBeenCalled();
     });
 
@@ -59,7 +59,7 @@ describe('plugin generate fallback behavior', () => {
         };
         await plugin.init(router);
 
-        const appendSpy = jest.spyOn(chatHistory, 'appendDiscordMessageToHistory').mockResolvedValue();
+        const appendSpy = jest.spyOn(chatHistory, 'appendExternalChatToHistory').mockResolvedValue();
 
         const req = { get() { return 'Bearer token'; }, body: { character: 'Gerard', message: 'Timeout test' }, query: {} };
         const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };

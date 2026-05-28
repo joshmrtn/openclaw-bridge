@@ -211,7 +211,7 @@ async function init(router) {
             }
 
             if (shouldWriteHistory) {
-                await chatHistory.appendDiscordMessageToHistory(character, { message, images, user_id }, generatedText);
+                await chatHistory.appendExternalChatToHistory(character, { message, images, user_id }, generatedText);
             }
 
             const result = { character, response: generatedText };

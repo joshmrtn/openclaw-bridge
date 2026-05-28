@@ -81,7 +81,7 @@ function constructStMessage({ role = 'user', content = '', name = null, user_id 
     };
 }
 
-function buildDiscordMessageContent(message, images = []) {
+function buildExternalChatContent(message, images = []) {
     if (!Array.isArray(images) || images.length === 0) {
         return message;
     }
@@ -95,17 +95,10 @@ function buildDiscordMessageContent(message, images = []) {
     ];
 }
 
-async function appendDiscordMessageToHistory(characterName, userMessage, response, baseDir = DEFAULT_CHATS_DIR, targetFile = null) {
-    const userContent = buildDiscordMessageContent(userMessage.message || '', userMessage.images || []);
-    const userEntry = constructStMessage({
-        role: 'user',
-        content: userContent,
-        user_id: userMessage.user_id || null,
-    });
-    const assistantEntry = constructStMessage({
-        role: 'assistant',
-        content: response,
-    });
+async function appendExternalChatToHistory(characterName, userMessage, response, baseDir = DEFAULT_CHATS_DIR, targetFile = null) {
+    const userContent = buildExternalChatContent(userMessage.message || '', userMessage.images || []);
+    const userEntry = constructStMessage({ role: 'user', content: userContent, user_id: userMessage.user_id || null });
+    const assistantEntry = constructStMessage({ role: 'assistant', content: response });
 
     await appendMessage(characterName, userEntry, baseDir, targetFile);
     await appendMessage(characterName, assistantEntry, baseDir, targetFile);
@@ -116,7 +109,7 @@ module.exports = {
     readLatestChat,
     appendMessage,
     constructStMessage,
-    buildDiscordMessageContent,
-    appendDiscordMessageToHistory,
+    buildExternalChatContent,
+    appendExternalChatToHistory,
     DEFAULT_CHATS_DIR,
 };
