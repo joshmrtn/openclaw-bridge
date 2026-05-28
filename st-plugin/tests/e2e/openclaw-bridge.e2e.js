@@ -14,8 +14,8 @@ function loadFixture(fileName) {
 
 function loadExtensionModule() {
     return loadFixture('index.js').replace(
-        "import { getContext } from '/script.js';",
-        "const { getContext } = await import(window.location.origin + '/script.js');",
+        "import { eventSource, event_types, getContext, getRequestHeaders } from '/script.js';",
+        "const { eventSource, event_types, getContext, getRequestHeaders } = await import(window.location.origin + '/script.js');",
     );
 }
 

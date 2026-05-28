@@ -80,3 +80,78 @@
     font-size: 14px;
     cursor: pointer;
 }
+
+#openclaw-bridge-management {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.openclaw-bridge-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.openclaw-bridge-card__title {
+    font-weight: 600;
+}
+
+.openclaw-bridge-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.openclaw-bridge-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.openclaw-bridge-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.openclaw-bridge-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.openclaw-bridge-button {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.openclaw-bridge-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.openclaw-bridge-status {
+    font-size: 12px;
+}
+
+.openclaw-bridge-status.is-muted {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.openclaw-bridge-status.is-error {
+    color: #ff9b9b;
+}
+
+.openclaw-bridge-status.is-success {
+    color: #8be08b;
+}
