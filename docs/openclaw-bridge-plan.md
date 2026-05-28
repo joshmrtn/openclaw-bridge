@@ -2,7 +2,7 @@
 
 ## Overview
 
-SillyTavern (ST) is the brain: canonical character identity, lorebooks, chat history, prompt assembly, LLM calls. OpenClaw (OC) is the body: Discord, WhatsApp, autonomous scheduled actions, always-on presence. A custom ST server plugin (`openclaw-bridge`) exposes the API that makes ST driveable from OC. The bridge (`bridge.py`, Python) routes between them. Together they give any character a persistent, multi-channel presence with 100% ST fidelity — no degraded copies, no SOUL.md approximations.
+SillyTavern (ST) is the brain: canonical character identity, lorebooks, chat history, prompt assembly, LLM calls. OpenClaw (OC) is the body: Discord, WhatsApp, autonomous scheduled actions, always-on presence. OC's channel integrations (Discord, Telegram, WhatsApp) handle all external communication natively. A custom OC skill (`character-bridge`) teaches character agents to route all responses through the ST plugin, ensuring 100% character fidelity on every channel. An ST server plugin and browser extension expose the generation API and UI that make this possible.
 
 ---
 
@@ -17,42 +17,30 @@ SillyTavern (ST) is the brain: canonical character identity, lorebooks, chat his
 │  │  (characters,      │◄──│   /api/plugins/openclaw-bridge │    │
 │  │   lorebooks,       │   │                               │    │
 │  │   chat history,    │   │  POST /generate               │    │
-│  │   LLM pipeline)    │   │  GET  /characters             │    │
-│  └────────────────────┘   │  POST /characters/:name/link  │    │
-│                           │  DELETE /characters/:name/link│    │
+│  │   LLM pipeline)    │   │  POST /log-action             │    │
+│  └────────────────────┘   │  GET  /characters             │    │
+│                           │  POST /characters/:name/link  │    │
 │  ┌────────────────────┐   │  GET  /status                 │    │
 │  │   ST UI (browser)  │◄──│  WS   :8765                   │    │
-│  │  + openclaw-bridge │   └───────────────────────────────┘    │
-│  │    UI extension    │                                         │
-│  └────────────────────┘                                         │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │ HTTP + WebSocket (localhost only)
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         bridge.py (Python)                      │
-│                                                                 │
-│  - Character registry (characters.yaml)                         │
-│  - Per-character async message queues                           │
-│  - Image attachment handling (Discord CDN → base64)             │
-│  - OC gateway HTTP client                                       │
-│  - Discord adapter (one bot token per character)                │
-│  - WhatsApp adapter (future)                                    │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │ HTTP (OpenAI-compatible)
-                                 │ localhost:18789
-                                 ▼
+│  │  + openclaw-bridge │   └──────────────┬────────────────┘    │
+│  │    UI extension    │                  │ HTTP (localhost)     │
+│  └────────────────────┘                  │                      │
+└──────────────────────────────────────────┼──────────────────────┘
+                                           │ POST /generate
+                                           │ POST /log-action
+                                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                       OpenClaw Gateway                          │
 │                                                                 │
-│  Agent: gerard          Agent: edward         Agent: ...        │
-│  ~/.openclaw/           ~/.openclaw/           ~/.openclaw/     │
-│  workspace-gerard/      workspace-edward/      workspace-.../   │
-│    MEMORY.md              MEMORY.md              MEMORY.md      │
-│    inbox.md               inbox.md               inbox.md       │
-│    last_summarized.txt    last_summarized.txt    ...            │
+│  Agent: gerard              Agent: edward          Agent: ...   │
+│  ~/.openclaw/workspace-gerard/   workspace-edward/  ...         │
+│    skills/character-bridge/        skills/character-bridge/     │
+│    MEMORY.md                       MEMORY.md                    │
+│    last_summarized.txt             last_summarized.txt          │
 │                                                                 │
-│  - Discord bot(s)         (each character's bot bound here)     │
-│  - Cron scheduler         (autonomous actions + nightly sync)   │
+│  - Discord / Telegram / WhatsApp (native OC channel support)    │
+│  - Cron scheduler (autonomous actions + nightly sync)           │
+│  - HTTP tool calls ST plugin directly                           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -162,53 +150,16 @@ Clicking an entry shows what was said.
 
 ---
 
-### 3. Bridge (`bridge.py`, Python)
+### 3. OC Skill (`character-bridge`)
 
-Routing layer between external channels and the ST plugin.
+Lives in `skills/character-bridge/` in the repository. Installed into each
+character agent's workspace directory. Defines two structured tools
+(`generate_response` and `log_action`) and teaches the agent to route
+all responses through the ST plugin.
 
-**Responsibilities:**
-- Maintain Discord bot connections (one per active character)
-- Receive Discord messages, identify the character from channel ID
-- Enqueue in the correct character's `asyncio.Queue`
-- Per-character worker coroutine processes one message at a time
-- Download Discord image attachments, base64-encode, include in `/generate` call
-- POST to ST plugin, receive response, send back to Discord
-- Receive OC action completions, write to character inbox files
-
-**Character registry (`characters.yaml`):**
-
-```yaml
-characters:
-  Gerard:                                  # must match exact ST character name
-    oc_agent_id: "gerard"                  # OC agent ID (lowercase, no spaces)
-    discord_channel_id: "123456789012345"
-    discord_bot_token: "Bot TOKEN_HERE"
-    whatsapp_number: null                  # future
-    active: true
-
-  Edward:
-    oc_agent_id: "edward"
-    discord_channel_id: "987654321098765"
-    discord_bot_token: "Bot OTHER_TOKEN"
-    whatsapp_number: null
-    active: true
-```
-
-**Per-character queue pattern:**
-
-```python
-async def character_worker(char_name: str, queue: asyncio.Queue):
-    """One worker per character — serializes all incoming messages."""
-    while True:
-        job = await queue.get()
-        try:
-            response = await post_to_st_plugin(char_name, job)
-            await send_to_discord(char_name, response)
-        except Exception as e:
-            logger.error(f"[{char_name}] Failed: {e}")
-        finally:
-            queue.task_done()
-```
+The skill uses environment variables for configuration so the same
+skill file works for any character agent — just set
+`OPENCLAW_BRIDGE_URL` and `OPENCLAW_BRIDGE_TOKEN` per agent.
 
 ---
 
@@ -900,101 +851,83 @@ Tasks:
 Gate checks:
 - Open a character in ST, verify "External Presence" panel is visible
 - Toggle on → plugin receives link request, creates workspace files
-- Enter token and channel ID → saved to `characters.yaml`
+- Enter token and channel ID → saved to plugin link state (character-links.json)
 - "Test connection" → panel shows success or error message
 
 ---
 
-### Stage 5: Python Bridge
+### Stage 5: OC Skill
 
-#### Phase 5.1 — Bridge skeleton and character registry
-**Deliverable:** Bridge starts, loads `characters.yaml`, logs loaded characters.
+#### Phase 5.1 — Skill file created and installed
+**Deliverable:** character-bridge skill installs into an OC agent workspace and appears in `openclaw skills list`.
 
 Tasks:
-- Write `bridge/bridge.py`: arg parsing, config loading, startup logging
-- Write `bridge/lib/registry.py`: parse `characters.yaml`, validate required fields
-- `--dry-run` flag: load config and exit, no network connections
-- `--validate` flag: check config is well-formed and all referenced characters exist in ST
+- Create `skills/character-bridge/SKILL.md` with tool schemas
+- Create `skills/character-bridge/README.md`
+- Install into test agent: cp -r into workspace-gerard/skills/
+- Configure OPENCLAW_BRIDGE_URL and OPENCLAW_BRIDGE_TOKEN in agent env
+- Restart OC gateway
+Gate checks:
+```bash
+openclaw skills list --agent gerard
+# Expected: character-bridge appears
 
-Unit tests:
-- Valid `characters.yaml` → correct character objects
-- Missing required field → clear error message
-- Unknown character name (not in ST) → warning, not crash
+openclaw agent --agent gerard \
+  --message "Hello, this is a test message"
+# Expected: generate_response tool is called, response comes from ST
+```
+
+#### Phase 5.2 — Trust tier enforcement
+**Deliverable:** Owner messages and guest messages receive different labels, verified in generated responses.
+
+Tasks:
+- Configure owner_user_ids for gerard via plugin link API
+- Send test generate requests with owner user_id vs unknown user_id
+- Verify [OWNER] and [GUEST] labels appear in ST chat history
 
 Gate checks:
 ```bash
-python bridge.py --validate
-# Expected: "Config valid. 2 characters loaded: Gerard, Edward"
+# Owner message
+curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/generate \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"character":"Gerard","message":"Hello","channel":"test","user_id":"discord:OWNER_ID"}'
+# Check ST chat: message prefixed with [OWNER]
 
-python bridge.py --dry-run
-# Expected: starts, logs config, exits cleanly
+# Guest message
+curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/generate \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"character":"Gerard","message":"Hello","channel":"test","user_id":"discord:UNKNOWN_ID"}'
+# Check ST chat: message prefixed with [GUEST]
 ```
 
-#### Phase 5.2 — ST plugin client
-**Deliverable:** Bridge can call `/generate` on the ST plugin and receive a response.
+#### Phase 5.3 — log-action endpoint
+**Deliverable:** OC can log autonomous actions into ST chat history.
 
 Tasks:
-- Write `bridge/lib/st_client.py`: async HTTP client for plugin endpoints
-- `generate(character, message, images=[])` → response text
-- Retry logic: 3 attempts with backoff on connection error
-- Timeout: 60 seconds per request
-
-Unit tests (mock HTTP):
-- Successful response → returns text
-- 401 response → raises AuthError, not generic exception
-- Timeout → raises TimeoutError with character name in message
-- 3 retries exhausted → raises after logging each attempt
+- Implement POST /log-action in plugin
+- Verify entry appears in character's ST chat history
 
 Gate checks:
 ```bash
-python bridge.py --test-generate \
-  --character "Gerard" \
-  --message "Hello from the bridge"
-# Expected: prints Gerard's response to stdout
+curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/log-action \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"character":"Gerard","action_description":"Posted a drawing to Discord","channel":"discord"}'
+# Open ST: system message appears in Gerard's chat
 ```
 
-#### Phase 5.3 — Message queues
-**Deliverable:** Per-character async queues serialize messages correctly.
+#### Phase 5.4 — AGENT-SETUP.md verified
+**Deliverable:** An AI agent can follow AGENT-SETUP.md to configure a new character end-to-end without human intervention for each step.
 
 Tasks:
-- Write `bridge/lib/queue_manager.py`: one `asyncio.Queue` per character, one worker coroutine each
-- Worker: dequeue job, call `st_client.generate`, pass result to callback
-- Backpressure: if queue exceeds N messages, log warning (don't drop silently)
-
-Unit tests (mock st_client with delay):
-- 5 messages for same character → processed in order, none lost
-- 5 messages split across 2 characters → both processed, isolated
-- st_client raises exception → job fails gracefully, queue continues
-
-Gate checks:
-```bash
-# Send 3 rapid test messages
-for i in 1 2 3; do
-  python bridge.py --test-generate --character "Gerard" \
-    --message "Queued message $i" --no-wait &
-done
-wait
-# Check ST chat history: all 3 messages present in order
-```
-
-#### Phase 5.4 — Discord adapter
-**Deliverable:** Bridge connects to Discord, receives messages, sends responses.
-
-Tasks:
-- Write `bridge/adapters/discord.py`: one `discord.Client` per character bot token
-- On message in correct channel → enqueue in character's queue
-- On response from queue → send to Discord channel
-- Handle Discord rate limits gracefully (discord.py handles most of this automatically)
-
-Gate checks (requires real Discord test server):
-- Send a message in Gerard's test channel
-- Expected: response appears in channel within ~10 seconds
-- Check ST: message and response in Gerard's chat history
-- Send message while another is processing: both eventually answered
-
+- Write AGENT-SETUP.md
+- Hand it to an OC assistant agent and ask it to set up a second test character (Edward)
+- Verify Edward is correctly configured and responds via ST
 ---
 
-### Stage 6: End-to-End Integration
+### Stage 5: End-to-End Integration
 
 #### Phase 6.1 — Single character, full pipeline
 **Deliverable:** One character works end-to-end: Discord → bridge → ST plugin → LLM → Discord.
@@ -1054,18 +987,17 @@ openclaw cron add \
 
 ---
 
-### Stage 7: Setup, Polish, and Public Release
+### Stage 6: Setup, Polish, and Public Release
 
-#### Phase 7.1 — setup.sh complete
+#### Phase 6.1 — setup.sh complete
 **Deliverable:** A fresh Ubuntu or macOS machine can run `setup.sh` and have everything configured.
 
 Tasks:
 - Check for required system deps, print clear error if missing
 - Create symlinks for plugin and extension
 - Run `npm install` in plugin directory
-- Run `pip install -r requirements.txt` in bridge directory
 - Patch ST's `config.yaml` to enable server plugins
-- Generate a random auth token, write to local `.env`
+- Generate a random auth token, write to local token file
 - Print a summary of next steps
 - `setup.sh` should accept a flag indicating where SillyTavern is installed. Ex: `./setup.sh --st-path ~/SillyTavern` indicates to the script that SillyTavern is installed at `~/SillyTavern`. Optionally the script can try checking a few common locations and then asking if it can't find it. 
 
@@ -1074,21 +1006,21 @@ Gate checks:
 - Run on macOS (verify with user's machine)
 - No manual steps required beyond what setup.sh instructs
 
-#### Phase 7.2 — start.sh complete
-**Deliverable:** One script starts everything in the right order with health checks.
+#### Phase 6.2 — start.sh complete
+**Deliverable:** One script starts SillyTavern with helpful checks; OpenClaw is managed separately.
 
 Tasks:
-- Docker check with auto-start on macOS
-- Wait for ST to be ready before starting bridge
+- Docker check with friendly warnings
+- Start SillyTavern from bundled checkout when present
 - Colored output showing status of each service
-- `--stop` flag to cleanly shut everything down
+- `--stop` flag optional for future work
 
-#### Phase 7.3 — README complete
+#### Phase 6.3 — README complete
 **Deliverable:** A stranger can understand, install, and use this project from the README alone.
 
 Sections:
 - What this is and why it exists (the gap it fills)
-- Prerequisites (Node.js, Python, Docker, OpenClaw, SillyTavern)
+- Prerequisites (Node.js, Docker, OpenClaw, SillyTavern)
 - Installation (clone, run setup.sh)
 - Adding your first character (step-by-step with screenshots)
 - Getting a Discord bot token (inline guide)
@@ -1096,7 +1028,7 @@ Sections:
 - Architecture overview (simplified, links to plan doc for detail)
 - Contributing
 
-#### Phase 7.4 — First public release
+#### Phase 6.4 — First public release
 - Tag `v0.1.0`
 - GitHub release with changelog
 - Post to relevant ST community spaces
@@ -1106,17 +1038,18 @@ Sections:
 ## Startup Sequence
 
 ```bash
-# 1. SillyTavern (plugin loads on startup)
-cd ~/SillyTavern && node server.js
-
-# 2. OpenClaw gateway
-openclaw gateway
-
-# 3. Bridge (after both above are running)
-python bridge.py
+# Note: OpenClaw is started separately and managed independently.
+# Verify it is running before starting ST:
+openclaw health
 ```
 
-A launcher script on the desktop (`Start.bat` / `start.sh`) can do all three. During development, run each in a separate terminal window so logs are visible. Later, `pm2` or system services for reliability.
+Run SillyTavern (plugin loads on startup) from the `./sillytavern` checkout:
+
+```bash
+cd ~/SillyTavern && node server.js
+```
+
+The `start.sh` script in this repo now focuses on starting SillyTavern and performing quick environment checks; OpenClaw should be managed by the user or their platform-specific service manager.
 
 ---
 
@@ -1125,9 +1058,12 @@ A launcher script on the desktop (`Start.bat` / `start.sh`) can do all three. Du
 - All plugin endpoints require `Authorization: Bearer {token}` — same token shared across plugin config, bridge, and OC gateway auth
 - Plugin WebSocket on port 8765 accepts connections from localhost only
 - OC gateway on port 18789 similarly localhost-only with auth enabled
-- `characters.yaml` contains Discord bot tokens — restrict file permissions: `chmod 600 characters.yaml`
-- ST should listen on localhost only (`listen: false` in `config.yaml`)
-- For remote access (chatting from phone or away from home): Tailscale, not open ports
+ - All plugin endpoints require `Authorization: Bearer {token}` — same token shared across plugin config and OC agent environment
+ - Plugin WebSocket on port 8765 accepts connections from localhost only
+ - OC gateway on port 18789 similarly localhost-only with auth enabled
+ - Discord bot tokens and channel credentials live in OC's own config and are managed by OC's security model — not in this project. The only secret this project manages is the bridge auth token shared between the ST plugin and OC agent environment variables.
+ - ST should listen on localhost only (`listen: false` in `config.yaml`)
+ - For remote access (chatting from phone or away from home): Tailscale, not open ports
 
 ---
 
