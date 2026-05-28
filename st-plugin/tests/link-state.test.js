@@ -33,10 +33,12 @@ describe('link-state', () => {
         expect(written).toEqual({
             oc_agent_id: 'gerard',
             active: true,
+            owner_user_ids: [],
         });
         expect(linkState.getLink('Gerard')).toEqual({
             oc_agent_id: 'gerard',
             active: true,
+            owner_user_ids: [],
         });
     });
 

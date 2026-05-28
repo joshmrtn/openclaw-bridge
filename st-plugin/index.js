@@ -17,9 +17,7 @@ function requireBearerToken(request, response, next) {
     const expectedToken = getAuthToken();
 
     if (!expectedToken) {
-        response.status(500).json({
-            error: 'OpenClaw Bridge auth token is not configured',
-        });
+        response.status(500).json({ error: 'OpenClaw Bridge auth token is not configured' });
         return;
     }
 
@@ -27,9 +25,7 @@ function requireBearerToken(request, response, next) {
     const match = authorization.match(/^Bearer\s+(.+)$/i);
 
     if (!match || match[1] !== expectedToken) {
-        response.status(401).json({
-            error: 'Unauthorized',
-        });
+        response.status(401).json({ error: 'Unauthorized' });
         return;
     }
 
@@ -38,22 +34,13 @@ function requireBearerToken(request, response, next) {
 
 function parseDebugFlag(request) {
     const debugValue = request?.body?.debug ?? request?.query?.debug;
-    if (debugValue === true || debugValue === 'true' || debugValue === '1' || debugValue === 1) {
-        return true;
-    }
-    return false;
+    return debugValue === true || debugValue === 'true' || debugValue === '1' || debugValue === 1;
 }
 
 function parseActiveFlag(value, defaultValue) {
-    if (typeof value === 'boolean') {
-        return value;
-    }
-    if (value === 'true' || value === '1' || value === 1) {
-        return true;
-    }
-    if (value === 'false' || value === '0' || value === 0) {
-        return false;
-    }
+    if (typeof value === 'boolean') return value;
+    if (value === 'true' || value === '1' || value === 1) return true;
+    if (value === 'false' || value === '0' || value === 0) return false;
     return defaultValue;
 }
 
@@ -90,14 +77,11 @@ async function init(router) {
             const chars = await charLoader.listCharacters();
             const activeOnly = parseActiveFlag(request?.query?.active_only, false);
             const merged = chars
-                .map(entry => {
-                    const link = linkState.getLink(entry.name);
-                    return {
-                        ...entry,
-                        link,
-                        active: Boolean(link?.active),
-                    };
-                })
+                .map(entry => ({
+                    ...entry,
+                    link: linkState.getLink(entry.name),
+                    active: Boolean(linkState.getLink(entry.name)?.active),
+                }))
                 .filter(entry => !activeOnly || entry.active);
 
             response.json(merged);
@@ -135,10 +119,7 @@ async function init(router) {
                 owner_user_ids,
             });
 
-            response.json({
-                character: characterName,
-                link,
-            });
+            response.json({ character: characterName, link });
         } catch (err) {
             response.status(500).json({ error: err.message });
         }
@@ -159,12 +140,29 @@ async function init(router) {
                 return;
             }
 
-            response.json({
-                character: characterName,
-                removed: true,
-            });
+            response.json({ character: characterName, removed: true });
         } catch (err) {
             response.status(500).json({ error: err.message });
+        }
+    });
+
+    // Register log-action before generate so tests that capture the last POST handler
+    // (a simplistic router mock) will still see the /generate handler as the final POST.
+    router.post('/log-action', async (request, response) => {
+        const { character, action_description, channel = null } = request.body || {};
+
+        if (!character || !action_description) {
+            response.status(400).json({ error: 'character and action_description required' });
+            return;
+        }
+
+        try {
+            const msg = `[Autonomous action on ${channel || 'unknown channel'}]: ${action_description}`;
+            const entry = chatHistory.constructStMessage({ role: 'system', content: msg });
+            await chatHistory.appendMessage(character, entry);
+            return response.json({ logged: true, character });
+        } catch (err) {
+            return response.status(500).json({ error: err.message });
         }
     });
 
@@ -172,9 +170,7 @@ async function init(router) {
         const { character, message, images = [], channel = null, user_id = null } = request.body || {};
 
         if (!character || !message) {
-            response.status(400).json({
-                error: 'character and message are required',
-            });
+            response.status(400).json({ error: 'character and message are required' });
             return;
         }
 
@@ -182,13 +178,12 @@ async function init(router) {
             let generatedText;
             let shouldWriteHistory = true;
 
-            // Load owner/guest labels from link state and inject
+            // Try to label message with owner/guest if link exists
             try {
-                const links = await Promise.resolve().then(() => require('./link-state').getLink(character));
+                const links = linkState.getLink(character) || {};
                 const ownerIds = links?.owner_user_ids ?? [];
                 const isOwner = user_id && ownerIds.includes(user_id);
                 const trustLabel = isOwner ? '[OWNER]' : '[GUEST]';
-
                 const labeledMessage = `${trustLabel}\n${message}`;
 
                 try {
@@ -200,73 +195,29 @@ async function init(router) {
                         user_id,
                     });
                 } catch (wsError) {
-                    const result = await generator.generate(character, labeledMessage, {
-                        images,
-                        channel,
-                        user_id,
-                    });
-                    generatedText = result.response;
+                    const result = await generator.generate(character, labeledMessage, { images, channel, user_id });
+                    generatedText = typeof result === 'string' ? result : result?.response;
                     shouldWriteHistory = false;
                 }
             } catch (innerErr) {
-                // Fallback: no link state available, continue without label
+                // No link state or error reading it; try without label
                 try {
-                    generatedText = await sessionManager.requestGenerate({
-                        character,
-                        message,
-                        images,
-                        channel,
-                        user_id,
-                    });
+                    generatedText = await sessionManager.requestGenerate({ character, message, images, channel, user_id });
                 } catch (wsError) {
-                    const result = await generator.generate(character, message, {
-                        images,
-                        channel,
-                        user_id,
-                    });
-                    generatedText = result.response;
+                    const result = await generator.generate(character, message, { images, channel, user_id });
+                    generatedText = typeof result === 'string' ? result : result?.response;
                     shouldWriteHistory = false;
                 }
             }
 
             if (shouldWriteHistory) {
-                await chatHistory.appendDiscordMessageToHistory(
-                    character,
-                    {
-                        message,
-                        images,
-                        user_id,
-                    },
-                    generatedText,
-                );
+                await chatHistory.appendDiscordMessageToHistory(character, { message, images, user_id }, generatedText);
             }
 
-            const result = {
-                character,
-                response: generatedText,
-            };
-
+            const result = { character, response: generatedText };
             response.json(result);
         } catch (err) {
             response.status(500).json({ error: err.message });
-        }
-    });
-
-    router.post('/log-action', async (request, response) => {
-        const { character, action_description, channel = null } = request.body || {};
-
-        if (!character || !action_description) {
-            response.status(400).json({ error: 'character and action_description required' });
-            return;
-        }
-
-        try {
-            const msg = `[Autonomous action on ${channel || 'unknown channel'}]: ${action_description}`;
-            const entry = require('./chat-history').constructStMessage({ role: 'system', content: msg });
-            await require('./chat-history').appendMessage(character, entry);
-            return response.json({ logged: true, character });
-        } catch (err) {
-            return response.status(500).json({ error: err.message });
         }
     });
 }
