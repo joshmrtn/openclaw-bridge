@@ -57,6 +57,17 @@ function sendJson(client, payload) {
     client.send(JSON.stringify(payload));
 }
 
+function broadcast(payload) {
+    let delivered = 0;
+    for (const client of clients) {
+        if (client.readyState === WS.OPEN) {
+            sendJson(client, payload);
+            delivered += 1;
+        }
+    }
+    return delivered;
+}
+
 function requestGenerate(payload, timeoutMs = 60000) {
     const client = pickClient();
     if (!client) {
@@ -123,6 +134,7 @@ module.exports = {
     registerClient,
     unregisterClient,
     getConnectedClientCount,
+    broadcast,
     requestGenerate,
     handleMessage,
     reset,

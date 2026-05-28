@@ -1,3 +1,82 @@
-#openclaw-bridge-root {
+#openclaw-bridge-notifications {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    width: 320px;
+    max-height: 60vh;
+    background: rgba(20, 20, 24, 0.94);
+    color: #f2f2f2;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    z-index: 9999;
+}
+
+#openclaw-bridge-notifications.is-hidden {
     display: none;
+}
+
+#openclaw-bridge-notifications.is-collapsed .openclaw-bridge-panel__list {
+    display: none;
+}
+
+.openclaw-bridge-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.openclaw-bridge-panel__title {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.openclaw-bridge-panel__toggle {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.openclaw-bridge-panel__list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    overflow-y: auto;
+}
+
+.openclaw-bridge-notification {
+    position: relative;
+    padding: 8px 28px 8px 8px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.openclaw-bridge-notification__content {
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: pre-wrap;
+}
+
+.openclaw-bridge-notification__meta {
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+}
+
+.openclaw-bridge-notification__dismiss {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    cursor: pointer;
 }

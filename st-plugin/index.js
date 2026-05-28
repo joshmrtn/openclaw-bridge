@@ -146,6 +146,24 @@ async function init(router) {
         }
     });
 
+    router.post('/test-notify', (request, response) => {
+        const { character, text } = request.body || {};
+
+        if (!character || !text) {
+            response.status(400).json({ error: 'character and text are required' });
+            return;
+        }
+
+        const delivered = sessionManager.broadcast({
+            type: 'notification',
+            character,
+            text,
+            timestamp: Date.now(),
+        });
+
+        response.json({ sent: true, delivered });
+    });
+
     // Register log-action before generate so tests that capture the last POST handler
     // (a simplistic router mock) will still see the /generate handler as the final POST.
     router.post('/log-action', async (request, response) => {

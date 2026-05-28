@@ -6,6 +6,9 @@ const STATE = {
     reconnectTimer: null,
     pending: new Map(),
     characterLocks: new Map(),
+    notificationRoot: null,
+    notificationList: null,
+    notificationsCollapsed: false,
 };
 
 function getStContext() {
@@ -54,6 +57,93 @@ function normalizeGenerationResult(result) {
     }
 
     return result?.text || result?.response || result?.message || JSON.stringify(result);
+}
+
+function ensureNotificationPanel() {
+    if (STATE.notificationRoot) {
+        return STATE.notificationRoot;
+    }
+
+    const root = document.createElement('div');
+    root.id = 'openclaw-bridge-notifications';
+    root.className = 'openclaw-bridge-panel is-hidden';
+
+    const header = document.createElement('div');
+    header.className = 'openclaw-bridge-panel__header';
+
+    const title = document.createElement('span');
+    title.className = 'openclaw-bridge-panel__title';
+    title.textContent = 'External Presence';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'openclaw-bridge-panel__toggle';
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.textContent = '▾';
+
+    toggle.addEventListener('click', () => {
+        STATE.notificationsCollapsed = !STATE.notificationsCollapsed;
+        root.classList.toggle('is-collapsed', STATE.notificationsCollapsed);
+        toggle.setAttribute('aria-expanded', String(!STATE.notificationsCollapsed));
+        toggle.textContent = STATE.notificationsCollapsed ? '▸' : '▾';
+    });
+
+    header.append(title, toggle);
+
+    const list = document.createElement('div');
+    list.className = 'openclaw-bridge-panel__list';
+
+    root.append(header, list);
+    document.body.append(root);
+
+    STATE.notificationRoot = root;
+    STATE.notificationList = list;
+
+    return root;
+}
+
+function formatNotificationTime(timestamp) {
+    if (!timestamp) return '';
+    try {
+        return new Date(timestamp).toLocaleTimeString();
+    } catch (error) {
+        return '';
+    }
+}
+
+function addNotification({ character, text, timestamp }) {
+    if (!text) return;
+
+    const root = ensureNotificationPanel();
+    const list = STATE.notificationList;
+    if (!list) return;
+
+    root.classList.remove('is-hidden');
+
+    const item = document.createElement('div');
+    item.className = 'openclaw-bridge-notification';
+
+    const content = document.createElement('div');
+    content.className = 'openclaw-bridge-notification__content';
+    content.textContent = text;
+
+    const meta = document.createElement('div');
+    meta.className = 'openclaw-bridge-notification__meta';
+    const timeLabel = formatNotificationTime(timestamp || Date.now());
+    meta.textContent = `${character || 'Unknown'}${timeLabel ? ` • ${timeLabel}` : ''}`;
+
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'openclaw-bridge-notification__dismiss';
+    dismiss.textContent = '×';
+    dismiss.addEventListener('click', () => item.remove());
+
+    item.append(content, meta, dismiss);
+    list.prepend(item);
+
+    while (list.children.length > 20) {
+        list.lastChild?.remove();
+    }
 }
 
 function withCharacterLock(characterName, task) {
@@ -181,6 +271,11 @@ function connect() {
 
         if (payload.type === 'generate') {
             await handleGenerateRequest(payload);
+            return;
+        }
+
+        if (payload.type === 'notification') {
+            addNotification(payload);
         }
     });
 
