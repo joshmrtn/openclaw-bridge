@@ -1,0 +1,277 @@
+describe('plugin routes', () => {
+    const originalToken = process.env.OPENCLAW_BRIDGE_AUTH_TOKEN;
+
+    function makeRouter() {
+        return {
+            middleware: null,
+            getHandlers: new Map(),
+            postHandlers: new Map(),
+            deleteHandlers: new Map(),
+            use(fn) { this.middleware = fn; },
+            get(path, handler) { this.getHandlers.set(path, handler); },
+            post(path, handler) { this.postHandlers.set(path, handler); },
+            delete(path, handler) { this.deleteHandlers.set(path, handler); },
+        };
+    }
+
+    async function callRoute(router, handler, req, res) {
+        if (router.middleware) {
+            let nextCalled = false;
+            await router.middleware(req, res, () => { nextCalled = true; });
+            if (!nextCalled) return;
+        }
+        await handler(req, res);
+    }
+
+    function makeRes() {
+        return {
+            statusCode: 200,
+            body: null,
+            status(code) { this.statusCode = code; return this; },
+            json(payload) { this.body = payload; return this; },
+        };
+    }
+
+    beforeEach(() => {
+        jest.resetModules();
+        process.env.OPENCLAW_BRIDGE_AUTH_TOKEN = 'token';
+    });
+
+    afterEach(() => {
+        jest.clearAllMocks();
+        process.env.OPENCLAW_BRIDGE_AUTH_TOKEN = originalToken;
+    });
+
+    test('GET /characters returns merged link state', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Gerard' }, { name: 'Edward' }]),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(name => (name === 'Gerard' ? { oc_agent_id: 'gerard', active: true, owner_user_ids: [] } : null)),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            query: { active_only: 'true' },
+        };
+        const res = makeRes();
+
+        const handler = router.getHandlers.get('/characters');
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual([
+            {
+                name: 'Gerard',
+                link: { oc_agent_id: 'gerard', active: true, owner_user_ids: [] },
+                active: true,
+            },
+        ]);
+    });
+
+    test('CSRF headers allow access without bearer token', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const getConnectedClientCount = jest.fn(() => 0);
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount,
+            broadcast: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/status');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                if (header.toLowerCase() === 'x-csrf-token') return 'csrf';
+                return '';
+            },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.status).toBe('ok');
+    });
+
+    test('POST /characters/:name/link validates and saves link state', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const upsertLink = jest.fn(() => ({ oc_agent_id: 'gerard', active: true, owner_user_ids: [] }));
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Gerard' }]),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => null),
+            upsertLink,
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            params: { name: 'Gerard' },
+            body: { oc_agent_id: 'gerard', owner_user_ids: ['discord:1'] },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(upsertLink).toHaveBeenCalledWith('Gerard', {
+            oc_agent_id: 'gerard',
+            active: true,
+            owner_user_ids: ['discord:1'],
+        });
+        expect(res.body).toEqual({
+            character: 'Gerard',
+            link: { oc_agent_id: 'gerard', active: true, owner_user_ids: [] },
+        });
+    });
+
+    test('DELETE /characters/:name/link returns 404 when missing', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../link-state', () => ({
+            removeLink: jest.fn(() => false),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.deleteHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            params: { name: 'Gerard' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(404);
+        expect(res.body.error).toMatch(/No link found/);
+    });
+
+    test('POST /log-action writes a system message', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const appendMessage = jest.fn().mockResolvedValue();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendMessage };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/log-action');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            body: { character: 'Gerard', action_description: 'Posted a drawing', channel: 'discord' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(appendMessage).toHaveBeenCalled();
+        const loggedMessage = appendMessage.mock.calls[0][1];
+        expect(loggedMessage.content).toMatch(/Autonomous action on discord/);
+        expect(res.body).toEqual({ logged: true, character: 'Gerard' });
+    });
+
+    test('POST /test-notify broadcasts to connected clients', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const broadcast = jest.fn(() => 2);
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            broadcast,
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/test-notify');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            body: { character: 'Gerard', text: 'Hello' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(broadcast).toHaveBeenCalled();
+        expect(res.body).toEqual({ sent: true, delivered: 2 });
+    });
+
+    test('POST /generate prefixes owner messages with [OWNER]', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const requestGenerate = jest.fn().mockResolvedValue('[RESP]');
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:1'] })),
+        }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            body: { character: 'Gerard', message: 'Hello', user_id: 'discord:1' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(requestGenerate).toHaveBeenCalledWith(expect.objectContaining({
+            message: '[OWNER]\nHello',
+        }));
+        expect(appendExternalChatToHistory).toHaveBeenCalledWith('Gerard', { message: 'Hello', images: [], user_id: 'discord:1' }, '[RESP]');
+        expect(res.body.response).toBe('[RESP]');
+    });
+});

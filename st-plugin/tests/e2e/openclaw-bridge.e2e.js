@@ -168,3 +168,36 @@ test('extension serializes same-character Generate() calls', async ({ page, requ
     expect(ended).toHaveLength(2);
     expect(started[1].at).toBeGreaterThanOrEqual(ended[0].at);
 });
+
+test('notification panel renders on test notify', async ({ page, request, baseURL }) => {
+    await bootExtension(page, {
+        characterName: CHARACTER_NAME,
+        generateImpl: async () => MOCK_RESPONSE,
+    });
+
+    const notifyResponse = await request.post(`${baseURL}/api/plugins/openclaw-bridge/test-notify`, {
+        headers: {
+            Authorization: `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+        },
+        data: {
+            character: CHARACTER_NAME,
+            text: 'Playwright notification',
+        },
+    });
+
+    expect(notifyResponse.ok()).toBeTruthy();
+
+    const notificationPanel = page.locator('#openclaw-bridge-notifications');
+    await expect(notificationPanel).toBeVisible();
+    await expect(notificationPanel.locator('.openclaw-bridge-notification__content')).toContainText('Playwright notification');
+});
+
+test('management panel injects into character editor', async ({ page }) => {
+    await bootExtension(page, {
+        characterName: CHARACTER_NAME,
+        generateImpl: async () => MOCK_RESPONSE,
+    });
+
+    await expect(page.locator('#openclaw-bridge-management')).toHaveCount(1);
+});

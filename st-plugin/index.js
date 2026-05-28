@@ -15,6 +15,12 @@ function getAuthToken() {
 
 function requireBearerToken(request, response, next) {
     const expectedToken = getAuthToken();
+    const csrfToken = request.get('x-csrf-token');
+
+    if (csrfToken) {
+        next();
+        return;
+    }
 
     if (!expectedToken) {
         response.status(500).json({ error: 'OpenClaw Bridge auth token is not configured' });
@@ -46,6 +52,11 @@ function parseActiveFlag(value, defaultValue) {
 
 function normalizeCharacterName(rawName = '') {
     return decodeURIComponent(String(rawName || '')).trim();
+}
+
+function isWsUnavailableError(error) {
+    const msg = error?.message || '';
+    return msg.includes('No connected extension client') || msg.includes('Timed out waiting for generation response');
 }
 
 async function ensureCharacterExists(characterName) {
@@ -186,6 +197,7 @@ async function init(router) {
 
     router.post('/generate', async (request, response) => {
         const { character, message, images = [], channel = null, user_id = null } = request.body || {};
+        const allowFallback = String(process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK || '').toLowerCase() === 'true';
 
         if (!character || !message) {
             response.status(400).json({ error: 'character and message are required' });
@@ -213,6 +225,10 @@ async function init(router) {
                         user_id,
                     });
                 } catch (wsError) {
+                    if (!allowFallback) {
+                        wsError.statusCode = 503;
+                        throw wsError;
+                    }
                     const result = await generator.generate(character, labeledMessage, { images, channel, user_id });
                     generatedText = typeof result === 'string' ? result : result?.response;
                     shouldWriteHistory = false;
@@ -222,6 +238,10 @@ async function init(router) {
                 try {
                     generatedText = await sessionManager.requestGenerate({ character, message, images, channel, user_id });
                 } catch (wsError) {
+                    if (!allowFallback) {
+                        wsError.statusCode = 503;
+                        throw wsError;
+                    }
                     const result = await generator.generate(character, message, { images, channel, user_id });
                     generatedText = typeof result === 'string' ? result : result?.response;
                     shouldWriteHistory = false;
@@ -235,7 +255,8 @@ async function init(router) {
             const result = { character, response: generatedText };
             response.json(result);
         } catch (err) {
-            response.status(500).json({ error: err.message });
+            const status = err?.statusCode || (isWsUnavailableError(err) ? 503 : 500);
+            response.status(status).json({ error: err.message });
         }
     });
 }

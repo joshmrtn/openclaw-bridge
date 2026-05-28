@@ -64,23 +64,6 @@ function normalizeGenerationResult(result) {
     return result?.text || result?.response || result?.message || JSON.stringify(result);
 }
 
-const BRIDGE_TOKEN_KEY = 'openclawBridgeAuthToken';
-
-function getStoredAuthToken() {
-    if (!globalThis.localStorage) return '';
-    return localStorage.getItem(BRIDGE_TOKEN_KEY) || '';
-}
-
-function setStoredAuthToken(value) {
-    if (!globalThis.localStorage) return;
-    const trimmed = String(value || '').trim();
-    if (!trimmed) {
-        localStorage.removeItem(BRIDGE_TOKEN_KEY);
-        return;
-    }
-    localStorage.setItem(BRIDGE_TOKEN_KEY, trimmed);
-}
-
 function resolveCharacterName() {
     const input = document.getElementById('character_name_pole');
     const value = input?.value?.trim();
@@ -95,12 +78,7 @@ function resolveCharacterName() {
 }
 
 function buildPluginHeaders({ omitContentType = false } = {}) {
-    const headers = getRequestHeaders({ omitContentType });
-    const token = getStoredAuthToken();
-    if (token) {
-        headers.Authorization = `Bearer ${token}`;
-    }
-    return headers;
+    return getRequestHeaders({ omitContentType });
 }
 
 function setManagementStatus(message, tone = 'info') {
@@ -120,8 +98,8 @@ function setManagementLoading(isLoading) {
     STATE.managementLoading = isLoading;
     const fields = STATE.managementFields;
     if (!fields) return;
-    const { toggleInput, ocAgentInput, ownerIdsInput, tokenInput, saveButton, testButton, saveTokenButton } = fields;
-    [toggleInput, ocAgentInput, ownerIdsInput, tokenInput, saveButton, testButton, saveTokenButton].forEach(el => {
+    const { toggleInput, ocAgentInput, ownerIdsInput, saveButton, testButton } = fields;
+    [toggleInput, ocAgentInput, ownerIdsInput, saveButton, testButton].forEach(el => {
         if (el) el.disabled = isLoading;
     });
 }
@@ -167,24 +145,6 @@ function ensureManagementPanel() {
     const body = document.createElement('div');
     body.className = 'openclaw-bridge-card__body';
 
-    const tokenField = document.createElement('div');
-    tokenField.className = 'openclaw-bridge-field';
-    const tokenLabel = document.createElement('label');
-    tokenLabel.textContent = 'Bridge Auth Token';
-    const tokenRow = document.createElement('div');
-    tokenRow.className = 'openclaw-bridge-inline';
-    const tokenInput = document.createElement('input');
-    tokenInput.type = 'password';
-    tokenInput.className = 'text_pole';
-    tokenInput.placeholder = 'Paste OPENCLAW_BRIDGE_TOKEN';
-    tokenInput.value = getStoredAuthToken();
-    const saveTokenButton = document.createElement('button');
-    saveTokenButton.type = 'button';
-    saveTokenButton.className = 'openclaw-bridge-button';
-    saveTokenButton.textContent = 'Save token';
-    tokenRow.append(tokenInput, saveTokenButton);
-    tokenField.append(tokenLabel, tokenRow);
-
     const agentField = document.createElement('div');
     agentField.className = 'openclaw-bridge-field';
     const agentLabel = document.createElement('label');
@@ -223,7 +183,11 @@ function ensureManagementPanel() {
     status.className = 'openclaw-bridge-status is-muted';
     status.textContent = 'Not configured.';
 
-    body.append(tokenField, agentField, ownerField, actions, status);
+    const authNote = document.createElement('small');
+    authNote.className = 'openclaw-bridge-status is-muted';
+    authNote.textContent = 'Uses current SillyTavern session for auth.';
+
+    body.append(agentField, ownerField, actions, authNote, status);
     root.append(header, body);
     container.append(root);
 
@@ -233,16 +197,9 @@ function ensureManagementPanel() {
         toggleInput,
         ocAgentInput,
         ownerIdsInput,
-        tokenInput,
         saveButton,
         testButton,
-        saveTokenButton,
     };
-
-    saveTokenButton.addEventListener('click', () => {
-        setStoredAuthToken(tokenInput.value);
-        setManagementStatus('Token saved.', 'success');
-    });
 
     toggleInput.addEventListener('change', () => {
         saveLinkState();
@@ -262,12 +219,6 @@ function ensureManagementPanel() {
 async function loadLinkState(characterName) {
     if (!characterName) {
         setManagementStatus('Enter a character name to configure.', 'muted');
-        return;
-    }
-
-    const token = getStoredAuthToken();
-    if (!token) {
-        setManagementStatus('Set the bridge auth token to load link state.', 'muted');
         return;
     }
 
@@ -321,12 +272,6 @@ async function saveLinkState() {
         return;
     }
 
-    const token = getStoredAuthToken();
-    if (!token) {
-        setManagementStatus('Bridge auth token is required.', 'error');
-        return;
-    }
-
     const ocAgentId = fields.ocAgentInput.value.trim();
     if (!ocAgentId) {
         setManagementStatus('OC Agent ID is required.', 'error');
@@ -369,12 +314,6 @@ async function testConnection() {
     const characterName = resolveCharacterName();
     if (!characterName) {
         setManagementStatus('Enter a character name before testing.', 'error');
-        return;
-    }
-
-    const token = getStoredAuthToken();
-    if (!token) {
-        setManagementStatus('Bridge auth token is required.', 'error');
         return;
     }
 

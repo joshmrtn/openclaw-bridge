@@ -1,8 +1,21 @@
 describe('plugin generate fallback behavior', () => {
-    beforeEach(() => jest.resetModules());
-    afterEach(() => jest.clearAllMocks());
+    let previousFallback;
 
-    test('falls back to generator.generate and does not double-write history', async () => {
+    beforeEach(() => {
+        jest.resetModules();
+        previousFallback = process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK;
+        delete process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK;
+    });
+    afterEach(() => {
+        jest.clearAllMocks();
+        if (previousFallback === undefined) {
+            delete process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK;
+        } else {
+            process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK = previousFallback;
+        }
+    });
+
+    test('returns 503 when extension is unavailable and fallback is disabled', async () => {
         // mock session-manager to throw
         const mockSessionManager = { requestGenerate: jest.fn().mockRejectedValue(new Error('no extension')) };
         jest.doMock('../session-manager', () => mockSessionManager);
@@ -33,12 +46,15 @@ describe('plugin generate fallback behavior', () => {
 
         await router.postHandler(req, res);
 
-        expect(res.body.response).toBe('[MOCK FALLBACK]');
+        expect(res.statusCode).toBe(503);
+        expect(res.body.error).toMatch(/no extension/i);
+        expect(mockGenerator.generate).not.toHaveBeenCalled();
         // generator.generate appends history itself; plugin should NOT call appendExternalChatToHistory
         expect(appendSpy).not.toHaveBeenCalled();
     });
 
-    test('falls back to generator.generate when session request times out', async () => {
+    test('falls back to generator.generate when explicitly enabled', async () => {
+        process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK = 'true';
         const mockSessionManager = { requestGenerate: jest.fn().mockRejectedValue(new Error('Timed out waiting for generation response (abc123)')) };
         jest.doMock('../session-manager', () => mockSessionManager);
 
