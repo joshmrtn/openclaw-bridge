@@ -43,6 +43,7 @@ function getLink(characterName) {
     return {
         oc_agent_id: typeof link.oc_agent_id === 'string' ? link.oc_agent_id : null,
         active: Boolean(link.active),
+        owner_user_ids: Array.isArray(link.owner_user_ids) ? link.owner_user_ids.slice() : [],
     };
 }
 
@@ -51,11 +52,15 @@ function upsertLink(characterName, patch) {
     const current = getLink(characterName) || {
         oc_agent_id: null,
         active: false,
+        owner_user_ids: [],
     };
 
     const next = {
         oc_agent_id: typeof patch.oc_agent_id === 'string' ? patch.oc_agent_id.trim() : current.oc_agent_id,
         active: typeof patch.active === 'boolean' ? patch.active : current.active,
+        owner_user_ids: Array.isArray(patch.owner_user_ids)
+            ? patch.owner_user_ids.filter(x => typeof x === 'string').map(x => x.trim())
+            : (Array.isArray(current.owner_user_ids) ? current.owner_user_ids.slice() : []),
     };
 
     state[characterName] = next;
