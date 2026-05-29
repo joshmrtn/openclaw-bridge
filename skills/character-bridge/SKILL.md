@@ -1,4 +1,7 @@
 ---
+name: character-bridge
+description: "Bridges OpenClaw agent execution to SillyTavern character brains and pipelines"
+version: "0.1.0"
 tools:
   - name: generate_response
     description: >
