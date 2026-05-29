@@ -1,4 +1,14 @@
-import { eventSource, event_types, getContext, getRequestHeaders } from '/script.js';
+let eventSource, event_types, getContext, getRequestHeaders;
+
+function ensureSillyTavernApis() {
+    if (!eventSource && typeof window !== 'undefined') {
+        eventSource = window.eventSource;
+        event_types = window.event_types;
+        getContext = window.getContext;
+        getRequestHeaders = window.getRequestHeaders;
+    }
+}
+
 
 const STATE = {
     socket: null,
@@ -612,6 +622,8 @@ function connect() {
 }
 
 function init() {
+    ensureSillyTavernApis();
+    console.log('[openclaw-bridge] init() called');
     globalThis.openclawBridge = {
         connect,
         generateForCharacter,

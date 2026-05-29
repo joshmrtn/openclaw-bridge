@@ -5,6 +5,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 st_dir="${ST_DIR:-${script_dir}/sillytavern}"
 plugin_source="${script_dir}/st-plugin"
 plugin_target="${st_dir}/plugins/openclaw-bridge"
+extension_source="${script_dir}/st-extension"
+extension_target="${st_dir}/public/scripts/extensions/openclaw-bridge"
 
 if [[ ! -d "${plugin_source}" ]]; then
     printf '%s\n' "Missing plugin source directory: ${plugin_source}" >&2
@@ -35,6 +37,27 @@ if [[ -e "${plugin_target}" || -L "${plugin_target}" ]]; then
 else
     ln -s "${plugin_source}" "${plugin_target}"
     printf '%s\n' "Linked ${plugin_target} -> ${plugin_source}"
+fi
+
+# Link extension into ST
+mkdir -p "${st_dir}/public/scripts/extensions"
+
+if [[ -e "${extension_target}" || -L "${extension_target}" ]]; then
+    if [[ -L "${extension_target}" ]]; then
+        current_target="$(readlink "${extension_target}")"
+        if [[ "${current_target}" == "${extension_source}" ]]; then
+            printf '%s\n' "Development symlink already points to ${extension_source}"
+        else
+            printf '%s\n' "Refusing to replace existing symlink ${extension_target} -> ${current_target}" >&2
+            exit 1
+        fi
+    else
+        printf '%s\n' "Refusing to overwrite existing path: ${extension_target}" >&2
+        exit 1
+    fi
+else
+    ln -s "${extension_source}" "${extension_target}"
+    printf '%s\n' "Linked ${extension_target} -> ${extension_source}"
 fi
 
 cat <<'EOF'
