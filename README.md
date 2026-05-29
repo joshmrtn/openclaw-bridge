@@ -22,6 +22,22 @@ cd openclaw-bridge
    an OpenClaw agent and configure `OPENCLAW_BRIDGE_URL` and
    `OPENCLAW_BRIDGE_TOKEN` in the agent's environment.
 
+## Configuration
+
+The plugin accepts the following environment variables:
+
+- `OPENCLAW_BRIDGE_URL` — base URL where the plugin is reachable (used by OpenClaw agents).
+- `OPENCLAW_BRIDGE_TOKEN` — bearer token OpenClaw agents must use when POSTing to the plugin.
+- `OPENCLAW_BRIDGE_WS_PORT` — optional port used by the plugin's WebSocket server (default: 8765).
+- `OPENCLAW_BRIDGE_ALLOW_FALLBACK` — if set to `true` (only recommended for local development), the plugin will fall back to a local mock generator when the SillyTavern extension is not connected. Defaults to `false` in production and should never be enabled in production environments.
+
+Example (development):
+
+```bash
+export OPENCLAW_BRIDGE_ALLOW_FALLBACK=true
+export OPENCLAW_BRIDGE_WS_PORT=8765
+```
+
 ## Development workflow
 
 If SillyTavern is checked out in this repo at `./sillytavern`, run:

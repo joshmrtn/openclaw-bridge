@@ -560,7 +560,18 @@ function connect() {
         return;
     }
 
-    const socket = new WebSocket('ws://localhost:8765');
+    // Derive WebSocket URL from current location with optional global overrides.
+    function getWebSocketUrl() {
+        if (globalThis.OPENCLAW_BRIDGE_WS_URL) {
+            return globalThis.OPENCLAW_BRIDGE_WS_URL;
+        }
+        const port = globalThis.OPENCLAW_BRIDGE_WS_PORT || 8765;
+        const protocol = (typeof location !== 'undefined' && location.protocol === 'https:') ? 'wss:' : 'ws:';
+        const host = (typeof location !== 'undefined' && location.hostname) ? location.hostname : 'localhost';
+        return `${protocol}//${host}:${port}`;
+    }
+
+    const socket = new WebSocket(getWebSocketUrl());
     STATE.socket = socket;
 
     socket.addEventListener('open', () => {
