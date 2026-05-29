@@ -76,7 +76,7 @@ DELETE /api/plugins/openclaw-bridge/characters/:name/link
 GET  /api/plugins/openclaw-bridge/status
   Returns: { plugin_version, connected_clients, active_sessions }
 
-WebSocket: ws://localhost:8765
+WebSocket: Derived from the page host and OPENCLAW_BRIDGE_WS_PORT (default: 8765). The ST extension derives the URL automatically (wss when the page is served over HTTPS) and it can be overridden by setting globalThis.OPENCLAW_BRIDGE_WS_URL in the extension.
   - Pushes inbound notifications to ST UI extension
   - Receives outbound action requests from UI extension
 ```
@@ -767,14 +767,14 @@ wait
 **Deliverable:** Plugin opens a WebSocket server on port 8765, accepts connections, echoes pings.
 
 Tasks:
-- Write `ws-server.js`: open `ws://localhost:8765`, handle connect/disconnect
+- Write `ws-server.js`: open a WebSocket on the configured OPENCLAW_BRIDGE_WS_PORT (default: 8765) and handle connect/disconnect. The extension connects to the derived URL (wss/ws depending on page protocol) or to the URL set in globalThis.OPENCLAW_BRIDGE_WS_URL.
 - Broadcast a test message to all connected clients
 - Add `/api/plugins/openclaw-bridge/status` to include `connected_ws_clients` count
 
 Gate checks:
 ```bash
 # Using wscat or websocat
-wscat -c ws://localhost:8765
+wscat -c $OPENCLAW_BRIDGE_WS_URL  # or ws://localhost:$OPENCLAW_BRIDGE_WS_PORT (default: 8765)
 # Send: {"type":"ping"}
 # Expected: {"type":"pong"}
 
@@ -789,7 +789,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 Tasks:
 - Create `st-extension/manifest.json`, `index.js`, `index.html`
 - `setup.sh`: symlink into `SillyTavern/public/scripts/extensions/third-party/`
-- Extension connects to `ws://localhost:8765` on load
+- Extension connects to the derived WebSocket URL on load (derived from page location + OPENCLAW_BRIDGE_WS_PORT, or overridden with globalThis.OPENCLAW_BRIDGE_WS_URL).
 - Extension logs connection status to ST's debug console
 
 Gate checks:

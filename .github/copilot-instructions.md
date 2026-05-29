@@ -159,7 +159,7 @@ The plugin's WebSocket protocol can be tested without a real browser by running 
 ```javascript
 // st-plugin/tools/fake-extension.js
 const WebSocket = require('ws');
-const ws = new WebSocket('ws://localhost:8765');
+const ws = new WebSocket(process.env.OPENCLAW_BRIDGE_WS_URL || `ws://localhost:${process.env.OPENCLAW_BRIDGE_WS_PORT || 8765}`);
 
 ws.on('message', (data) => {
     const msg = JSON.parse(data);
