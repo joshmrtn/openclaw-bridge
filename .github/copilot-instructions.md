@@ -178,6 +178,52 @@ Run this alongside ST, then fire curl commands at the plugin endpoints. This let
 
 ### E2E tests (Playwright)
 
+### Mock OpenClaw Client (end-to-end testing)
+
+A mock OpenClaw client at `st-plugin/tools/mock-openclaw.js` simulates the full bridge pipeline without needing real OpenClaw infrastructure. This is the primary tool for validating end-to-end flows because running real OpenClaw locally is resource-intensive.
+
+**Features:**
+- Simulates OpenClaw agents sending messages to the bridge `/generate` endpoint
+- Tests different user IDs to verify `[OWNER]` vs `[GUEST]` trust label injection
+- Can call `/log-action` for autonomous action logging
+- **6 built-in test scenarios** (interactive menu mode) covering:
+  1. Guest user sends message
+  2. Owner sends message (trust label verification)
+  3. Multiple messages from different users (ordering, concurrency)
+  4. Autonomous action logging
+  5. Full workflow (message + action together)
+  6. Character switching (tests `force_chid` logic)
+
+**Usage:**
+```bash
+# Interactive test menu with 6 scenarios
+
+### Performance tuning for local development
+
+**WebSocket timeout (generation requests):** Default is 900000ms (15 minutes). This is necessary because local Ollama models are slow:
+- Average response time: 5–10 minutes  
+- First token latency: 30 seconds to several minutes
+
+Do not reduce this timeout for development. If a request times out, the issue is likely that Ollama is busy or the model is slow, not the timeout value.
+
+**Tested model:** llama3.2 on limited hardware is faster than gemma4:e2b.
+
+node st-plugin/tools/mock-openclaw.js --test-scenario
+
+# Single message as guest user
+node st-plugin/tools/mock-openclaw.js --character Frog --message "Ribbit!" --user-id discord:user123
+
+# Single message as different character
+node st-plugin/tools/mock-openclaw.js --character Toad --message "Hello" --user-id telegram:librarian-42
+
+# Help
+node st-plugin/tools/mock-openclaw.js --help
+```
+
+Requires ST running with the plugin loaded. Token is auto-loaded from `data/openclaw-bridge/bridge-token.txt`. **Use this tool for all end-to-end validation work.**
+
+### E2E tests (Playwright)
+
 Reserve for things that genuinely require a browser: UI panel rendering, status indicator updates, and verifying that a real `Generate()` call goes through and the response appears in ST's chat UI. Keep the E2E suite minimal — one happy-path test is enough to catch regressions in the extension without a slow full suite.
 
 ### Skill validation

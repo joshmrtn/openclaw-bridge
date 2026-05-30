@@ -504,19 +504,23 @@ async function generateForCharacter(characterName, message) {
     const shouldRestorePreviousCharacter = previousChid !== -1 && previousChid !== chid;
 
     if (shouldRestorePreviousCharacter && typeof selectCharacterById === 'function') {
+        console.info('[openclaw-bridge] Switching to character', { chid, characterName });
         await selectCharacterById(chid, { switchMenu: false });
         await waitForCharacterChat(context, chid);
     }
 
     let result;
+    console.info('[openclaw-bridge] Attempting generation with message:', { characterName, messagePreview: message?.substring(0, 100) });
 
     if (typeof generate === 'function') {
+        console.info('[openclaw-bridge] Using context.generate()');
         result = await generate('quiet', {
             quiet_prompt: message,
             force_chid: chid,
             skipWIAN: false,
         });
     } else if (typeof generateQuietPrompt === 'function') {
+        console.info('[openclaw-bridge] Using context.generateQuietPrompt()');
         try {
             result = await generateQuietPrompt({
                 quietPrompt: message,
@@ -524,15 +528,18 @@ async function generateForCharacter(characterName, message) {
                 skipWIAN: false,
             });
         } catch (e) {
+            console.warn('[openclaw-bridge] generateQuietPrompt failed, retrying without force_chid:', e);
             result = await generateQuietPrompt({ quietPrompt: message });
         }
     } else if (typeof Generate === 'function') {
+        console.info('[openclaw-bridge] Using global Generate()');
         result = await Generate('quiet', {
             quiet_prompt: message,
             force_chid: chid,
             skipWIAN: false,
         });
     } else if (typeof sendGenerationRequest === 'function') {
+        console.info('[openclaw-bridge] Using context.sendGenerationRequest()');
         result = await sendGenerationRequest('quiet', {
             prompt: message,
             force_chid: chid,
@@ -546,8 +553,11 @@ async function generateForCharacter(characterName, message) {
         throw new Error('No Generate API available in the SillyTavern context');
     }
 
+    console.info('[openclaw-bridge] Generation result (raw):', { type: typeof result, length: result?.length, preview: typeof result === 'string' ? result.substring(0, 100) : result });
+
     if (shouldRestorePreviousCharacter && typeof selectCharacterById === 'function') {
         try {
+            console.info('[openclaw-bridge] Restoring previous character', { previousChid });
             await selectCharacterById(previousChid, { switchMenu: false });
             await waitForCharacterChat(context, previousChid);
         } catch (restoreError) {
@@ -555,20 +565,26 @@ async function generateForCharacter(characterName, message) {
         }
     }
 
-    return normalizeGenerationResult(result);
+    const normalized = normalizeGenerationResult(result);
+    console.info('[openclaw-bridge] Final normalized result:', { length: normalized?.length, preview: normalized?.substring(0, 100) });
+    return normalized;
 }
 
 async function handleGenerateRequest(payload) {
     const { requestId, character, message } = payload;
+    console.info('[openclaw-bridge] handleGenerateRequest received:', { requestId, character, messagePreview: message?.substring(0, 50) });
 
     try {
+        console.info('[openclaw-bridge] Starting generation with character lock');
         const response = await withCharacterLock(character, () => generateForCharacter(character, message));
+        console.info('[openclaw-bridge] Generation completed, sending response:', { requestId, responseLength: response?.length, responsePreview: response?.substring(0, 100) });
         sendSocketMessage({
             type: 'generate_response',
             requestId,
             response,
         });
     } catch (error) {
+        console.error('[openclaw-bridge] Generation failed:', { requestId, error: error?.message || String(error), stack: error?.stack });
         sendSocketMessage({
             type: 'generate_error',
             requestId,

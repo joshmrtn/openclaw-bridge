@@ -68,7 +68,7 @@ function broadcast(payload) {
     return delivered;
 }
 
-function requestGenerate(payload, timeoutMs = 60000) {
+function requestGenerate(payload, timeoutMs = 900000) { // 15 minutes for local Ollama models
     const client = pickClient();
     if (!client) {
         return Promise.reject(new Error('No connected extension client is available'));
