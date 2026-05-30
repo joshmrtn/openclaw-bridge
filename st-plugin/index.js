@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const PLUGIN_ID = 'openclaw-bridge';
 const PLUGIN_VERSION = '0.1.0';
 const charLoader = require('./character-loader');
@@ -10,7 +12,28 @@ const { startWebSocketServer } = require('./ws-server');
 let wsBundle = null;
 
 function getAuthToken() {
-    return process.env.OPENCLAW_BRIDGE_AUTH_TOKEN || process.env.OPENCLAW_BRIDGE_TOKEN || '';
+    const envToken = process.env.OPENCLAW_BRIDGE_AUTH_TOKEN || process.env.OPENCLAW_BRIDGE_TOKEN;
+    if (envToken) return envToken;
+
+    const configuredPath = process.env.OPENCLAW_BRIDGE_TOKEN_PATH;
+    const candidatePaths = [
+        configuredPath,
+        path.resolve(__dirname, '../data/openclaw-bridge/bridge-token.txt'),
+        path.resolve(process.cwd(), '../data/openclaw-bridge/bridge-token.txt'),
+        path.resolve(process.cwd(), 'data/openclaw-bridge/bridge-token.txt'),
+    ].filter(Boolean);
+
+    for (const tokenPath of candidatePaths) {
+        try {
+            if (!fs.existsSync(tokenPath)) continue;
+            const fileToken = fs.readFileSync(tokenPath, 'utf8').trim();
+            if (fileToken) return fileToken;
+        } catch (err) {
+            // Keep trying other candidate paths.
+        }
+    }
+
+    return '';
 }
 
 function requireBearerToken(request, response, next) {

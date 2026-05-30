@@ -1,11 +1,20 @@
 let eventSource, event_types, getContext, getRequestHeaders;
 
 function ensureSillyTavernApis() {
-    if (!eventSource && typeof window !== 'undefined') {
-        eventSource = window.eventSource;
-        event_types = window.event_types;
-        getContext = window.getContext;
-        getRequestHeaders = window.getRequestHeaders;
+    if (globalThis.SillyTavern?.getContext) {
+        const context = globalThis.SillyTavern.getContext();
+        if (context) {
+            eventSource = context.eventSource || eventSource;
+            event_types = context.eventTypes || event_types;
+            getRequestHeaders = context.getRequestHeaders || getRequestHeaders;
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        getContext = getContext || window.getContext;
+        eventSource = eventSource || window.eventSource;
+        event_types = event_types || window.event_types;
+        getRequestHeaders = getRequestHeaders || window.getRequestHeaders;
     }
 }
 
@@ -31,7 +40,11 @@ function getStContext() {
         return globalThis.SillyTavern.getContext();
     }
 
-    return getContext();
+    if (typeof getContext === 'function') {
+        return getContext();
+    }
+
+    return {};
 }
 
 function getCharacters() {
@@ -88,7 +101,14 @@ function resolveCharacterName() {
 }
 
 function buildPluginHeaders({ omitContentType = false } = {}) {
-    return getRequestHeaders({ omitContentType });
+    const contextHeaders = getStContext()?.getRequestHeaders;
+    if (typeof contextHeaders === 'function') {
+        return contextHeaders({ omitContentType });
+    }
+    if (typeof getRequestHeaders === "function") {
+        return getRequestHeaders({ omitContentType });
+    }
+    return {};
 }
 
 function setManagementStatus(message, tone = 'info') {
