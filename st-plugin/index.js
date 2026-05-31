@@ -1,5 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+
+console.info('[openclaw-bridge-plugin] ===== INDEX.JS LOADED =====');
+
 const PLUGIN_ID = 'openclaw-bridge';
 const PLUGIN_VERSION = '0.1.0';
 const charLoader = require('./character-loader');
@@ -88,13 +91,18 @@ async function ensureCharacterExists(characterName) {
 }
 
 async function init(router) {
+    console.info('[openclaw-bridge-plugin] ===== PLUGIN INIT CALLED =====');
     router.use(requireBearerToken);
 
     if (!wsBundle) {
+        console.info('[openclaw-bridge-plugin] Starting WebSocket server...');
         wsBundle = startWebSocketServer({
             port: Number(process.env.OPENCLAW_BRIDGE_WS_PORT || 8765),
             sessionManager,
         });
+        console.info('[openclaw-bridge-plugin] WebSocket server bundle created');
+    } else {
+        console.info('[openclaw-bridge-plugin] WebSocket server already running');
     }
 
     router.get('/status', (request, response) => {

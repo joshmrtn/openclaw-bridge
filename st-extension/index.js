@@ -33,6 +33,10 @@ const STATE = {
     managementFields: null,
     managementLoading: false,
     activeCharacterName: null,
+    backoffMs: 1000,           // exponential backoff, start at 1s
+    maxBackoffMs: 30000,       // cap at 30s
+    healthCheckInterval: null, // health ping timer
+    pongReceived: true,        // track if we got a pong back
 };
 
 function getStContext() {
@@ -496,15 +500,25 @@ async function generateForCharacter(characterName, message) {
     const { generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = context;
     const chid = findCharacterIndex(characterName);
 
+    console.info('[openclaw-bridge] generateForCharacter called with:', { characterName, messageLength: message?.length });
+    console.info('[openclaw-bridge] Context functions available:', {
+        hasGenerate: typeof generate === 'function',
+        hasGenerateQuietPrompt: typeof generateQuietPrompt === 'function',
+        hasSendGenerationRequest: typeof sendGenerationRequest === 'function',
+        hasSelectCharacterById: typeof selectCharacterById === 'function',
+        hasContext: !!context,
+        contextKeys: context ? Object.keys(context).slice(0, 20) : 'NO CONTEXT'
+    });
+
     if (chid === -1) {
         throw new Error(`Character not found: ${characterName}`);
     }
 
     const previousChid = getCurrentCharacterIndex(context);
-    const shouldRestorePreviousCharacter = previousChid !== -1 && previousChid !== chid;
+    const needsCharacterSwitch = previousChid !== chid;
 
-    if (shouldRestorePreviousCharacter && typeof selectCharacterById === 'function') {
-        console.info('[openclaw-bridge] Switching to character', { chid, characterName });
+    if (needsCharacterSwitch && typeof selectCharacterById === 'function') {
+        console.info('[openclaw-bridge] Switching to character', { chid, characterName, previousChid });
         await selectCharacterById(chid, { switchMenu: false });
         await waitForCharacterChat(context, chid);
     }
@@ -512,50 +526,101 @@ async function generateForCharacter(characterName, message) {
     let result;
     console.info('[openclaw-bridge] Attempting generation with message:', { characterName, messagePreview: message?.substring(0, 100) });
 
-    if (typeof generate === 'function') {
-        console.info('[openclaw-bridge] Using context.generate()');
-        result = await generate('quiet', {
-            quiet_prompt: message,
-            force_chid: chid,
-            skipWIAN: false,
-        });
-    } else if (typeof generateQuietPrompt === 'function') {
+    let debugMethod = null;
+    let debugLog = [];
+
+    if (typeof generateQuietPrompt === 'function') {
+        debugMethod = 'context.generateQuietPrompt';
         console.info('[openclaw-bridge] Using context.generateQuietPrompt()');
+        debugLog.push('Using context.generateQuietPrompt()');
         try {
             result = await generateQuietPrompt({
                 quietPrompt: message,
                 forceChId: chid,
                 skipWIAN: false,
+                quietToLoud: true,
+                removeReasoning: false,
+                trimToSentence: false,
             });
+            debugLog.push(`generateQuietPrompt returned: ${typeof result} (${result?.length || 0} chars)`);
         } catch (e) {
             console.warn('[openclaw-bridge] generateQuietPrompt failed, retrying without force_chid:', e);
-            result = await generateQuietPrompt({ quietPrompt: message });
+            debugLog.push(`generateQuietPrompt failed: ${e.message}`);
+            result = await generateQuietPrompt({ quietPrompt: message, quietToLoud: true, removeReasoning: false });
+            debugLog.push(`Retry returned: ${typeof result} (${result?.length || 0} chars)`);
+        }
+    } else if (typeof generate === 'function') {
+        debugMethod = 'context.generate';
+        console.info('[openclaw-bridge] Using context.generate()');
+        debugLog.push('Using context.generate()');
+        try {
+            console.info('[openclaw-bridge] Calling generate with params:', { quiet_prompt: message.substring(0, 50), force_chid: chid, force_name2: true, quietToLoud: true });
+            result = await generate('quiet', {
+                quiet_prompt: message,
+                force_chid: chid,
+                force_name2: true,
+                skipWIAN: false,
+                quietToLoud: true,
+            });
+            console.info('[openclaw-bridge] generate() returned:', { type: typeof result, length: result?.length, preview: typeof result === 'string' ? result.substring(0, 100) : result });
+            debugLog.push(`generate() returned ${typeof result}: ${result?.substring?.(0, 100) || JSON.stringify(result)}`);
+        } catch (genErr) {
+            console.error('[openclaw-bridge] generate() threw error:', genErr);
+            debugLog.push(`generate() ERROR: ${genErr.message}`);
+            throw genErr;
         }
     } else if (typeof Generate === 'function') {
+        debugMethod = 'global.Generate';
         console.info('[openclaw-bridge] Using global Generate()');
+        debugLog.push('Using global Generate()');
         result = await Generate('quiet', {
             quiet_prompt: message,
             force_chid: chid,
+            force_name2: true,
             skipWIAN: false,
+            quietToLoud: true,
         });
+        debugLog.push(`Generate returned: ${typeof result} (${result?.length || 0} chars)`);
     } else if (typeof sendGenerationRequest === 'function') {
+        debugMethod = 'context.sendGenerationRequest';
         console.info('[openclaw-bridge] Using context.sendGenerationRequest()');
+        debugLog.push('Using context.sendGenerationRequest()');
         result = await sendGenerationRequest('quiet', {
             prompt: message,
             force_chid: chid,
             quiet_prompt: message,
             stream: false,
-        });
+        }, { removeReasoning: false, trimToSentence: false, quietToLoud: true });
         if (result && typeof result === 'object' && 'text' in result && typeof result.text === 'string') {
             result = result.text;
         }
+        debugLog.push(`sendGenerationRequest returned: ${typeof result} (${result?.length || 0} chars)`);
     } else {
+        debugLog.push('ERROR: No Generate API available in the SillyTavern context');
         throw new Error('No Generate API available in the SillyTavern context');
+    }
+
+    // Send debug log to server for inspection
+    sendSocketMessage({
+        type: 'debug_log',
+        level: 'info',
+        event: 'generation_debug',
+        method: debugMethod,
+        logs: debugLog,
+        resultType: typeof result,
+        resultLength: result?.length || 0
+    });
+
+    // send debug info back to plugin/ws server so it can be logged on server side
+    try {
+        sendSocketMessage({ type: 'debug_log', level: 'info', event: 'generation_method', method: debugMethod, rawType: typeof result, preview: (typeof result === 'string' ? result.substring(0, 200) : undefined) });
+    } catch (e) {
+        console.warn('[openclaw-bridge] Failed to send debug_log over socket', e);
     }
 
     console.info('[openclaw-bridge] Generation result (raw):', { type: typeof result, length: result?.length, preview: typeof result === 'string' ? result.substring(0, 100) : result });
 
-    if (shouldRestorePreviousCharacter && typeof selectCharacterById === 'function') {
+    if (needsCharacterSwitch && previousChid !== -1 && typeof selectCharacterById === 'function') {
         try {
             console.info('[openclaw-bridge] Restoring previous character', { previousChid });
             await selectCharacterById(previousChid, { switchMenu: false });
@@ -602,74 +667,184 @@ function sendSocketMessage(payload) {
 }
 
 function connect() {
+    console.log('[openclaw-bridge] connect() called, current STATE:', { connected: STATE.connected, hasSocket: !!STATE.socket });
+
     if (STATE.socket && (STATE.socket.readyState === WebSocket.OPEN || STATE.socket.readyState === WebSocket.CONNECTING)) {
+        console.log('[openclaw-bridge] Already connected or connecting, skipping');
         return;
     }
 
     // Derive WebSocket URL from current location with optional global overrides.
     function getWebSocketUrl() {
+        console.log('[openclaw-bridge] getWebSocketUrl() called');
         if (globalThis.OPENCLAW_BRIDGE_WS_URL) {
+            console.info('[openclaw-bridge] Using override WS URL:', globalThis.OPENCLAW_BRIDGE_WS_URL);
             return globalThis.OPENCLAW_BRIDGE_WS_URL;
         }
+
         const port = globalThis.OPENCLAW_BRIDGE_WS_PORT || 8765;
         const protocol = (typeof location !== 'undefined' && location.protocol === 'https:') ? 'wss:' : 'ws:';
-        const host = (typeof location !== 'undefined' && location.hostname) ? location.hostname : 'localhost';
-        return `${protocol}//${host}:${port}`;
+        // Use page's own hostname (localhost, 192.168.x, etc.) instead of hardcoded 127.0.0.1
+        let host = (typeof location !== 'undefined' && location.hostname) ? location.hostname : 'localhost';
+
+        // Workaround: if hostname is 127.0.0.1, try localhost instead as some browsers block 127.0.0.1 cross-port
+        if (host === '127.0.0.1') {
+            console.log('[openclaw-bridge] Using localhost instead of 127.0.0.1 to work around browser cross-port restrictions');
+            host = 'localhost';
+        }
+
+        const url = `${protocol}//${host}:${port}`;
+        console.info('[openclaw-bridge] Derived WS URL from page:', { protocol, host, port, url });
+        return url;
     }
 
-    const socket = new WebSocket(getWebSocketUrl());
-    STATE.socket = socket;
+    try {
+        const wsUrl = getWebSocketUrl();
+        console.log('[openclaw-bridge] Creating WebSocket to:', wsUrl);
 
-    socket.addEventListener('open', () => {
-        STATE.connected = true;
-        console.info('[openclaw-bridge] WebSocket connected');
-    });
-
-    socket.addEventListener('message', async event => {
-        let payload;
-
+        let socket;
         try {
-            payload = JSON.parse(event.data);
-        } catch (error) {
+            socket = new WebSocket(wsUrl);
+        } catch (constructorErr) {
+            console.error('[openclaw-bridge] ❌ Failed to create WebSocket object:', constructorErr);
+            // Schedule retry with backoff
+            STATE.backoffMs = Math.min(STATE.backoffMs * 1.5, STATE.maxBackoffMs);
+            console.info(`[openclaw-bridge] Retrying in ${STATE.backoffMs}ms`);
+            STATE.reconnectTimer = setTimeout(connect, STATE.backoffMs);
             return;
         }
 
-        if (payload.type === 'generate') {
-            await handleGenerateRequest(payload);
+        STATE.socket = socket;
+        console.log('[openclaw-bridge] WebSocket object created, readyState:', socket.readyState);
+
+        socket.addEventListener('open', () => {
+            STATE.connected = true;
+            STATE.backoffMs = 1000; // reset backoff on successful connection
+            STATE.pongReceived = true;
+            console.info('[openclaw-bridge] ✅ WebSocket connected!');
+            startHealthCheck(); // begin periodic health pings
+        });
+
+        socket.addEventListener('message', async event => {
+            console.log('[openclaw-bridge] Message received on WebSocket:', event.data.substring(0, 200));
+            let payload;
+
+            try {
+                payload = JSON.parse(event.data);
+            } catch (error) {
+                console.error('[openclaw-bridge] Failed to parse message:', error);
+                return;
+            }
+
+            console.log('[openclaw-bridge] Parsed payload type:', payload.type);
+
+            if (payload.type === 'pong') {
+                STATE.pongReceived = true;
+                console.log('[openclaw-bridge] Pong received');
+                return;
+            }
+
+            if (payload.type === 'generate') {
+                console.info('[openclaw-bridge] ⚡ GENERATE REQUEST RECEIVED:', { character: payload.character, messageLength: payload.message?.length });
+                await handleGenerateRequest(payload);
+                return;
+            }
+
+            if (payload.type === 'notification') {
+                addNotification(payload);
+            }
+        });
+
+        socket.addEventListener('close', () => {
+            STATE.connected = false;
+            if (STATE.reconnectTimer) {
+                clearTimeout(STATE.reconnectTimer);
+            }
+            if (STATE.healthCheckInterval) {
+                clearInterval(STATE.healthCheckInterval);
+                STATE.healthCheckInterval = null;
+            }
+
+            // Exponential backoff: increase delay each attempt, capped at maxBackoffMs
+            STATE.backoffMs = Math.min(STATE.backoffMs * 1.5, STATE.maxBackoffMs);
+            console.info(`[openclaw-bridge] WebSocket closed. Reconnecting in ${STATE.backoffMs}ms`);
+            STATE.reconnectTimer = setTimeout(connect, STATE.backoffMs);
+        });
+
+        socket.addEventListener('error', (event) => {
+            STATE.connected = false;
+            console.error('[openclaw-bridge] WebSocket error event:', event);
+            console.error('[openclaw-bridge] Socket readyState:', socket.readyState);
+            try {
+                sendSocketMessage({
+                    type: 'debug_log',
+                    level: 'error',
+                    event: 'ws_error',
+                    message: event?.message || 'unknown WS error',
+                    readyState: STATE.socket?.readyState
+                });
+            } catch (e) {
+                // ignore send failures during error state
+            }
+        });
+    } catch (err) {
+        console.error('[openclaw-bridge] ❌ Unexpected error in connect():', err);
+    }
+}
+
+function startHealthCheck() {
+    // Cancel any existing health check
+    if (STATE.healthCheckInterval) {
+        clearInterval(STATE.healthCheckInterval);
+    }
+
+    // Send ping every 30s; if no pong within 5s, reconnect
+    STATE.healthCheckInterval = setInterval(() => {
+        if (!STATE.socket || STATE.socket.readyState !== WebSocket.OPEN) {
+            clearInterval(STATE.healthCheckInterval);
+            STATE.healthCheckInterval = null;
             return;
         }
 
-        if (payload.type === 'notification') {
-            addNotification(payload);
+        STATE.pongReceived = false;
+        console.debug('[openclaw-bridge] Health check: sending ping');
+        try {
+            sendSocketMessage({ type: 'ping' });
+        } catch (e) {
+            console.warn('[openclaw-bridge] Failed to send health check ping:', e);
         }
-    });
 
-    socket.addEventListener('close', () => {
-        STATE.connected = false;
-        if (STATE.reconnectTimer) {
-            clearTimeout(STATE.reconnectTimer);
-        }
-        STATE.reconnectTimer = setTimeout(connect, 1000);
-    });
-
-    socket.addEventListener('error', () => {
-        STATE.connected = false;
-    });
+        // If no pong received within 5 seconds, reconnect
+        setTimeout(() => {
+            if (!STATE.pongReceived) {
+                console.warn('[openclaw-bridge] Health check failed (no pong); reconnecting');
+                if (STATE.socket) STATE.socket.close();
+            }
+        }, 5000);
+    }, 30000);
 }
 
 function init() {
-    ensureSillyTavernApis();
-    console.log('[openclaw-bridge] init() called');
-    globalThis.openclawBridge = {
-        connect,
-        generateForCharacter,
-        withCharacterLock,
-        state: STATE,
-    };
+    console.log('[openclaw-bridge] ===== INIT CALLED =====');
 
-    connect();
-    registerManagementPanelHooks();
-    refreshManagementPanel();
+    try {
+        console.log('[openclaw-bridge] Step 1: Adding small delay before connecting (ST may still be initializing)');
+
+        // Give ST a moment to fully initialize before we try to connect
+        setTimeout(() => {
+            try {
+                console.log('[openclaw-bridge] Step 2: Now attempting WebSocket connection');
+                connect();
+                console.log('[openclaw-bridge] Step 3: connect() returned');
+            } catch (e) {
+                console.error('[openclaw-bridge] ❌ ERROR in delayed init():', e);
+            }
+        }, 2000);
+    } catch (e) {
+        console.error('[openclaw-bridge] ❌ ERROR in init():', e);
+    }
+
+    console.log('[openclaw-bridge] ===== INIT DONE =====');
 }
 
 export {

@@ -252,3 +252,4 @@ This catches malformed tool schemas before anyone tries to install them.
 - Minimize global side-effects in `init()` so tests can mock modules and call handlers directly
 - Plugin test router mocks assume stable route registration order — add new routes at the end
 - The extension is browser code — verify UI integration manually by loading in the SillyTavern dev server; do not attempt to unit-test browser globals
+- The Copilot CLI must not create git commits or push changes without explicit user instruction from the repository maintainer.

@@ -102,6 +102,28 @@ function handleMessage(rawMessage) {
     }
 
     const { type, requestId, response, error } = message || {};
+    
+    // Handle health check ping/pong
+    if (type === 'ping') {
+        // Find the client that sent the ping and respond
+        for (const client of clients) {
+            if (client.readyState === WS.OPEN) {
+                sendJson(client, { type: 'pong' });
+            }
+        }
+        return;
+    }
+    
+    if (type === 'debug_log') {
+        // Log debug messages sent from the extension to the server console for inspection.
+        try {
+            console.info('[openclaw-bridge][EXT_DEBUG]', JSON.stringify(message));
+        } catch (e) {
+            console.info('[openclaw-bridge][EXT_DEBUG] (unserializable)');
+        }
+        return;
+    }
+
     if (type !== 'generate_response' && type !== 'generate_error') {
         return;
     }

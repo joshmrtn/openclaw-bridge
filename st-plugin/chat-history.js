@@ -155,8 +155,8 @@ async function appendExternalChatToHistory(characterName, userMessage, response,
     }
 
     const userContent = buildExternalChatContent(userMessage.message || '', userMessage.images || []);
-    const userEntry = constructStMessage({ role: 'user', content: userContent, user_id: userMessage.user_id || null });
-    const assistantEntry = constructStMessage({ role: 'assistant', content: response });
+    const userEntry = constructStMessage({ role: 'user', content: userContent, name: 'ExternalChat', user_id: userMessage.user_id || null });
+    const assistantEntry = constructStMessage({ role: 'assistant', content: response, name: characterName });
 
     chatArray.push(userEntry);
     chatArray.push(assistantEntry);

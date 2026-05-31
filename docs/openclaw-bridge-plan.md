@@ -856,6 +856,177 @@ Gate checks:
 
 ---
 
+### Stage 4.5: Deployment Strategies and WebSocket Resilience
+
+#### Why ST's Frontend-Centric Generation Is Actually Fine
+
+SillyTavern's `generateQuietPrompt()` lives in the browser (script.js) because:
+- Prompt assembly depends on UI state (character selection, swipes, custom fields)
+- Streaming responses need live UI rendering
+- Backend doesn't need to know ST's extension system
+
+For the plugin/extension bridge, this is **actually desirable** because:
+1. **generateQuietPrompt is pure and idempotent** — takes input, returns text, no side effects on UI
+2. **forceChId ensures character isolation** — extension can target Gerard while user chats with Edward, no conflicts
+3. **quietToLoud controls the output filtering** — set to true to ensure visible text (prevents empty-string problem)
+
+#### Integration Architecture (Refined)
+
+**Plugin never generates directly.** Always:
+1. Plugin receives POST /generate → validates auth → calls sessionManager.requestGenerate()
+2. sessionManager picks an open WS client and sends `{ type: 'generate', requestId, character, message }`
+3. Extension (browser context) receives message → calls ST's generateQuietPrompt({quietPrompt: message, forceChId, quietToLoud: true, removeReasoning: false})
+4. Extension sends back `{ type: 'generate_response', requestId, response }`
+5. Plugin resolves pending request and returns { response, character }
+
+This is clean because:
+- ST's prompt assembly, token budgeting, lorebook all work as intended
+- No code duplication or reimplementation of ST logic
+- Character isolation is natural (forceChId + per-character mutex in extension)
+
+#### WebSocket Resilience Improvements
+
+##### 1. Exponential Backoff (Extension)
+Currently: reconnects every 1s on close. Problem: hammers the server, doesn't adapt.
+
+Improvement:
+```javascript
+// On socket close, exponential backoff (1s → 1.5s → 2.25s → ... → 30s cap)
+STATE.backoffMs = Math.min((STATE.backoffMs || 1000) * 1.5, 30000);
+STATE.reconnectTimer = setTimeout(connect, STATE.backoffMs);
+```
+
+##### 2. Health Check Pings (Extension + Plugin)
+Every 30s, extension sends ping; if no pong within 5s, reconnect automatically.
+
+Extension:
+```javascript
+setInterval(() => {
+    if (STATE.socket?.readyState === WS.OPEN) {
+        sendSocketMessage({ type: 'ping' });
+        setTimeout(() => {
+            if (!STATE.pongReceived) {
+                console.warn('No pong; reconnecting...');
+                reconnect();
+            }
+        }, 5000);
+    }
+}, 30000);
+```
+
+Plugin:
+```javascript
+if (type === 'ping') {
+    for (const client of clients) {
+        if (client.readyState === WS.OPEN) {
+            sendJson(client, { type: 'pong' });
+        }
+    }
+}
+```
+
+##### 3. Hostname Robustness (Extension + Plugin)
+
+**Problem:** Extension tries to connect to hardcoded `127.0.0.1:8765`, browser blocks it (origin mismatch, loopback restrictions).
+
+**Extension fix:**
+```javascript
+function getWebSocketUrl() {
+    if (globalThis.OPENCLAW_BRIDGE_WS_URL) {
+        return globalThis.OPENCLAW_BRIDGE_WS_URL;
+    }
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = location.hostname; // derives from page URL (localhost, 192.168.x.x, etc.)
+    const port = globalThis.OPENCLAW_BRIDGE_WS_PORT || 8765;
+    return `${protocol}//${host}:${port}`;
+}
+```
+
+**Plugin fix:** Listen on `0.0.0.0` (all interfaces) instead of localhost:
+```javascript
+const server = new WS.Server({ port, host: '0.0.0.0' });
+```
+
+##### 4. Timeout Awareness (Plugin)
+
+Current: 900s timeout, but no intermediate feedback. Add "soft timeout" warning:
+
+```javascript
+const softTimeoutMs = 300000;  // 5 min
+const hardTimeoutMs = 900000;  // 15 min
+
+const softTimer = setTimeout(() => {
+    console.warn(`Generation slow (>5min) for ${requestId}`);
+    // Could notify caller: "still generating..."
+}, softTimeoutMs);
+
+const hardTimer = setTimeout(() => {
+    pendingRequests.delete(requestId);
+    reject(new Error(`Generation timed out after ${hardTimeoutMs}ms`));
+}, hardTimeoutMs);
+```
+
+This helps distinguish "generation is slow" from "something is broken".
+
+#### Multi-Tier Deployment Strategy
+
+OpenClaw has two distinct use cases:
+
+**1. User's local browser (Development / Testing)**
+- User runs ST in browser, extension connects via WS
+- Good for testing and local development
+- Depends on user keeping ST/browser open
+
+**2. Always-on autonomous actions (Production)**
+- OpenClaw needs to generate 24/7, independent of whether user has ST/browser open
+- Autonomous scheduled actions, Discord/Telegram presence, nightly syncs
+- A dedicated headless browser makes architectural sense here
+
+#### Headless Browser Alternative (Production)
+
+**Why it matters:**
+- User still runs ST normally on their machine (for manual interactions)
+- Separately, plugin can spawn a Puppeteer/Playwright headless instance that loads ST
+- Headless instance is isolated: its own character context, chat history, generation pipeline
+- Plugin calls headless instance via WS, same as user's browser instance
+- If user's browser is unavailable, headless instance takes over; if both available, plugin can choose which to use
+
+**Pros:**
+- No dependency on user's browser being open
+- Always-on generation even if user closes ST
+- Could reduce WS connection fragility (would connect to headless instance instead)
+- Can be containerized and deployed separately
+
+**Cons:**
+- Requires running a separate browser process (memory, CPU overhead)
+- Synchronization complexity: headless instance needs to load same character, same chat history, same state
+- Still needs WS/HTTP to talk between plugin and headless browser
+- Adds a new failure point (browser crash, stuck process)
+- Headless browser state can drift from main ST (character updates, chat history changes)
+
+**Implementation sketch (if needed):**
+```javascript
+// Instead of WS waiting for browser extension, run headless browser on startup
+const headlessBrowser = await chromium.launch();
+const headlessPage = await headlessBrowser.newPage();
+await headlessPage.goto('http://localhost:8000/'); // ST frontend
+await headlessPage.waitForFunction(() => window.SillyTavern?.getContext);
+
+// On /generate request:
+// 1. Set character and chat context in headless instance (via page.evaluate)
+// 2. Call generateQuietPrompt() in headless context
+// 3. Return response
+```
+
+**Recommended timeline:**
+- **Phase 1 (now):** Get user's browser path working (WS resilience, extension connection, real generation)
+- **Phase 2 (when needed):** Add Puppeteer/Playwright launcher to plugin startup; test headless generation
+- **Phase 3 (optional):** Add CLI flag or config option to choose browser mode (user's browser only, headless only, or fallback)
+
+**Key benefit:** Same codebase and plugin, just with pluggable browser backends (user's tab vs headless). Avoids code duplication or reimplementation of ST logic.
+
+---
+
 ### Stage 5: OC Skill
 
 #### Phase 5.1 — Skill file created and installed

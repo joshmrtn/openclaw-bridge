@@ -21,9 +21,12 @@ function loadWsModule() {
 const WS = loadWsModule();
 
 function startWebSocketServer({ port = 8765, sessionManager }) {
-    const server = new WS.Server({ port });
+    const server = new WS.Server({ port, host: '0.0.0.0' });
+    console.info(`[openclaw-bridge] WS server listening on 0.0.0.0:${port}`);
+    console.info(`[openclaw-bridge] WS server ready to accept connections on ws://localhost:${port} or ws://127.0.0.1:${port}`);
 
     server.on('connection', socket => {
+        console.info('[openclaw-bridge] ✅ WS client connected');
         sessionManager.registerClient(socket);
 
         socket.on('message', message => {
@@ -31,12 +34,23 @@ function startWebSocketServer({ port = 8765, sessionManager }) {
         });
 
         socket.on('close', () => {
+            console.info('[openclaw-bridge] WS client disconnected');
             sessionManager.unregisterClient(socket);
         });
 
-        socket.on('error', () => {
+        socket.on('error', (error) => {
+            console.error('[openclaw-bridge] WS socket error:', error);
             sessionManager.unregisterClient(socket);
         });
+    });
+
+    server.on('error', (error) => {
+        console.error('[openclaw-bridge] WS server error:', error);
+    });
+
+    // Log incoming connection attempts (before upgrade)
+    server.on('upgrade', (request, socket, head) => {
+        console.info('[openclaw-bridge] WebSocket upgrade request from:', request.headers['user-agent']);
     });
 
     return {
