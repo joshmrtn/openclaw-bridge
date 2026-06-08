@@ -26,31 +26,34 @@ function startWebSocketServer({ port = 8765, sessionManager }) {
     console.info(`[openclaw-bridge] WS server ready to accept connections on ws://localhost:${port} or ws://127.0.0.1:${port}`);
 
     server.on('connection', socket => {
-        console.info('[openclaw-bridge] ✅ WS client connected');
+        const remote = (socket._socket && socket._socket.remoteAddress) ? socket._socket.remoteAddress : 'unknown';
+        console.info('[openclaw-bridge] ✅ WS client connected from', remote);
         sessionManager.registerClient(socket);
 
         socket.on('message', message => {
             sessionManager.handleMessage(message);
         });
 
-        socket.on('close', () => {
-            console.info('[openclaw-bridge] WS client disconnected');
+        socket.on('close', (code, reason) => {
+            let reasonText = '';
+            try { reasonText = reason && reason.toString ? reason.toString() : String(reason); } catch (e) { reasonText = '<unserializable>'; }
+            console.info('[openclaw-bridge] WS client disconnected', { remote, code, reason: reasonText });
             sessionManager.unregisterClient(socket);
         });
 
         socket.on('error', (error) => {
-            console.error('[openclaw-bridge] WS socket error:', error);
+            console.error('[openclaw-bridge] WS socket error from', remote, error && error.stack ? error.stack : error);
             sessionManager.unregisterClient(socket);
         });
     });
 
     server.on('error', (error) => {
-        console.error('[openclaw-bridge] WS server error:', error);
+        console.error('[openclaw-bridge] WS server error:', error && error.stack ? error.stack : error);
     });
 
     // Log incoming connection attempts (before upgrade)
     server.on('upgrade', (request, socket, head) => {
-        console.info('[openclaw-bridge] WebSocket upgrade request from:', request.headers['user-agent']);
+        console.info('[openclaw-bridge] WebSocket upgrade request from:', request.headers['user-agent'], 'remote:', request.socket?.remoteAddress);
     });
 
     return {

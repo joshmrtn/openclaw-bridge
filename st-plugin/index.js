@@ -206,6 +206,34 @@ async function init(router) {
         response.json({ sent: true, delivered });
     });
 
+    // HTTP polling endpoints for extension fallback
+    router.get('/http-message', (request, response) => {
+        try {
+            const msg = sessionManager.popHttpOutboundMessage();
+            if (!msg) {
+                // No message available — return 204 so client can poll later
+                return response.status(204).end();
+            }
+
+            return response.json(msg);
+        } catch (err) {
+            return response.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/http-response', (request, response) => {
+        try {
+            const body = request.body || {};
+            const handled = sessionManager.handleHttpResponse(body);
+            if (!handled) {
+                return response.status(404).json({ handled: false });
+            }
+            return response.json({ handled: true });
+        } catch (err) {
+            return response.status(500).json({ error: err.message });
+        }
+    });
+
     // Register log-action before generate so tests that capture the last POST handler
     // (a simplistic router mock) will still see the /generate handler as the final POST.
     router.post('/log-action', async (request, response) => {
@@ -281,6 +309,18 @@ async function init(router) {
 
             if (shouldWriteHistory) {
                 await chatHistory.appendExternalChatToHistory(character, { message, images, user_id }, generatedText);
+
+                // Notify connected extension clients that a chat file was updated so frontends can reload.
+                try {
+                    sessionManager.broadcast({
+                        type: 'chat_updated',
+                        character,
+                        user_id: user_id || null,
+                        timestamp: Date.now(),
+                    });
+                } catch (bcastErr) {
+                    console.warn('[openclaw-bridge-plugin] Failed to broadcast chat_updated:', bcastErr?.message || bcastErr);
+                }
             }
 
             const result = { character, response: generatedText };

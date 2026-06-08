@@ -9,7 +9,16 @@ describe('session-manager behavior', () => {
     });
 
     test('requestGenerate rejects when no client connected', async () => {
-        await expect(sessionManager.requestGenerate({ character: 'X' }, 100)).rejects.toThrow(/No connected extension client is available/);
+        // Set wait-for-client to 0 so it doesn't delay the test with a 5-second wait
+        const prevVal = process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS;
+        process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS = '0';
+        try {
+            // With no client and wait=0, it falls back to HTTP queue and times out after 100ms
+            await expect(sessionManager.requestGenerate({ character: 'X' }, 100)).rejects.toThrow(/Timed out waiting for generation response/);
+        } finally {
+            if (prevVal) process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS = prevVal;
+            else delete process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS;
+        }
     });
 
     test('requestGenerate times out if no response from client', async () => {

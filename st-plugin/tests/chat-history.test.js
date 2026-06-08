@@ -34,7 +34,7 @@ describe('chat-history', () => {
         await chatHistory.appendMessage('Gerard', newMsg, tmpDir);
         const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
         expect(msgs.length).toBe(3);
-        expect(msgs[2].content).toBe('Mock reply');
+        expect(msgs[2].mes).toBe('Mock reply');
     });
 
     test('concurrent appends do not corrupt file', async () => {
@@ -46,7 +46,7 @@ describe('chat-history', () => {
         await Promise.all(writers);
         const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
         expect(msgs.length).toBe(12); // 2 original + 10 appended
-        const contents = msgs.slice(2).map(m => m.content);
+        const contents = msgs.slice(2).map(m => m.mes);
         for (let i = 0; i < 10; i++) expect(contents).toContain(`C${i}`);
     });
 });

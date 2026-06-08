@@ -1,0 +1,8 @@
+[openclaw-bridge] WS server listening on 0.0.0.0:8765
+[openclaw-bridge] WS server ready to accept connections on ws://localhost:8765 or ws://127.0.0.1:8765
+[temp-ws-server] started
+[openclaw-bridge] WS server error: Error: listen EADDRINUSE: address already in use 0.0.0.0:8765
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at node:net:2274:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)

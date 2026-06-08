@@ -65,8 +65,8 @@ describe('generator (mock)', () => {
 
         const msgs = await chatHistory.readLatestChat('Gerard', opts.chatsDir);
         const last = msgs.slice(-2);
-        expect(last[0].content).toBe('Do you like tea?');
-        expect(last[1].content).toBe('[MOCK RESPONSE]');
+        expect(last[0].mes).toBe('Do you like tea?');
+        expect(last[1].mes).toBe('[MOCK RESPONSE]');
     });
 
     test('generate preserves multimodal incoming content in chat history', async () => {
@@ -81,12 +81,12 @@ describe('generator (mock)', () => {
 
         const msgs = await chatHistory.readLatestChat('Gerard', opts.chatsDir);
         const last = msgs.slice(-2);
-        expect(Array.isArray(last[0].content)).toBe(true);
-        expect(last[0].content[0]).toEqual({ type: 'text', text: 'Look at this' });
-        expect(last[0].content[1]).toEqual({
+        expect(Array.isArray(last[0].mes)).toBe(true);
+        expect(last[0].mes[0]).toEqual({ type: 'text', text: 'Look at this' });
+        expect(last[0].mes[1]).toEqual({
             type: 'image_url',
             image_url: { url: 'data:image/jpeg;base64,abc123' },
         });
-        expect(last[1].content).toBe('[MOCK RESPONSE]');
+        expect(last[1].mes).toBe('[MOCK RESPONSE]');
     });
 });

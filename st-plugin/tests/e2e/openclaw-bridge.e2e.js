@@ -99,11 +99,15 @@ test('extension round-trip uses Generate(quiet) and returns plugin response', as
     expect(calls[0]).toMatchObject({
         mode: 'quiet',
         params: {
-            quiet_prompt: MESSAGE,
             force_chid: 0,
             skipWIAN: false,
         },
     });
+
+    // The plugin prepends a trust label ([OWNER] or [GUEST]) before the message.
+    // Tests should accept either label and ensure the message body is preserved.
+    expect(calls[0].params.quiet_prompt).toMatch(/^\[(OWNER|GUEST)\]\n/);
+    expect(calls[0].params.quiet_prompt).toContain(MESSAGE);
 });
 
 test('extension serializes same-character Generate() calls', async ({ page, request, baseURL }) => {

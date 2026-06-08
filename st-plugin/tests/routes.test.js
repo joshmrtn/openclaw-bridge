@@ -199,7 +199,7 @@ describe('plugin routes', () => {
 
         expect(appendMessage).toHaveBeenCalled();
         const loggedMessage = appendMessage.mock.calls[0][1];
-        expect(loggedMessage.content).toMatch(/Autonomous action on discord/);
+        expect(loggedMessage.mes).toMatch(/Autonomous action on discord/);
         expect(res.body).toEqual({ logged: true, character: 'Gerard' });
     });
 
