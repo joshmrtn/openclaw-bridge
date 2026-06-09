@@ -11,8 +11,10 @@ const generator = require('./generator');
 const linkState = require('./link-state');
 const sessionManager = require('./session-manager');
 const { startWebSocketServer } = require('./ws-server');
+const headlessService = require('./headless-service');
 
 let wsBundle = null;
+let headlessStartupError = null;
 
 function getAuthToken() {
     const envToken = process.env.OPENCLAW_BRIDGE_AUTH_TOKEN || process.env.OPENCLAW_BRIDGE_TOKEN;
@@ -105,12 +107,46 @@ async function init(router) {
         console.info('[openclaw-bridge-plugin] WebSocket server already running');
     }
 
+    // Start headless service if enabled
+    const enableHeadless = (process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS !== 'false');
+    if (enableHeadless && !headlessStartupError) {
+        console.info('[openclaw-bridge-plugin] Starting headless browser service...');
+        try {
+            await headlessService.start({
+                stUrl: process.env.OPENCLAW_BRIDGE_ST_URL || 'http://localhost:8000',
+                timeoutMs: Number(process.env.OPENCLAW_BRIDGE_HEADLESS_STARTUP_TIMEOUT_MS || 30000),
+                onError: (err) => {
+                    headlessStartupError = err;
+                    console.error('[openclaw-bridge-plugin] Headless service error:', err.message);
+                },
+            });
+            console.info('[openclaw-bridge-plugin] Headless service started');
+        } catch (err) {
+            headlessStartupError = err;
+            // Don't fail plugin init if headless fails; just log it
+            console.warn('[openclaw-bridge-plugin] Headless service startup failed (plugin will continue with UI-only):', err.message);
+        }
+    }
+
     router.get('/status', (request, response) => {
         response.json({
             status: 'ok',
             version: PLUGIN_VERSION,
             plugin: PLUGIN_ID,
             connected_ws_clients: sessionManager.getConnectedClientCount(),
+        });
+    });
+
+    router.get('/health', (request, response) => {
+        const clientStatus = sessionManager.getClientStatus();
+        const headlessStatus = headlessService.getStatus();
+        response.json({
+            plugin: PLUGIN_ID,
+            version: PLUGIN_VERSION,
+            uptime: process.uptime(),
+            clients: clientStatus,
+            headless: headlessStatus,
+            headlessError: headlessStartupError?.message || null,
         });
     });
 

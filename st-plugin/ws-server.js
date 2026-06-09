@@ -31,6 +31,15 @@ function startWebSocketServer({ port = 8765, sessionManager }) {
         sessionManager.registerClient(socket);
 
         socket.on('message', message => {
+            let parsed;
+            try { parsed = JSON.parse(message.toString()); } catch (e) {}
+            if (parsed?.type === 'register') {
+                sessionManager.registerClient(socket, {
+                    isHeadless: parsed.clientType === 'headless',
+                    isUi: parsed.clientType === 'ui',
+                });
+                return;
+            }
             sessionManager.handleMessage(message);
         });
 

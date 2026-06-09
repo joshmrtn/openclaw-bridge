@@ -23,7 +23,7 @@ describe('session-manager behavior', () => {
 
     test('requestGenerate times out if no response from client', async () => {
         const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
-        sessionManager.registerClient(fakeClient);
+        sessionManager.registerClient(fakeClient, { isHeadless: true });
 
         const p = sessionManager.requestGenerate({ character: 'Y' }, 50);
         await expect(p).rejects.toThrow(/Timed out waiting for generation response/);
@@ -33,7 +33,7 @@ describe('session-manager behavior', () => {
 
     test('handleMessage resolves pending request when response arrives', async () => {
         const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
-        sessionManager.registerClient(fakeClient);
+        sessionManager.registerClient(fakeClient, { isHeadless: true });
 
         // start request
         const promise = sessionManager.requestGenerate({ character: 'Z' }, 1000);
@@ -55,7 +55,7 @@ describe('session-manager behavior', () => {
 
     test('handleMessage rejects pending request when generate_error arrives', async () => {
         const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
-        sessionManager.registerClient(fakeClient);
+        sessionManager.registerClient(fakeClient, { isHeadless: true });
 
         const promise = sessionManager.requestGenerate({ character: 'Err' }, 1000);
         expect(fakeClient.send).toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe('session-manager behavior', () => {
 
     test('handleMessage ignores malformed or unrelated messages', async () => {
         const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
-        sessionManager.registerClient(fakeClient);
+        sessionManager.registerClient(fakeClient, { isHeadless: true });
 
         const promise = sessionManager.requestGenerate({ character: 'Keep' }, 1000);
         expect(fakeClient.send).toHaveBeenCalled();

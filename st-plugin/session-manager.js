@@ -20,11 +20,14 @@ function loadWsModule() {
 
 const WS = loadWsModule();
 
-const clients = new Set();
+const clients = new Map(); // Maps client socket -> { socket, isHeadless, isUi, registeredAt }
 const pendingRequests = new Map();
 
 // HTTP fallback queue for extensions that cannot maintain WS
 const httpOutboundQueue = []; // items: { type, requestId, payload }
+
+// Track which client type was last used for generation (for logging)
+let lastPickedClientType = null;
 
 function createRequestId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -34,25 +37,91 @@ function createRequestId() {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function registerClient(client) {
-    clients.add(client);
+/**
+ * Register a client (browser extension or headless)
+ * @param {WebSocket} client - The WebSocket client
+ * @param {object} metadata - Client metadata { isHeadless, isUi }
+ */
+function registerClient(client, metadata = {}) {
+    const { isHeadless = false, isUi = false } = metadata;
+    clients.set(client, {
+        socket: client,
+        isHeadless: !!isHeadless,
+        isUi: !!isUi,
+        registeredAt: Date.now(),
+    });
+    console.info('[openclaw-bridge] Client registered', {
+        type: isHeadless ? 'headless' : isUi ? 'ui' : 'unknown',
+        totalClients: clients.size,
+    });
 }
 
 function unregisterClient(client) {
+    const meta = clients.get(client);
+    if (meta) {
+        console.info('[openclaw-bridge] Client unregistered', {
+            type: meta.isHeadless ? 'headless' : meta.isUi ? 'ui' : 'unknown',
+            remainingClients: clients.size - 1,
+        });
+    }
     clients.delete(client);
 }
 
 function getConnectedClientCount() {
-    return clients.size;
+    let count = 0;
+    for (const meta of clients.values()) {
+        if (meta.socket.readyState === WS.OPEN) {
+            count++;
+        }
+    }
+    return count;
 }
 
-function pickClient() {
-    for (const client of clients) {
-        if (client.readyState === WS.OPEN) {
-            return client;
+/**
+ * Get count of headless clients
+ */
+function getHeadlessClientCount() {
+    let count = 0;
+    for (const meta of clients.values()) {
+        if (meta.isHeadless && meta.socket.readyState === WS.OPEN) {
+            count++;
+        }
+    }
+    return count;
+}
+
+/**
+ * Get count of UI clients
+ */
+function getUiClientCount() {
+    let count = 0;
+    for (const meta of clients.values()) {
+        if (meta.isUi && meta.socket.readyState === WS.OPEN) {
+            count++;
+        }
+    }
+    return count;
+}
+
+/**
+ * Pick a client for generation
+ * Strategy: ALWAYS prefer headless clients (never hijack user's browser).
+ * If headless unavailable, return null (HTTP polling or error will handle it).
+ */
+function getClient() {
+    // Get the headless client for OC bridge generation
+    // User's browser is never to be hijacked by OC messages
+    // Only headless clients are suitable for background message processing
+    for (const [socket, meta] of clients.entries()) {
+        if (meta.isHeadless && socket.readyState === WS.OPEN) {
+            lastPickedClientType = 'headless';
+            return socket;
         }
     }
 
+    // If no headless available, return null
+    // HTTP polling or error will handle the fallback
+    lastPickedClientType = null;
     return null;
 }
 
@@ -62,9 +131,9 @@ function sendJson(client, payload) {
 
 function broadcast(payload) {
     let delivered = 0;
-    for (const client of clients) {
-        if (client.readyState === WS.OPEN) {
-            sendJson(client, payload);
+    for (const [socket, meta] of clients.entries()) {
+        if (socket.readyState === WS.OPEN) {
+            sendJson(socket, payload);
             delivered += 1;
         }
     }
@@ -78,7 +147,7 @@ function requestGenerate(payload, timeoutMs = 900000) { // 15 minutes for local 
         const start = Date.now();
 
         function attemptSend() {
-            const client = pickClient();
+            const client = getClient();
             if (!client) {
                 if (Date.now() - start >= waitForClientMs) {
                     // No WS client available within wait window — enqueue for HTTP pollers
@@ -141,9 +210,9 @@ function handleMessage(rawMessage) {
     // Handle health check ping/pong
     if (type === 'ping') {
         // Find the client that sent the ping and respond
-        for (const client of clients) {
-            if (client.readyState === WS.OPEN) {
-                sendJson(client, { type: 'pong' });
+        for (const [socket, meta] of clients.entries()) {
+            if (socket.readyState === WS.OPEN) {
+                sendJson(socket, { type: 'pong' });
             }
         }
         return;
@@ -215,10 +284,22 @@ function reset() {
     clients.clear();
 }
 
+function getClientStatus() {
+    return {
+        headless: getHeadlessClientCount(),
+        ui: getUiClientCount(),
+        total: getConnectedClientCount(),
+        lastPickedType: lastPickedClientType,
+    };
+}
+
 module.exports = {
     registerClient,
     unregisterClient,
     getConnectedClientCount,
+    getHeadlessClientCount,
+    getUiClientCount,
+    getClientStatus,
     broadcast,
     requestGenerate,
     handleMessage,

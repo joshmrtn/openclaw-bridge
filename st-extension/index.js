@@ -805,6 +805,8 @@ function connect() {
                 STATE.pongReceived = true;
                 console.info('[openclaw-bridge] ✅ WebSocket connected!');
                 startHealthCheck();
+                const clientType = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE || 'ui';
+                try { ws.send(JSON.stringify({ type: 'register', clientType })); } catch (e) {}
             });
 
             ws.addEventListener('message', async event => {
