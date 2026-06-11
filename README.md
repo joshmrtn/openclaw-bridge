@@ -73,13 +73,38 @@ curl http://localhost:8000/api/plugins/openclaw-bridge/characters \
   -H "Authorization: Bearer $(cat data/openclaw-bridge/bridge-token.txt)"
 ```
 
-### 5. Install the OC skill and create an agent
+### 5. Install the OC gateway plugin
+
+The `oc-plugin/` directory contains an OpenClaw gateway plugin that intercepts
+incoming messages before they reach the agent LLM and routes them to ST
+automatically. `./setup.sh` installs it if the `openclaw` CLI is in your PATH.
+To install or reinstall manually:
+
+```bash
+openclaw plugins install --path ./oc-plugin
+openclaw gateway restart
+```
+
+Verify it loaded:
+
+```bash
+openclaw plugins list
+# Expected: openclaw-bridge appears in the list
+```
+
+The plugin reads its data from `~/.openclaw/openclaw-bridge/` by default.
+`setup.sh` creates symlinks there pointing at `data/openclaw-bridge/`, so
+token and character links are shared automatically. If you need a custom
+location, set `OPENCLAW_BRIDGE_DATA_DIR` (or the per-file overrides
+`OPENCLAW_BRIDGE_LINKS_PATH` and `OPENCLAW_BRIDGE_TOKEN`) in your environment.
+
+### 6. Install the OC skill and create an agent
 
 Follow `AGENT-SETUP.md` for the complete OC-side steps: creating the agent,
 installing the `character-bridge` skill, and configuring
 `OPENCLAW_BRIDGE_URL` and `OPENCLAW_BRIDGE_TOKEN` in the agent environment.
 
-### 6. Headless mode (production)
+### 7. Headless mode (production)
 
 The plugin launches a headless Playwright browser automatically when ST
 starts, so the extension is always connected even without an open browser
@@ -144,13 +169,17 @@ character serialization. Run tests with `npm test` under `st-plugin`.
 ```
 openclaw-bridge/
 ├── README.md
-├── setup.sh
-├── dev-setup.sh
-├── start.sh
 ├── AGENT-SETUP.md
-├── skills/character-bridge/
+├── setup.sh           # bootstraps everything — run this first
+├── dev-setup.sh       # symlinks plugin/extension into a local ST checkout
+├── start.sh
+├── oc-plugin/         # OC gateway plugin (installed via openclaw plugins install)
+│   ├── src/index.ts
+│   ├── dist/index.js  # pre-built; rebuild with: cd oc-plugin && tsc
+│   └── openclaw.plugin.json
+├── skills/character-bridge/   # per-agent skill (fallback routing via LLM)
 │   ├── SKILL.md
 │   └── README.md
-├── st-plugin/
-└── st-extension/
+├── st-plugin/         # SillyTavern Node.js server plugin
+└── st-extension/      # SillyTavern browser extension
 ```

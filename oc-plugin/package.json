@@ -1,0 +1,14 @@
+{
+  "name": "openclaw-bridge",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "openclaw": {
+    "plugin": {
+      "entry": "./src/index.ts"
+    },
+    "extensions": ["./dist/index.js"]
+  }
+}

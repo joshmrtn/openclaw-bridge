@@ -75,15 +75,47 @@ else
 	echo "Existing bridge token found at ${token_file}"
 fi
 
+# Symlink data files into ~/.openclaw/openclaw-bridge/ so the OC gateway plugin
+# can find them at their default paths without needing env vars.
+oc_data_dir="${HOME}/.openclaw/openclaw-bridge"
+mkdir -p "${oc_data_dir}"
+
+links_file="${token_dir}/character-links.json"
+if [ ! -f "${links_file}" ]; then
+	printf '{}' > "${links_file}"
+	echo "Created empty character-links.json at ${links_file}"
+fi
+
+for fname in bridge-token.txt character-links.json; do
+	src="${token_dir}/${fname}"
+	dst="${oc_data_dir}/${fname}"
+	if [ ! -e "${dst}" ] && [ ! -L "${dst}" ]; then
+		ln -s "${src}" "${dst}"
+		echo "Linked ${dst} -> ${src}"
+	else
+		echo "Already exists: ${dst}"
+	fi
+done
+
+# Install the OC gateway plugin (requires openclaw CLI)
+if command -v openclaw >/dev/null 2>&1; then
+	echo "Installing OC gateway plugin from ${script_dir}/oc-plugin..."
+	openclaw plugins install --path "${script_dir}/oc-plugin" 2>&1 || \
+		echo "Warning: plugin install failed — run 'openclaw plugins install --path ${script_dir}/oc-plugin' manually after starting the gateway."
+else
+	echo "Note: openclaw CLI not found — install the OC gateway plugin manually:"
+	echo "  openclaw plugins install --path ${script_dir}/oc-plugin"
+fi
+
 echo
 echo "Next steps:"
 echo "- Link each SillyTavern character to an OC agent:"
 echo "  ./scripts/link-character.sh --character \"My Character\" --agent my-agent --owner \"discord:YOUR_USER_ID\""
-echo "- Set OPENCLAW_BRIDGE_URL and OPENCLAW_BRIDGE_TOKEN in each OC agent's env config."
-echo "  Token: $(cat ${token_file})"
-echo "- Install the skill into an agent workspace:"
+echo "- Token (for OC agent env config): $(cat "${token_file}")"
+echo "- Install the character-bridge skill into each agent workspace:"
 echo "  cp -r skills/character-bridge ~/.openclaw/workspace-{agentname}/skills/"
-echo "- Restart the OpenClaw gateway after updating agent configs."
-echo "- See README.md for the full setup guide."
+echo "- Restart the OpenClaw gateway after installing the plugin:"
+echo "  openclaw gateway restart"
+echo "- See README.md and AGENT-SETUP.md for the full setup guide."
 echo
 echo "Setup complete (idempotent)."
