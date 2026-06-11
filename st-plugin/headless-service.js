@@ -15,6 +15,7 @@ const path = require('path');
 
 let STATE = {
     browser: null,
+    context: null,
     page: null,
     isRunning: false,
     startupPromise: null,
@@ -55,7 +56,7 @@ async function start(options = {}) {
     }
 
     const {
-        stUrl = 'http://localhost:8000',
+        stUrl = 'http://127.0.0.1:8000',
         timeoutMs = 30000,
         onError = null,
     } = options;
@@ -78,10 +79,10 @@ async function start(options = {}) {
 
             console.info('[openclaw-bridge-headless] Browser launched, navigating to', stUrl);
 
-            STATE.page = await STATE.browser.newPage();
-
-            // Set user agent to look like a real browser
-            await STATE.page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            STATE.context = await STATE.browser.newContext({
+                userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            });
+            STATE.page = await STATE.context.newPage();
 
             // Signal to the extension that this browser context is headless so it
             // sends clientType: 'headless' in its register message on WS connect.
@@ -89,10 +90,28 @@ async function start(options = {}) {
                 globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless';
             });
 
-            // Navigate to SillyTavern
-            const navigationResponse = await STATE.page.goto(stUrl, { waitUntil: 'networkidle' });
-            if (!navigationResponse.ok()) {
-                throw new Error(`Failed to navigate to ${stUrl}: ${navigationResponse.status()}`);
+            // Navigate to SillyTavern — retry on ERR_CONNECTION_REFUSED because
+            // init() fires during ST's own startup before it's listening on the port.
+            const MAX_NAV_RETRIES = 12;
+            const NAV_RETRY_DELAY_MS = 5000;
+            let navigationResponse = null;
+            for (let attempt = 1; attempt <= MAX_NAV_RETRIES; attempt++) {
+                try {
+                    navigationResponse = await STATE.page.goto(stUrl, { waitUntil: 'load', timeout: 15000 });
+                    break;
+                } catch (navErr) {
+                    const isRefused = navErr.message.includes('ERR_CONNECTION_REFUSED') ||
+                                      navErr.message.includes('ECONNREFUSED');
+                    if (isRefused && attempt < MAX_NAV_RETRIES) {
+                        console.info(`[openclaw-bridge-headless] ST not ready yet (attempt ${attempt}/${MAX_NAV_RETRIES}), retrying in ${NAV_RETRY_DELAY_MS / 1000}s...`);
+                        await new Promise(r => setTimeout(r, NAV_RETRY_DELAY_MS));
+                        continue;
+                    }
+                    throw navErr;
+                }
+            }
+            if (!navigationResponse || !navigationResponse.ok()) {
+                throw new Error(`Failed to navigate to ${stUrl}: ${navigationResponse?.status()}`);
             }
 
             console.info('[openclaw-bridge-headless] Page loaded, waiting for extension connection...');
@@ -132,6 +151,11 @@ async function start(options = {}) {
             STATE.lastError = err;
             STATE.isRunning = false;
             console.error('[openclaw-bridge-headless] Failed to start:', err.message);
+            // Clean up any partially-initialized browser resources so they don't
+            // accumulate as zombies across repeated start attempts.
+            if (STATE.page) { try { await STATE.page.close(); } catch (_) {} STATE.page = null; }
+            if (STATE.context) { try { await STATE.context.close(); } catch (_) {} STATE.context = null; }
+            if (STATE.browser) { try { await STATE.browser.close(); } catch (_) {} STATE.browser = null; }
             if (onError) onError(err);
             throw err;
         }
@@ -155,6 +179,10 @@ async function stop() {
             await STATE.page.close().catch(e => console.warn('Failed to close page:', e.message));
             STATE.page = null;
         }
+        if (STATE.context) {
+            await STATE.context.close().catch(e => console.warn('Failed to close context:', e.message));
+            STATE.context = null;
+        }
         if (STATE.browser) {
             await STATE.browser.close().catch(e => console.warn('Failed to close browser:', e.message));
             STATE.browser = null;
@@ -165,6 +193,7 @@ async function stop() {
     } catch (err) {
         console.error('[openclaw-bridge-headless] Error during stop:', err.message);
         STATE.browser = null;
+        STATE.context = null;
         STATE.page = null;
         STATE.isRunning = false;
     }
@@ -192,6 +221,42 @@ function getStatus() {
 }
 
 /**
+ * Reload the headless browser page so it picks up new ST settings (e.g. model changes).
+ * After reload the extension re-connects to the WS server and registers fresh.
+ */
+async function reloadPage() {
+    if (!STATE.page) {
+        throw new Error('Headless page not active');
+    }
+    console.info('[openclaw-bridge-headless] Reloading page to pick up new settings...');
+    STATE.isRunning = false;
+    await STATE.page.reload({ waitUntil: 'load', timeout: 30000 });
+    // Wait for extension to re-initialize and reconnect
+    const extensionConnected = await STATE.page.evaluate(
+        ({ timeoutMs }) => {
+            return new Promise((resolve, reject) => {
+                const startTime = Date.now();
+                const checkInterval = setInterval(() => {
+                    if (globalThis.openclawBridge?.state?.connected === true) {
+                        clearInterval(checkInterval);
+                        resolve(true);
+                    }
+                    if (Date.now() - startTime > timeoutMs) {
+                        clearInterval(checkInterval);
+                        reject(new Error(`Extension reconnect timeout after ${timeoutMs}ms`));
+                    }
+                }, 200);
+            });
+        },
+        { timeoutMs: 30000 }
+    );
+    if (extensionConnected) {
+        STATE.isRunning = true;
+        console.info('[openclaw-bridge-headless] ✅ Page reloaded and extension reconnected');
+    }
+}
+
+/**
  * Execute JavaScript in headless browser context
  * Useful for debugging or triggering actions
  */
@@ -205,6 +270,7 @@ async function evaluateInPage(fn, args = []) {
 module.exports = {
     start,
     stop,
+    reloadPage,
     isConnected,
     getStatus,
     evaluateInPage,

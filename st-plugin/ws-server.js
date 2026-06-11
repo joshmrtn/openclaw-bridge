@@ -40,6 +40,11 @@ function startWebSocketServer({ port = 8765, sessionManager }) {
                 });
                 return;
             }
+            if (parsed?.type === 'debug_log') {
+                const level = parsed.level === 'error' ? 'error' : 'info';
+                console[level]('[openclaw-bridge][ext]', parsed.event || '', JSON.stringify(parsed).substring(0, 300));
+                return;
+            }
             sessionManager.handleMessage(message);
         });
 

@@ -63,10 +63,25 @@ async function appendMessage(characterName, messageObj, baseDir = DEFAULT_CHATS_
         }
     }
 
-    const payload = JSON.stringify(messageObj) + '\n';
+    const line = JSON.stringify(messageObj) + '\n';
     const key = path.resolve(filePath);
     return _enqueue(key, async () => {
-        await fs.promises.appendFile(filePath, payload, 'utf8');
+        // JSONL requires one object per line. If the file exists but doesn't end
+        // with \n (e.g. written by ST's trySaveChat which uses join('\n')), a plain
+        // appendFile would merge our entry onto the last line. Peek at the last byte
+        // and prepend \n when needed so the entry always starts on its own line.
+        let prefix = '';
+        try {
+            const stat = await fs.promises.stat(filePath).catch(() => null);
+            if (stat && stat.size > 0) {
+                const buf = Buffer.alloc(1);
+                const fh = await fs.promises.open(filePath, 'r');
+                await fh.read(buf, 0, 1, stat.size - 1);
+                await fh.close();
+                if (buf[0] !== 0x0a) prefix = '\n'; // file does not end with \n
+            }
+        } catch (_) {}
+        await fs.promises.appendFile(filePath, prefix + line, 'utf8');
     });
 }
 
@@ -125,32 +140,22 @@ function buildExternalChatContent(message, images = []) {
 }
 
 async function appendExternalChatToHistory(characterName, userMessage, response, baseDir = DEFAULT_CHATS_DIR, targetFile = null) {
-    // Prefer using SillyTavern's in-process chat saving to maintain format and integrity.
     const dir = _charDirFor(baseDir, characterName);
     await fs.promises.mkdir(dir, { recursive: true });
 
-    let filePath;
-    let chatArray = [];
-
+    let resolvedFile;
     if (targetFile) {
-        filePath = path.join(dir, targetFile);
+        resolvedFile = targetFile;
     } else {
         const files = await listChatFiles(characterName, baseDir);
         if (files.length === 0) {
-            // New chat file - create a minimal header entry similar to SillyTavern
-            filePath = path.join(dir, `${Date.now()}.jsonl`);
-            chatArray = [{ chat_metadata: {}, user_name: 'unused', character_name: 'unused' }];
+            // No existing chat — bootstrap a new file with the ST header entry
+            const fname = `${Date.now()}.jsonl`;
+            const header = { chat_metadata: {}, user_name: 'unused', character_name: characterName };
+            await fs.promises.writeFile(path.join(dir, fname), JSON.stringify(header) + '\n', 'utf8');
+            resolvedFile = fname;
         } else {
-            filePath = path.join(dir, files[0]);
-            try {
-                // Import SillyTavern's chat helper and read existing chat as objects
-                const chatsModule = await import('file://' + path.resolve(process.cwd(), 'sillytavern', 'src', 'endpoints', 'chats.js'));
-                chatArray = chatsModule.getChatData(filePath) || [];
-            } catch (err) {
-                // Fallback: read lines and parse
-                const existingTxt = await fs.promises.readFile(filePath, 'utf8').catch(() => '');
-                chatArray = existingTxt ? existingTxt.split(/\r?\n/).filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) : [{ chat_metadata: {}, user_name: 'unused', character_name: 'unused' }];
-            }
+            resolvedFile = files[0];
         }
     }
 
@@ -158,18 +163,10 @@ async function appendExternalChatToHistory(characterName, userMessage, response,
     const userEntry = constructStMessage({ role: 'user', content: userContent, name: 'ExternalChat', user_id: userMessage.user_id || null });
     const assistantEntry = constructStMessage({ role: 'assistant', content: response, name: characterName });
 
-    chatArray.push(userEntry);
-    chatArray.push(assistantEntry);
-
-    try {
-        // Use SillyTavern's atomic save to preserve integrity and backups
-        const chatsModule = await import('file://' + path.resolve(process.cwd(), 'sillytavern', 'src', 'endpoints', 'chats.js'));
-        await chatsModule.trySaveChat(chatArray, filePath, false, 'openclaw-bridge', characterName, undefined);
-    } catch (err) {
-        // Fallback to appending directly if in-process save is unavailable
-        await appendMessage(characterName, userEntry, baseDir, path.basename(filePath));
-        await appendMessage(characterName, assistantEntry, baseDir, path.basename(filePath));
-    }
+    // Append both entries. appendMessage handles the case where the file doesn't
+    // end with \n (written by ST's own save path which uses join('\n')).
+    await appendMessage(characterName, userEntry, baseDir, resolvedFile);
+    await appendMessage(characterName, assistantEntry, baseDir, resolvedFile);
 }
 
 module.exports = {

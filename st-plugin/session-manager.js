@@ -106,17 +106,24 @@ function getUiClientCount() {
 /**
  * Pick a client for generation
  * Strategy: ALWAYS prefer headless clients (never hijack user's browser).
+ * Among headless clients, prefer the most recently registered one — the fresh
+ * headless browser started by headless-service.js connects after zombie
+ * browsers from previous sessions, so picking newest avoids stale contexts.
  * If headless unavailable, return null (HTTP polling or error will handle it).
  */
 function getClient() {
-    // Get the headless client for OC bridge generation
-    // User's browser is never to be hijacked by OC messages
-    // Only headless clients are suitable for background message processing
+    let newest = null;
+    let newestTime = -1;
     for (const [socket, meta] of clients.entries()) {
-        if (meta.isHeadless && socket.readyState === WS.OPEN) {
-            lastPickedClientType = 'headless';
-            return socket;
+        if (meta.isHeadless && socket.readyState === WS.OPEN && meta.registeredAt > newestTime) {
+            newest = socket;
+            newestTime = meta.registeredAt;
         }
+    }
+
+    if (newest) {
+        lastPickedClientType = 'headless';
+        return newest;
     }
 
     // If no headless available, return null

@@ -107,26 +107,40 @@ async function init(router) {
         console.info('[openclaw-bridge-plugin] WebSocket server already running');
     }
 
-    // Start headless service if enabled
+    // Start headless service in the background so it doesn't block plugin init.
+    // It retries page.goto if ST isn't listening yet (race condition on startup).
     const enableHeadless = (process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS !== 'false');
-    if (enableHeadless && !headlessStartupError) {
-        console.info('[openclaw-bridge-plugin] Starting headless browser service...');
-        try {
-            await headlessService.start({
-                stUrl: process.env.OPENCLAW_BRIDGE_ST_URL || 'http://localhost:8000',
-                timeoutMs: Number(process.env.OPENCLAW_BRIDGE_HEADLESS_STARTUP_TIMEOUT_MS || 30000),
-                onError: (err) => {
-                    headlessStartupError = err;
-                    console.error('[openclaw-bridge-plugin] Headless service error:', err.message);
-                },
-            });
+    if (enableHeadless) {
+        headlessStartupError = null;
+        console.info('[openclaw-bridge-plugin] Starting headless browser service in background...');
+        headlessService.start({
+            stUrl: process.env.OPENCLAW_BRIDGE_ST_URL || 'http://127.0.0.1:8000',
+            timeoutMs: Number(process.env.OPENCLAW_BRIDGE_HEADLESS_STARTUP_TIMEOUT_MS || 30000),
+            onError: (err) => {
+                headlessStartupError = err;
+                console.error('[openclaw-bridge-plugin] Headless service error:', err.message);
+            },
+        }).then(() => {
             console.info('[openclaw-bridge-plugin] Headless service started');
-        } catch (err) {
+        }).catch(err => {
             headlessStartupError = err;
-            // Don't fail plugin init if headless fails; just log it
-            console.warn('[openclaw-bridge-plugin] Headless service startup failed (plugin will continue with UI-only):', err.message);
-        }
+            console.warn('[openclaw-bridge-plugin] Headless service startup failed (plugin will continue without headless):', err.message);
+        });
     }
+
+    // POST /reload-headless — forces the headless browser to reload so it picks up
+    // any settings changes made in the ST UI (e.g. model, API endpoint, persona).
+    router.post('/reload-headless', async (request, response) => {
+        if (!headlessService.isConnected()) {
+            return response.status(503).json({ error: 'Headless service not connected or not running' });
+        }
+        try {
+            await headlessService.reloadPage();
+            return response.json({ reloaded: true });
+        } catch (err) {
+            return response.status(500).json({ error: err.message });
+        }
+    });
 
     router.get('/status', (request, response) => {
         response.json({

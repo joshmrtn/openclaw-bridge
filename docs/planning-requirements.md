@@ -80,12 +80,18 @@ Return a configurable unavailable message
 Run ST in a headless browser (Playwright/Puppeteer) for background generation
 
 The chosen approach must be documented and implemented. R1.5 depends on this.
-R9.3 — Small model tool calling reliability
-OC agents using small local models (sub-7B parameters) may not reliably use the generate_response tool and instead respond directly. The system must either:
+R9.3 — OC agent must not be in the inbound message path
+Spike result (2026-06-09): internal `message:received` hooks are additive — the OC agent LLM runs regardless of what the hook pushes to `event.messages`. There is no OC config option to force exclusive tool use. Typed plugin hooks with cancel/claim semantics are required.
 
-Document minimum model requirements clearly
-Implement a fallback detection mechanism (detect direct responses and re-route)
-Or find an OC configuration that enforces tool use structurally rather than relying on model behavior
+The inbound message path must bypass the OC agent LLM entirely. The solution is an OC typed plugin hook using `inbound_claim`, which claims the message before agent routing so the agent never runs.
+
+Implementation: an OC plugin (`oc-plugin/`) registers `inbound_claim`. When a message arrives for an agent that has an active linked ST character (per `character-links.json`), the plugin:
+1. Claims the message — preventing agent routing and LLM invocation
+2. Calls the ST plugin `/generate` endpoint and awaits the response
+3. Returns the ST-generated response as a synthetic reply delivered to the channel
+4. If ST is unavailable or generation fails, does not claim — the agent handles it with its character-bridge skill as a fallback
+
+The OC agent LLM is only involved for outbound character actions (R5.x), where it receives instructions from ST and uses the character-bridge skill to act on them. Minimum model requirements for that surface are a separate concern documented under R5.x implementation.
 
 
 Out of Scope for v1.0

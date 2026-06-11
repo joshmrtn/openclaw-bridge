@@ -516,11 +516,65 @@ async function generateForCharacter(characterName, message) {
 
     const previousChid = getCurrentCharacterIndex(context);
     const needsCharacterSwitch = previousChid !== chid;
-    if (needsCharacterSwitch) {
-        console.info('[openclaw-bridge] Not switching UI for external generation; relying on forceChId', { chid, characterName, previousChid });
+    const isHeadless = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE === 'headless';
+
+    // Always log switch decision — this is sent via WS so visible in ST server logs
+    sendSocketMessage({ type: 'debug_log', level: 'info', event: 'char_switch_decision',
+        characterName, chid, previousChid, needsCharacterSwitch, isHeadless,
+        hasSelectCharacterById: typeof selectCharacterById === 'function',
+        hasExecuteSlash: typeof context?.executeSlashCommandsWithOptions === 'function',
+    });
+
+    if (needsCharacterSwitch && isHeadless) {
+        console.info('[openclaw-bridge] Headless: switching active character before generation', { from: previousChid, to: chid, characterName });
+
+        // Primary: selectCharacterById (awaits getChat internally, sets name2 on completion)
+        if (typeof selectCharacterById === 'function') {
+            try {
+                await selectCharacterById(chid);
+            } catch (switchErr) {
+                sendSocketMessage({ type: 'debug_log', level: 'error', event: 'char_switch_error',
+                    method: 'selectCharacterById', error: switchErr?.message });
+            }
+        }
+
+        // Verify the switch worked by reading a fresh context snapshot
+        await new Promise(r => setTimeout(r, 300)); // let any async side-effects settle
+        const postSwitchCtx = getStContext();
+        const postSwitchChid = Number(postSwitchCtx?.characterId);
+        const postSwitchName2 = postSwitchCtx?.name2;
+
+        sendSocketMessage({ type: 'debug_log', level: 'info', event: 'char_switch_after_primary',
+            postSwitchChid, postSwitchName2, targetChid: chid, targetName: characterName,
+            switchOk: postSwitchChid === chid });
+
+        // Fallback: /go command if primary switch failed
+        if (postSwitchChid !== chid && typeof context?.executeSlashCommandsWithOptions === 'function') {
+            console.info('[openclaw-bridge] Headless: primary switch failed, trying /go command');
+            try {
+                await context.executeSlashCommandsWithOptions(`/go ${characterName}`);
+                await new Promise(r => setTimeout(r, 500));
+                const fallbackCtx = getStContext();
+                sendSocketMessage({ type: 'debug_log', level: 'info', event: 'char_switch_after_fallback',
+                    characterId: Number(fallbackCtx?.characterId), name2: fallbackCtx?.name2, targetChid: chid });
+            } catch (fallbackErr) {
+                sendSocketMessage({ type: 'debug_log', level: 'error', event: 'char_switch_fallback_error',
+                    error: fallbackErr?.message });
+            }
+        }
+    } else if (needsCharacterSwitch) {
+        sendSocketMessage({ type: 'debug_log', level: 'info', event: 'char_switch_skipped',
+            reason: 'not headless', chid, characterName, previousChid });
     }
 
     let result;
+
+    // Log the ST state right before generation so we can verify the character context
+    const preGenCtx = getStContext();
+    sendSocketMessage({ type: 'debug_log', level: 'info', event: 'pre_generation_state',
+        characterId: Number(preGenCtx?.characterId), name2: preGenCtx?.name2,
+        chatId: preGenCtx?.chatId, targetChid: chid, targetName: characterName });
+
     console.info('[openclaw-bridge] Attempting generation with message:', { characterName, messagePreview: message?.substring(0, 100) });
 
     let debugMethod = null;
@@ -572,6 +626,20 @@ async function generateForCharacter(characterName, message) {
                 debugLog.push(`generateQuietPrompt failed: ${e.message}`);
                 result = await generateQuietPrompt({ quietPrompt: message, quietToLoud: true, removeReasoning: false });
                 debugLog.push(`Retry returned: ${typeof result} (${result?.length || 0} chars)`);
+            }
+
+            // If generateQuietPrompt returned empty, fall through to generate() as a safety net
+            if (!result && typeof generate === 'function') {
+                console.warn('[openclaw-bridge] generateQuietPrompt returned empty; falling back to generate()');
+                debugLog.push('generateQuietPrompt was empty; falling back to generate()');
+                result = await generate('quiet', {
+                    quiet_prompt: message,
+                    force_chid: chid,
+                    force_name2: true,
+                    skipWIAN: false,
+                    quietToLoud: true,
+                });
+                debugLog.push(`generate() fallback returned: ${typeof result} (${result?.length || 0} chars)`);
             }
         } else if (typeof generate === 'function') {
             debugMethod = 'context.generate';
@@ -711,7 +779,11 @@ async function handleGenerateRequest(payload) {
     try {
         console.info('[openclaw-bridge] Starting generation with character lock');
         const response = await withCharacterLock(character, () => generateForCharacter(character, message));
-        console.info('[openclaw-bridge] Generation completed, sending response:', { requestId, responseLength: response?.length, responsePreview: response?.substring(0, 100) });
+        console.info('[openclaw-bridge] Generation completed:', { requestId, responseLength: response?.length, responsePreview: response?.substring(0, 100) });
+        if (!response) {
+            sendSocketMessage({ type: 'generate_error', requestId, error: 'Generation returned empty response — check LLM model/connection' });
+            return;
+        }
         sendSocketMessage({
             type: 'generate_response',
             requestId,
