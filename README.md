@@ -2,25 +2,106 @@
 
 Bridging the gap between SillyTavern and OpenClaw.
 
-## Install
+## Full setup
 
-1. Clone the repository:
+### 1. Clone and bootstrap
 
 ```bash
 git clone https://github.com/joshmrtn/openclaw-bridge.git
 cd openclaw-bridge
-```
-
-2. Run the setup script to wire the plugin into a local SillyTavern checkout,
-   install plugin dependencies, and generate a bridge auth token:
-
-```bash
 ./setup.sh
 ```
 
-3. Follow `AGENT-SETUP.md` to install the `character-bridge` skill into
-   an OpenClaw agent and configure `OPENCLAW_BRIDGE_URL` and
-   `OPENCLAW_BRIDGE_TOKEN` in the agent's environment.
+`setup.sh` installs npm dependencies, symlinks the plugin into a local
+SillyTavern checkout (if `./sillytavern` exists), and generates a bridge
+auth token at `data/openclaw-bridge/bridge-token.txt`.
+
+### 2. Install the ST plugin
+
+Copy `st-plugin/` into SillyTavern's `plugins/` directory:
+
+```bash
+cp -r st-plugin /path/to/SillyTavern/plugins/openclaw-bridge
+```
+
+Or, if you cloned into `./sillytavern`, `./setup.sh` already created a
+development symlink — no copy needed.
+
+Restart SillyTavern. Verify the plugin loaded:
+
+```bash
+curl http://localhost:8000/api/plugins/openclaw-bridge/status
+# Expected: {"status":"ok",...}
+```
+
+### 3. Install the ST extension
+
+Copy `st-extension/` into SillyTavern's extensions directory:
+
+```bash
+cp -r st-extension /path/to/SillyTavern/public/scripts/extensions/openclaw-bridge
+```
+
+Refresh the SillyTavern browser tab. The extension connects to the plugin's
+WebSocket automatically and registers itself as the generation client.
+
+> The headless browser service (see step 6) handles this automatically in
+> production — manual extension install is only needed if you run ST
+> without headless mode.
+
+### 4. Link a character to an OC agent
+
+For each SillyTavern character you want to expose via OpenClaw, run:
+
+```bash
+./scripts/link-character.sh \
+  --character "Gerard Fontaine" \
+  --agent gerard \
+  --owner "discord:YOUR_DISCORD_USER_ID"
+```
+
+- `--character` must match the character name exactly as it appears in ST
+- `--agent` is the OC agent ID you will create in step 5
+- `--owner` sets a user ID in `platform:id` format that receives `[OWNER]`
+  trust (repeat the flag for multiple owners)
+- Token is read from `data/openclaw-bridge/bridge-token.txt` automatically
+
+Verify the link was saved:
+
+```bash
+curl http://localhost:8000/api/plugins/openclaw-bridge/characters \
+  -H "Authorization: Bearer $(cat data/openclaw-bridge/bridge-token.txt)"
+```
+
+### 5. Install the OC skill and create an agent
+
+Follow `AGENT-SETUP.md` for the complete OC-side steps: creating the agent,
+installing the `character-bridge` skill, and configuring
+`OPENCLAW_BRIDGE_URL` and `OPENCLAW_BRIDGE_TOKEN` in the agent environment.
+
+### 6. Headless mode (production)
+
+The plugin launches a headless Playwright browser automatically when ST
+starts, so the extension is always connected even without an open browser
+tab. No additional configuration is needed — Playwright is installed as a
+dev dependency.
+
+If you change the LLM or API settings in the ST UI after startup, reload the
+headless session to pick up the changes:
+
+```bash
+TOKEN=$(cat data/openclaw-bridge/bridge-token.txt)
+curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/reload-headless \
+  -H "Authorization: Bearer ${TOKEN}"
+# Expected: {"reloaded":true}
+```
+
+Check headless status at any time:
+
+```bash
+curl http://localhost:8000/api/plugins/openclaw-bridge/health \
+  -H "Authorization: Bearer ${TOKEN}"
+```
 
 ## Configuration
 

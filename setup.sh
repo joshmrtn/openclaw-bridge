@@ -77,10 +77,13 @@ fi
 
 echo
 echo "Next steps:"
-echo "- Set OPENCLAW_BRIDGE_URL (e.g. http://localhost:8000) and OPENCLAW_BRIDGE_TOKEN in each OC agent's env config."
-echo "  Example agent env entries: OPENCLAW_BRIDGE_URL=http://localhost:8000, OPENCLAW_BRIDGE_TOKEN=$(cat ${token_file})"
+echo "- Link each SillyTavern character to an OC agent:"
+echo "  ./scripts/link-character.sh --character \"My Character\" --agent my-agent --owner \"discord:YOUR_USER_ID\""
+echo "- Set OPENCLAW_BRIDGE_URL and OPENCLAW_BRIDGE_TOKEN in each OC agent's env config."
+echo "  Token: $(cat ${token_file})"
 echo "- Install the skill into an agent workspace:"
 echo "  cp -r skills/character-bridge ~/.openclaw/workspace-{agentname}/skills/"
 echo "- Restart the OpenClaw gateway after updating agent configs."
+echo "- See README.md for the full setup guide."
 echo
 echo "Setup complete (idempotent)."

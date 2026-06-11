@@ -63,6 +63,17 @@ Add to ~/.openclaw/openclaw.json under agents.list:
 
 ### Step 4: Register the character link in ST
 
+Use the provided script (recommended):
+
+```bash
+./scripts/link-character.sh \
+  --character "{STCharacterName}" \
+  --agent "{agentname}" \
+  --owner "{platform}:{ownerUserId}"
+```
+
+Or with curl directly:
+
 ```bash
 curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/characters/{STCharacterName}/link \
   -H "Authorization: Bearer {token}" \
@@ -73,7 +84,7 @@ curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/characters/{STCha
   }'
 ```
 
-The owner_user_ids array accepts IDs in the format "platform:id",
+The `owner_user_ids` array accepts IDs in the format "platform:id",
 for example "discord:123456789012345678" or "telegram:987654321".
 These users get [OWNER] label. All others get [GUEST] label.
 
@@ -98,6 +109,32 @@ openclaw agent --agent {agentname} \
   --message "Hello, this is a test"
 # Expected: response is generated in character via SillyTavern
 ```
+
+## After changing ST model or API settings
+
+The headless browser caches its session at startup. If you change the LLM,
+API endpoint, or character settings in the SillyTavern UI after the bridge
+is running, the headless service will not pick them up automatically.
+
+Trigger a page reload without restarting the plugin:
+
+```bash
+curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/reload-headless \
+  -H "Authorization: Bearer {token}"
+# Expected: {"reloaded":true}
+```
+
+Or with the plugin URL env var:
+
+```bash
+TOKEN=$(cat data/openclaw-bridge/bridge-token.txt)
+curl -sS -X POST "${OPENCLAW_BRIDGE_URL:-http://localhost:8000}/api/plugins/openclaw-bridge/reload-headless" \
+  -H "Authorization: Bearer ${TOKEN}"
+```
+
+If the headless service is not running (plugin started with
+`OPENCLAW_BRIDGE_ENABLE_HEADLESS=false`) this endpoint returns HTTP 503 —
+that is expected.
 
 ## Removing a character
 

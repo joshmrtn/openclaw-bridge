@@ -6,7 +6,7 @@ function getLinksPath() {
         return process.env.OPENCLAW_BRIDGE_LINKS_PATH;
     }
 
-    return path.join(process.cwd(), 'data', 'openclaw-bridge', 'character-links.json');
+    return path.join(__dirname, '..', 'data', 'openclaw-bridge', 'character-links.json');
 }
 
 function readState() {
