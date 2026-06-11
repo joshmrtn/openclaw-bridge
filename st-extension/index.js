@@ -91,6 +91,49 @@ function normalizeGenerationResult(result) {
     return result?.text || result?.response || result?.message || JSON.stringify(result);
 }
 
+function stripInstructTemplate(text) {
+    if (!text || typeof text !== 'string') return text;
+
+    let s = text;
+
+    // ChatML: extract content of last <|im_start|>assistant block
+    const chatMlAssistant = s.lastIndexOf('<|im_start|>assistant');
+    if (chatMlAssistant !== -1) {
+        const afterNewline = s.indexOf('\n', chatMlAssistant);
+        s = afterNewline !== -1 ? s.slice(afterNewline + 1) : s.slice(chatMlAssistant + 21);
+    }
+
+    // Llama 3: extract after last <|start_header_id|>assistant<|end_header_id|>
+    const llama3Header = s.lastIndexOf('<|start_header_id|>assistant<|end_header_id|>');
+    if (llama3Header !== -1) {
+        const afterHeader = s.indexOf('\n\n', llama3Header);
+        s = afterHeader !== -1 ? s.slice(afterHeader + 2) : s.slice(llama3Header + 45);
+    }
+
+    // Mistral/Llama instruct: take everything after last [/INST]
+    const lastInstClose = s.lastIndexOf('[/INST]');
+    if (lastInstClose !== -1) {
+        s = s.slice(lastInstClose + 7);
+    }
+
+    // Alpaca/Vicuna: extract after last "### Assistant:\n"
+    const alpacaAssistant = s.lastIndexOf('### Assistant:');
+    if (alpacaAssistant !== -1) {
+        const afterNewline = s.indexOf('\n', alpacaAssistant);
+        s = afterNewline !== -1 ? s.slice(afterNewline + 1) : s.slice(alpacaAssistant + 14);
+    }
+
+    // Strip stray EOS/boundary tokens
+    s = s.replace(/<\|im_end\|>/g, '')
+         .replace(/<\|im_start\|>/g, '')
+         .replace(/<\|endoftext\|>/g, '')
+         .replace(/<\|eot_id\|>/g, '')
+         .replace(/<\/s>/g, '')
+         .replace(/^<s>/g, '');
+
+    return s.trim();
+}
+
 function resolveCharacterName() {
     const input = document.getElementById('character_name_pole');
     const value = input?.value?.trim();
@@ -767,7 +810,7 @@ async function generateForCharacter(characterName, message) {
     console.info('[openclaw-bridge] Generation result (raw):', { type: typeof result, length: result?.length, preview: typeof result === 'string' ? result.substring(0, 100) : result });
 
 
-    const normalized = normalizeGenerationResult(result);
+    const normalized = stripInstructTemplate(normalizeGenerationResult(result));
     console.info('[openclaw-bridge] Final normalized result:', { length: normalized?.length, preview: normalized?.substring(0, 100) });
     return normalized;
 }
