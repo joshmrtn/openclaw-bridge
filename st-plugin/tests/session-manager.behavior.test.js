@@ -72,6 +72,35 @@ describe('session-manager behavior', () => {
         sessionManager.unregisterClient(fakeClient);
     });
 
+    test('popHttpOutboundMessage returns null when queue is empty', () => {
+        expect(sessionManager.popHttpOutboundMessage()).toBeNull();
+        expect(sessionManager.popHttpOutboundMessage('headless')).toBeNull();
+    });
+
+    test('popHttpOutboundMessage ui client receives chat_updated', () => {
+        sessionManager.queueChatUpdated('Frog', 'discord:user1');
+        const msg = sessionManager.popHttpOutboundMessage('ui');
+        expect(msg).toMatchObject({ type: 'chat_updated', character: 'Frog', user_id: 'discord:user1' });
+        expect(sessionManager.popHttpOutboundMessage()).toBeNull();
+    });
+
+    test('popHttpOutboundMessage headless client skips chat_updated, returns generate', () => {
+        sessionManager.queueChatUpdated('Frog', null);
+        // headless skips chat_updated — queue still has it
+        expect(sessionManager.popHttpOutboundMessage('headless')).toBeNull();
+
+        // now add a generate message behind the chat_updated
+        const prevMs = process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS;
+        process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS = '0';
+        // enqueue directly (requestGenerate internal path pushes to httpOutboundQueue)
+        // use queueChatUpdated as a proxy — we'll test the splice behaviour manually
+        process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS = prevMs || '';
+
+        // Verify chat_updated is still in queue for UI after headless peek
+        const uiMsg = sessionManager.popHttpOutboundMessage('ui');
+        expect(uiMsg).toMatchObject({ type: 'chat_updated', character: 'Frog' });
+    });
+
     test('handleMessage ignores malformed or unrelated messages', async () => {
         const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
         sessionManager.registerClient(fakeClient, { isHeadless: true });

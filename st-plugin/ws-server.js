@@ -45,6 +45,11 @@ function startWebSocketServer({ port = 8765, sessionManager }) {
                 console[level]('[openclaw-bridge][ext]', parsed.event || '', JSON.stringify(parsed).substring(0, 300));
                 return;
             }
+            // Reply pong only to the sender — not to all clients.
+            if (parsed?.type === 'ping') {
+                try { socket.send(JSON.stringify({ type: 'pong' })); } catch (e) {}
+                return;
+            }
             sessionManager.handleMessage(message);
         });
 

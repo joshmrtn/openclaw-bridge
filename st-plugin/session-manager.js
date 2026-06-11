@@ -147,6 +147,17 @@ function broadcast(payload) {
     return delivered;
 }
 
+// Queue a chat_updated notification for UI clients that use HTTP polling instead of WS.
+// Called alongside broadcast() so browsers that can't reach the WS port still receive the event.
+function queueChatUpdated(character, userId) {
+    httpOutboundQueue.push({
+        type: 'chat_updated',
+        character,
+        user_id: userId || null,
+        timestamp: Date.now(),
+    });
+}
+
 function requestGenerate(payload, timeoutMs = 900000) { // 15 minutes for local Ollama models
     const waitForClientMs = Number(process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS || 5000);
 
@@ -213,18 +224,7 @@ function handleMessage(rawMessage) {
     }
 
     const { type, requestId, response, error } = message || {};
-    
-    // Handle health check ping/pong
-    if (type === 'ping') {
-        // Find the client that sent the ping and respond
-        for (const [socket, meta] of clients.entries()) {
-            if (socket.readyState === WS.OPEN) {
-                sendJson(socket, { type: 'pong' });
-            }
-        }
-        return;
-    }
-    
+
     if (type === 'debug_log') {
         // Log debug messages sent from the extension to the server console for inspection.
         try {
@@ -255,8 +255,15 @@ function handleMessage(rawMessage) {
     pending.resolve(response);
 }
 
-// HTTP polling helpers for extensions that cannot open a persistent WS
-function popHttpOutboundMessage() {
+// HTTP polling helpers for extensions that cannot open a persistent WS.
+// clientType='headless' only pops 'generate' messages — chat_updated stays for UI browsers.
+// clientType='ui' (default) pops any message.
+function popHttpOutboundMessage(clientType = 'ui') {
+    if (clientType === 'headless') {
+        const idx = httpOutboundQueue.findIndex(m => m.type === 'generate');
+        if (idx === -1) return null;
+        return httpOutboundQueue.splice(idx, 1)[0];
+    }
     return httpOutboundQueue.shift() || null;
 }
 
@@ -289,6 +296,7 @@ function reset() {
     }
     pendingRequests.clear();
     clients.clear();
+    httpOutboundQueue.length = 0;
 }
 
 function getClientStatus() {
@@ -308,6 +316,7 @@ module.exports = {
     getUiClientCount,
     getClientStatus,
     broadcast,
+    queueChatUpdated,
     requestGenerate,
     handleMessage,
     reset,

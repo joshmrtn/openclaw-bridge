@@ -274,4 +274,50 @@ describe('plugin routes', () => {
         expect(appendExternalChatToHistory).toHaveBeenCalledWith('Gerard', { message: 'Hello', images: [], user_id: 'discord:1' }, '[RESP]');
         expect(res.body.response).toBe('[RESP]');
     });
+
+    test('POST /generate broadcasts chat_updated after history write', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const requestGenerate = jest.fn().mockResolvedValue('Hello back');
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const broadcast = jest.fn();
+        const queueChatUpdated = jest.fn();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            broadcast,
+            queueChatUpdated,
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => null),
+        }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            body: { character: 'Frog', message: 'Ribbit', user_id: 'discord:user1' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.body.response).toBe('Hello back');
+        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'chat_updated',
+            character: 'Frog',
+        }));
+        expect(queueChatUpdated).toHaveBeenCalledWith('Frog', 'discord:user1');
+    });
 });

@@ -37,6 +37,10 @@ const STATE = {
     maxBackoffMs: 30000,       // cap at 30s
     healthCheckInterval: null, // health ping timer
     pongReceived: true,        // track if we got a pong back
+    pollingInterval: null,     // single shared HTTP polling fallback timer
+    newMessageBadge: null,     // "new message" badge element for deferred reload
+    connectionId: 0,           // incremented each connect(); stale sockets self-close
+    lastChatUpdatedTs: 0,      // deduplicate chat_updated when multiple WS sockets are active
 };
 
 function getStContext() {
@@ -850,6 +854,151 @@ function sendSocketMessage(payload) {
     STATE.socket.send(JSON.stringify(payload));
 }
 
+function startHttpPollingFallback() {
+    if (STATE.pollingInterval) return;
+    console.info('[openclaw-bridge] Starting HTTP polling fallback for plugin messages');
+    let poll404Count = 0;
+    STATE.pollingInterval = setInterval(async () => {
+        try {
+            const headers = buildPluginHeaders({ omitContentType: true }) || {};
+            const clientType = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE || 'ui';
+            const resp = await fetch(`/api/plugins/openclaw-bridge/http-message?clientType=${clientType}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers,
+            });
+
+            if (resp.status === 204) return;
+
+            if (resp.status === 404) {
+                poll404Count += 1;
+                if (poll404Count === 1) console.warn('[openclaw-bridge] HTTP polling returned 404; plugin route may be missing');
+                return;
+            }
+
+            if (!resp.ok) {
+                console.warn('[openclaw-bridge] HTTP polling returned:', resp.status);
+                return;
+            }
+
+            poll404Count = 0;
+            const msg = await resp.json();
+            console.info('[openclaw-bridge] Polled HTTP message:', msg.type, msg.requestId);
+            if (msg.type === 'generate') {
+                const payload = msg.payload || {};
+                const responseText = await withCharacterLock(payload.character, () => generateForCharacter(payload.character, payload.message));
+                const postHeaders = Object.assign({ 'Content-Type': 'application/json' }, buildPluginHeaders());
+                await fetch('/api/plugins/openclaw-bridge/http-response', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: postHeaders,
+                    body: JSON.stringify({ type: 'generate_response', requestId: msg.requestId, response: responseText }),
+                });
+            } else if (msg.type === 'chat_updated') {
+                if (!STATE.connected) {
+                    console.info('[openclaw-bridge] chat_updated received via HTTP poll:', { character: msg.character });
+                    await handleChatUpdatedMessage(msg);
+                }
+            }
+        } catch (e) {
+            console.warn('[openclaw-bridge] HTTP polling error:', e);
+        }
+    }, 2000);
+}
+
+function stopHttpPollingFallback() {
+    if (!STATE.pollingInterval) return;
+    clearInterval(STATE.pollingInterval);
+    STATE.pollingInterval = null;
+    console.info('[openclaw-bridge] Stopped HTTP polling fallback');
+}
+
+async function handleChatUpdatedMessage(payload) {
+    if (globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE === 'headless') return;
+    // Deduplicate: two active WS sockets both receive the same broadcast.
+    // The timestamp is set once per generation, so identical timestamps = same event.
+    if (payload.timestamp && payload.timestamp === STATE.lastChatUpdatedTs) {
+        console.info('[openclaw-bridge] chat_updated duplicate ignored:', payload.character);
+        return;
+    }
+    if (payload.timestamp) STATE.lastChatUpdatedTs = payload.timestamp;
+    try {
+        const context = getStContext();
+        const updatedChid = findCharacterIndex(payload.character);
+        const currentChid = typeof context?.characterId === 'number'
+            ? context.characterId
+            : getCurrentCharacterIndex(context);
+        const reloadFn = context?.reloadCurrentChat || (typeof reloadCurrentChat === 'function' ? reloadCurrentChat : null);
+
+        console.info('[openclaw-bridge] chat_updated check:', {
+            updatedChid,
+            currentChid,
+            contextCharacterId: context?.characterId,
+            hasReloadFn: typeof reloadFn === 'function',
+            charactersCount: context?.characters?.length,
+        });
+
+        if (updatedChid !== -1 && currentChid === updatedChid) {
+            if (typeof reloadFn !== 'function') {
+                console.warn('[openclaw-bridge] reloadCurrentChat() is not available in this context');
+            } else if (isAtChatBottom()) {
+                console.info('[openclaw-bridge] At chat bottom; reloading');
+                hideNewMessageBadge();
+                await reloadFn();
+                console.info('[openclaw-bridge] reloadCurrentChat completed');
+            } else {
+                console.info('[openclaw-bridge] Scrolled up; showing new message badge');
+                showNewMessageBadge(payload.character, reloadFn);
+            }
+        } else {
+            console.info('[openclaw-bridge] Not viewing updated character; skipping reload');
+        }
+    } catch (e) {
+        console.warn('[openclaw-bridge] Error handling chat_updated:', e);
+    }
+}
+
+function isAtChatBottom() {
+    const chatEl = document.getElementById('chat');
+    if (!chatEl) return true;
+    return chatEl.scrollHeight - chatEl.scrollTop <= chatEl.clientHeight + 60;
+}
+
+function showNewMessageBadge(characterName, reloadFn) {
+    hideNewMessageBadge(); // remove any existing badge first
+
+    const chat = document.getElementById('chat');
+    if (!chat) {
+        console.warn('[openclaw-bridge] #chat not found; cannot show new message badge');
+        return;
+    }
+
+    // Sticky-bottom inside #chat: immune to ancestor CSS transforms that break position:fixed.
+    // Appended at end-of-list → sticks to the bottom of the visible chat area when scrolled up.
+    const wrapper = document.createElement('div');
+    wrapper.id = 'openclaw-bridge-new-msg-badge';
+    wrapper.style.cssText = 'position:sticky;bottom:10px;text-align:center;z-index:100;pointer-events:none;margin:4px 0;';
+
+    const btn = document.createElement('button');
+    btn.style.cssText = 'pointer-events:auto;background:#4a9eff;color:#fff;border:none;border-radius:16px;padding:6px 18px;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.35);white-space:nowrap;';
+    btn.textContent = `↓ New message from ${characterName}`;
+    btn.onclick = async () => {
+        hideNewMessageBadge();
+        if (typeof reloadFn === 'function') await reloadFn();
+    };
+
+    wrapper.appendChild(btn);
+    chat.appendChild(wrapper);
+    STATE.newMessageBadge = wrapper;
+}
+
+function hideNewMessageBadge() {
+    if (STATE.newMessageBadge) {
+        STATE.newMessageBadge.remove();
+        STATE.newMessageBadge = null;
+    }
+}
+
 function connect() {
     console.log('[openclaw-bridge] connect() called, current STATE:', { connected: STATE.connected, hasSocket: !!STATE.socket });
 
@@ -857,6 +1006,9 @@ function connect() {
         console.log('[openclaw-bridge] Already connected or connecting, skipping');
         return;
     }
+
+    // Tag this attempt so stale sockets from earlier connect() calls self-close.
+    const myConnectionId = ++STATE.connectionId;
 
     // Derive WebSocket URL from current location with optional global overrides.
     function getWebSocketUrl() {
@@ -898,33 +1050,32 @@ function connect() {
 
         console.log('[openclaw-bridge] Attempting WebSocket URLs:', urls);
 
-        // Start HTTP polling fallback immediately to ensure the extension can receive messages
-        // Defer start of HTTP polling fallback so the function declaration below exists
-        try {
-            setTimeout(() => startHttpPollingFallback(), 0);
-        } catch (e) {
-            console.warn('[openclaw-bridge] Failed to schedule HTTP polling fallback start:', e);
-        }
-
         let socket = null;
         let tried = 0;
         let connected = false;
 
         function attachHandlers(ws) {
             ws.addEventListener('open', () => {
-                if (connected) return; // ignore late opens
+                if (STATE.connectionId !== myConnectionId) {
+                    // A newer connect() call is already active — close this stale socket.
+                    try { ws.close(); } catch (e) {}
+                    return;
+                }
+                if (connected) return; // ignore late opens within same attempt
                 connected = true;
                 STATE.socket = ws;
                 STATE.connected = true;
                 STATE.backoffMs = 1000;
                 STATE.pongReceived = true;
                 console.info('[openclaw-bridge] ✅ WebSocket connected!');
+                stopHttpPollingFallback();
                 startHealthCheck();
                 const clientType = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE || 'ui';
                 try { ws.send(JSON.stringify({ type: 'register', clientType })); } catch (e) {}
             });
 
             ws.addEventListener('message', async event => {
+                if (STATE.connectionId !== myConnectionId) return; // stale socket
                 console.log('[openclaw-bridge] Message received on WebSocket:', String(event.data).substring(0, 200));
                 let payload;
 
@@ -950,26 +1101,8 @@ function connect() {
                 }
 
                 if (payload.type === 'chat_updated') {
-                    console.info('[openclaw-bridge] Chat updated notification received:', { character: payload.character });
-                    try {
-                        const context = getStContext();
-                        const updatedChid = findCharacterIndex(payload.character);
-                        const currentChid = getCurrentCharacterIndex(context);
-
-                        if (updatedChid !== -1 && currentChid === updatedChid) {
-                            console.info('[openclaw-bridge] Viewing updated character; reloading chat');
-                            // reloadCurrentChat is provided by SillyTavern's public script
-                            if (typeof reloadCurrentChat === 'function') {
-                                await reloadCurrentChat();
-                            } else {
-                                console.warn('[openclaw-bridge] reloadCurrentChat() is not available in this context');
-                            }
-                        } else {
-                            console.info('[openclaw-bridge] Not viewing updated character; skipping reload');
-                        }
-                    } catch (e) {
-                        console.warn('[openclaw-bridge] Error handling chat_updated notification:', e);
-                    }
+                    console.info('[openclaw-bridge] chat_updated received via WS:', { character: payload.character });
+                    await handleChatUpdatedMessage(payload);
                     return;
                 }
 
@@ -979,6 +1112,7 @@ function connect() {
             });
 
             ws.addEventListener('close', (ev) => {
+                if (STATE.connectionId !== myConnectionId) return; // stale socket, ignore
                 STATE.connected = false;
                 if (STATE.reconnectTimer) {
                     clearTimeout(STATE.reconnectTimer);
@@ -991,6 +1125,7 @@ function connect() {
                 // Exponential backoff: increase delay each attempt, capped at maxBackoffMs
                 STATE.backoffMs = Math.min(STATE.backoffMs * 1.5, STATE.maxBackoffMs);
                 console.info(`[openclaw-bridge] WebSocket closed. Reconnecting in ${STATE.backoffMs}ms`);
+                startHttpPollingFallback();
                 STATE.reconnectTimer = setTimeout(connect, STATE.backoffMs);
             });
 
@@ -1005,10 +1140,10 @@ function connect() {
                         console.info('[openclaw-bridge] Trying next WebSocket URL:', urls[tried]);
                         tryConnect();
                     } else {
-                        // All attempts failed — schedule reconnect with backoff
-                        STATE.backoffMs = Math.min(STATE.backoffMs * 1.5, STATE.maxBackoffMs);
-                        console.warn('[openclaw-bridge] All WebSocket URL attempts failed. Reconnecting in', STATE.backoffMs, 'ms');
-                        STATE.reconnectTimer = setTimeout(connect, STATE.backoffMs);
+                        // All attempts failed — close event already scheduled a reconnect;
+                        // don't set a second timer or the backoff compounds and two connect()
+                        // calls race each other on the next attempt.
+                        startHttpPollingFallback();
                     }
                 }
 
@@ -1049,74 +1184,6 @@ function connect() {
 
         // start first attempt
         tryConnect();
-
-        // HTTP polling fallback implementation
-        let pollingInterval = null;
-        async function startHttpPollingFallback() {
-            if (pollingInterval) return;
-            console.info('[openclaw-bridge] Starting HTTP polling fallback for plugin messages');
-            let poll404Count = 0;
-            pollingInterval = setInterval(async () => {
-                try {
-                    // Use plugin API mount path under /api/plugins/openclaw-bridge
-                    const url = '/api/plugins/openclaw-bridge/http-message';
-                    const headers = buildPluginHeaders({ omitContentType: true }) || {};
-                    const resp = await fetch(url, { method: 'GET', credentials: 'same-origin', headers });
-
-                    if (resp.status === 204) return; // no message
-
-                    if (resp.status === 404) {
-                        // Plugin endpoint not found; increase polling interval to avoid log spam
-                        poll404Count += 1;
-                        if (poll404Count === 1) console.warn('[openclaw-bridge] HTTP polling returned 404; plugin route may be missing or not mounted at /api/plugins/openclaw-bridge');
-                        return;
-                    }
-
-                    if (!resp.ok) {
-                        console.warn('[openclaw-bridge] HTTP polling returned:', resp.status);
-                        return;
-                    }
-
-                    // Reset 404 counter on success
-                    poll404Count = 0;
-
-                    const msg = await resp.json();
-                    console.info('[openclaw-bridge] Polled HTTP message:', msg.type, msg.requestId);
-                    if (msg.type === 'generate') {
-                        // handle locally
-                        const payload = msg.payload || {};
-                        const responseText = await withCharacterLock(payload.character, () => generateForCharacter(payload.character, payload.message));
-                        // send back
-                        const postHeaders = Object.assign({ 'Content-Type': 'application/json' }, buildPluginHeaders());
-                        await fetch('/api/plugins/openclaw-bridge/http-response', {
-                            method: 'POST',
-                            credentials: 'same-origin',
-                            headers: postHeaders,
-                            body: JSON.stringify({ type: 'generate_response', requestId: msg.requestId, response: responseText }),
-                        });
-                    }
-                } catch (e) {
-                    console.warn('[openclaw-bridge] HTTP polling error:', e);
-                }
-            }, 2000);
-        }
-
-        // Stop polling when socket connects
-        function stopHttpPollingFallback() {
-            if (!pollingInterval) return;
-            clearInterval(pollingInterval);
-            pollingInterval = null;
-            console.info('[openclaw-bridge] Stopped HTTP polling fallback');
-        }
-
-        // When connected via WS, ensure any polling is stopped
-        const originalAttachOpen = attachHandlers;
-        // attachHandlers sets STATE.socket and startHealthCheck; intercept that by stopping polling when connected
-        const oldAttach = attachHandlers;
-        attachHandlers = (ws) => {
-            oldAttach(ws);
-            stopHttpPollingFallback();
-        };
 
     } catch (err) {
         console.error('[openclaw-bridge] ❌ Unexpected error in connect():', err);

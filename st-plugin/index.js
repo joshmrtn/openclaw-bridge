@@ -259,7 +259,8 @@ async function init(router) {
     // HTTP polling endpoints for extension fallback
     router.get('/http-message', (request, response) => {
         try {
-            const msg = sessionManager.popHttpOutboundMessage();
+            const clientType = request?.query?.clientType || 'ui';
+            const msg = sessionManager.popHttpOutboundMessage(clientType);
             if (!msg) {
                 // No message available — return 204 so client can poll later
                 return response.status(204).end();
@@ -360,7 +361,9 @@ async function init(router) {
             if (shouldWriteHistory) {
                 await chatHistory.appendExternalChatToHistory(character, { message, images, user_id }, generatedText);
 
-                // Notify connected extension clients that a chat file was updated so frontends can reload.
+                // Notify extension clients that the chat file was updated.
+                // WS broadcast reaches headless clients; HTTP queue reaches UI browsers that can't
+                // connect to the WS port directly (e.g. when ST runs on a remote server).
                 try {
                     sessionManager.broadcast({
                         type: 'chat_updated',
@@ -368,8 +371,9 @@ async function init(router) {
                         user_id: user_id || null,
                         timestamp: Date.now(),
                     });
+                    sessionManager.queueChatUpdated(character, user_id);
                 } catch (bcastErr) {
-                    console.warn('[openclaw-bridge-plugin] Failed to broadcast chat_updated:', bcastErr?.message || bcastErr);
+                    console.warn('[openclaw-bridge-plugin] Failed to notify chat_updated:', bcastErr?.message || bcastErr);
                 }
             }
 
