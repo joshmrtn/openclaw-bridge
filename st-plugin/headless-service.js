@@ -21,6 +21,7 @@ let STATE = {
     startupPromise: null,
     lastError: null,
     playwrightAvailable: false,
+    _reconnecting: false,
 };
 
 // Check if Playwright is available
@@ -33,6 +34,42 @@ function checkPlaywrightAvailable() {
         STATE.playwrightAvailable = false;
         return false;
     }
+}
+
+// R8.4: auto-reconnect after ST restarts. Called when the page crashes or closes
+// unexpectedly. Retries start() in a loop until ST comes back or stop() is called.
+async function _reconnect(options) {
+    if (STATE._reconnecting) return;
+    STATE._reconnecting = true;
+    STATE.isRunning = false;
+    STATE.startupPromise = null;
+    STATE.page = null;
+    STATE.context = null;
+    STATE.browser = null;
+
+    const RECONNECT_DELAY_MS = 10000;
+    const MAX_RECONNECT_ATTEMPTS = 20;
+
+    console.info('[openclaw-bridge-headless] Headless page lost — will retry reconnect every', RECONNECT_DELAY_MS / 1000, 's (max', MAX_RECONNECT_ATTEMPTS, 'attempts)');
+
+    for (let attempt = 1; attempt <= MAX_RECONNECT_ATTEMPTS; attempt++) {
+        if (!STATE._reconnecting) {
+            console.info('[openclaw-bridge-headless] Reconnect cancelled (stop called)');
+            return;
+        }
+        await new Promise(r => setTimeout(r, RECONNECT_DELAY_MS));
+        if (!STATE._reconnecting) return;
+        try {
+            console.info(`[openclaw-bridge-headless] Reconnect attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS}...`);
+            await start(options);
+            STATE._reconnecting = false;
+            return;
+        } catch (err) {
+            console.warn(`[openclaw-bridge-headless] Reconnect attempt ${attempt} failed: ${err.message}`);
+        }
+    }
+    STATE._reconnecting = false;
+    console.error('[openclaw-bridge-headless] Could not reconnect after', MAX_RECONNECT_ATTEMPTS, 'attempts — headless service is offline');
 }
 
 /**
@@ -146,6 +183,25 @@ async function start(options = {}) {
                 STATE.isRunning = true;
                 STATE.lastError = null;
                 console.info('[openclaw-bridge-headless] ✅ Headless service started successfully');
+
+                // R8.4: wire reconnect watchers so the service recovers if ST restarts
+                const onUnexpectedClose = () => {
+                    if (STATE.isRunning) {
+                        console.warn('[openclaw-bridge-headless] Page closed unexpectedly — scheduling reconnect');
+                        _reconnect(options).catch(() => {});
+                    }
+                };
+                STATE.page.on('crash', () => {
+                    console.warn('[openclaw-bridge-headless] Page crashed — scheduling reconnect');
+                    _reconnect(options).catch(() => {});
+                });
+                STATE.page.on('close', onUnexpectedClose);
+                STATE.browser.on('disconnected', () => {
+                    if (STATE.isRunning && !STATE._reconnecting) {
+                        console.warn('[openclaw-bridge-headless] Browser disconnected — scheduling reconnect');
+                        _reconnect(options).catch(() => {});
+                    }
+                });
             }
         } catch (err) {
             STATE.lastError = err;
@@ -168,10 +224,16 @@ async function start(options = {}) {
  * Stop headless browser and cleanup
  */
 async function stop() {
-    if (!STATE.isRunning && !STATE.browser) {
+    if (!STATE.isRunning && !STATE.browser && !STATE._reconnecting) {
         console.info('[openclaw-bridge-headless] Not running, skipping stop');
         return;
     }
+
+    // Cancel any in-progress reconnect and mark stopped BEFORE closing the page,
+    // so the page 'close' event handler does not trigger another reconnect.
+    STATE.isRunning = false;
+    STATE._reconnecting = false;
+    STATE.startupPromise = null;
 
     try {
         console.info('[openclaw-bridge-headless] Stopping headless browser...');
@@ -187,8 +249,6 @@ async function stop() {
             await STATE.browser.close().catch(e => console.warn('Failed to close browser:', e.message));
             STATE.browser = null;
         }
-        STATE.isRunning = false;
-        STATE.startupPromise = null;
         console.info('[openclaw-bridge-headless] ✅ Stopped');
     } catch (err) {
         console.error('[openclaw-bridge-headless] Error during stop:', err.message);
@@ -214,6 +274,7 @@ function getStatus() {
         available: STATE.playwrightAvailable,
         isRunning: STATE.isRunning,
         isConnected: isConnected(),
+        isReconnecting: STATE._reconnecting,
         lastError: STATE.lastError?.message || null,
         browser: STATE.browser ? 'active' : 'none',
         page: STATE.page ? 'active' : 'none',

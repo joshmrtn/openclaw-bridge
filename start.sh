@@ -3,9 +3,9 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "openclaw-bridge start: start SillyTavern (OpenClaw is managed separately)"
+echo "openclaw-bridge start: starting SillyTavern (OpenClaw is managed separately)"
 
-# Docker check (don't fail)
+# Docker check (non-fatal)
 if command -v docker >/dev/null 2>&1; then
 	if docker info >/dev/null 2>&1; then
 		echo "Docker available"
@@ -13,7 +13,31 @@ if command -v docker >/dev/null 2>&1; then
 		echo "Warning: Docker present but not responding."
 	fi
 else
-	echo "Note: docker not found; continue if you don't need Docker." 
+	echo "Note: docker not found; continue if you don't need Docker."
+fi
+
+# OC gateway preflight — the bridge is useless without OC running, so warn loudly
+OC_OK=0
+if command -v openclaw >/dev/null 2>&1; then
+	if openclaw health >/dev/null 2>&1; then
+		echo "OpenClaw gateway: OK"
+		OC_OK=1
+	fi
+fi
+if [ "${OC_OK}" -eq 0 ] && command -v curl >/dev/null 2>&1; then
+	if curl -sS --max-time 3 http://localhost:18789/health >/dev/null 2>&1; then
+		echo "OpenClaw gateway: OK (localhost:18789)"
+		OC_OK=1
+	fi
+fi
+if [ "${OC_OK}" -eq 0 ]; then
+	echo ""
+	echo "  ╔══════════════════════════════════════════════════════════════╗"
+	echo "  ║  WARNING: OpenClaw gateway is not reachable                 ║"
+	echo "  ║  The bridge will NOT receive any channel messages until OC  ║"
+	echo "  ║  is running.  Start it first:  openclaw gateway start       ║"
+	echo "  ╚══════════════════════════════════════════════════════════════╝"
+	echo ""
 fi
 
 # Start SillyTavern from bundled checkout if present

@@ -59,6 +59,26 @@ if [ -d "${script_dir}/st-plugin" ]; then
 	(cd "${script_dir}/st-plugin" && npm install --no-audit --no-fund)
 fi
 
+# Install ST browser extension (symlink for dev checkout, copy fallback for production)
+if [ -d "${script_dir}/st-extension" ]; then
+	# Dev checkout: SillyTavern is checked out in ./sillytavern
+	st_ext_dir="${script_dir}/sillytavern/public/scripts/extensions"
+	if [ -d "${st_ext_dir}" ]; then
+		ext_dst="${st_ext_dir}/openclaw-bridge"
+		if [ ! -e "${ext_dst}" ] && [ ! -L "${ext_dst}" ]; then
+			ln -s "${script_dir}/st-extension" "${ext_dst}"
+			echo "Linked ST extension (dev): ${ext_dst}"
+		else
+			echo "ST extension already present at ${ext_dst}"
+		fi
+	else
+		# No dev checkout — emit instruction for manual install
+		echo "Note: SillyTavern checkout not found at ${script_dir}/sillytavern"
+		echo "  Install the ST extension manually:"
+		echo "  cp -r ${script_dir}/st-extension /path/to/SillyTavern/public/scripts/extensions/openclaw-bridge"
+	fi
+fi
+
 # Ensure bridge auth token exists (generate if missing)
 token_dir="${script_dir}/data/openclaw-bridge"
 token_file="${token_dir}/bridge-token.txt"
