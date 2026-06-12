@@ -2,6 +2,21 @@
 
 Bridging the gap between SillyTavern and OpenClaw.
 
+## Prerequisites
+
+Before starting, ensure:
+
+- **SillyTavern** is installed and running (default: `http://localhost:8000`)
+- **OpenClaw gateway** is installed and running (`openclaw health` returns ok)
+- **Node.js 22+** is available (`node -v`)
+- **CSRF is disabled in SillyTavern** — the bridge plugin uses Bearer token auth, which requires CSRF protection to be off. Without this, every plugin request returns 403.
+
+  Open ST's `config.yaml` (in the SillyTavern root directory) and set:
+  ```yaml
+  disableCsrf: true
+  ```
+  Then restart SillyTavern. This is a one-time change.
+
 ## Full setup
 
 ### 1. Clone and bootstrap
