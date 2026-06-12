@@ -36,10 +36,10 @@ R5.4 Outbound actions triggered from a guest conversation must be blocked. Only 
 R5.5 The OC agent must confirm action completion back to the character's context in some form, so the character's memory reflects whether the action succeeded or failed.
 
 R6: Channel Output Formatting
-R6.1 Responses sent to external channels must be formatted appropriately for that channel. SillyTavern roleplay markup (asterisk action notation, e.g. *Frog claps his hands*) must be converted to natural prose or removed before being posted to Discord or Telegram.
-R6.2 The formatting transformation must preserve semantic content. Removing action descriptions wholesale is not acceptable — the information they contain must be either converted to natural prose or consciously discarded with a documented rationale.
-R6.3 Channel-specific formatting must be configurable per channel type. Discord and Telegram may have different formatting rules.
-R6.4 Markdown elements that render correctly on the target platform may be preserved. Markdown that does not render (e.g. tables in Discord) must be converted or removed.
+R6.1 Markup transformation must be toggleable per channel type. Some channels render markdown natively (Discord renders `*text*` as italics, which looks acceptable for action notation). Others do not (Telegram renders asterisks as literal characters, which is ugly). The default for each channel type should reflect how that channel actually renders markdown.
+R6.2 When transformation is enabled for a channel, SillyTavern roleplay markup (asterisk action notation, e.g. *Frog claps his hands*) must be converted to natural prose or cleanly removed — not left as raw asterisks.
+R6.3 The transformation must preserve semantic content. Removing action descriptions wholesale is not acceptable — the information they contain must be either converted to natural prose or consciously discarded with a documented rationale.
+R6.4 Markdown elements that render correctly on the target platform may be preserved. Markdown that does not render (e.g. tables in Discord) must be converted or removed when transformation is enabled.
 
 R7: Multi-Character Isolation
 R7.1 Characters must be fully isolated at every layer: OC agent workspace, ST chat history, trust configuration, channel bindings, and session state.
@@ -83,23 +83,64 @@ The chosen approach must be documented and implemented. R1.5 depends on this.
 R9.3 — OC agent must not be in the inbound message path
 Spike result (2026-06-09): internal `message:received` hooks are additive — the OC agent LLM runs regardless of what the hook pushes to `event.messages`. There is no OC config option to force exclusive tool use. Typed plugin hooks with cancel/claim semantics are required.
 
-The inbound message path must bypass the OC agent LLM entirely. The solution is an OC typed plugin hook using `inbound_claim`, which claims the message before agent routing so the agent never runs.
+The inbound message path must bypass the OC agent LLM entirely. The solution is an OC typed plugin hook using `before_dispatch`, which intercepts the message before agent routing and returns a synthetic reply, preventing the agent from running at all.
 
-Implementation: an OC plugin (`oc-plugin/`) registers `inbound_claim`. When a message arrives for an agent that has an active linked ST character (per `character-links.json`), the plugin:
-1. Claims the message — preventing agent routing and LLM invocation
+Implementation: an OC plugin (`oc-plugin/`) registers `before_dispatch`. When a message arrives for an agent that has an active linked ST character (per `character-links.json`), the plugin:
+1. Intercepts the message by returning `{ handled: true, text }` — preventing agent routing and LLM invocation
 2. Calls the ST plugin `/generate` endpoint and awaits the response
 3. Returns the ST-generated response as a synthetic reply delivered to the channel
-4. If ST is unavailable or generation fails, does not claim — the agent handles it with its character-bridge skill as a fallback
+4. If ST is unavailable or generation fails, returns `undefined` — the agent handles it with its character-bridge skill as a fallback
+
+Status: Implemented in `oc-plugin/src/index.ts`.
 
 The OC agent LLM is only involved for outbound character actions (R5.x), where it receives instructions from ST and uses the character-bridge skill to act on them. Minimum model requirements for that surface are a separate concern documented under R5.x implementation.
 
+
+R10: Autonomous Presence (Heartbeat)
+The character must be able to maintain a persistent presence — acting on its own initiative on a schedule, not only in response to inbound messages. OC's scheduler is the clock; ST's generation pipeline is the brain; the existing outbound action tools (R5.x) are the hands.
+
+R10.1 Each character link may be configured with a heartbeat schedule (e.g. "every 2 hours", "daily at 9am"). When the schedule fires, the OC plugin calls ST's /generate endpoint with an autonomous trigger — not a user message.
+R10.2 The trigger payload must carry a clear signal that this is a scheduled wake, not an inbound user message. The character must be able to distinguish a heartbeat session from a conversation in its prompt context.
+R10.3 Heartbeat sessions are autonomous: they may trigger outbound actions (R5.x) without an owner user_id present. Guest-message action blocking (R4.4, R5.4) must not apply to heartbeat sessions.
+R10.4 If the character returns an empty response during a heartbeat, nothing is posted to any channel and no history entry is written. A non-empty response follows normal outbound delivery and history rules.
+R10.5 The most recent N messages of the character's chat history must be injected into the heartbeat context so the character has a sense of recent events when it wakes. N is configurable; default is enough to cover roughly the last day of conversation.
+R10.6 Heartbeat activity must be logged to ST chat history as an autonomous action entry (satisfying R3.4), including what the character said and which actions it took.
+R10.7 A second heartbeat trigger — conversation idle detection — must fire when a conversation goes quiet after an active exchange (configurable threshold, default 2 hours of no messages). This lets the character summarize what just happened while the context is still fresh, rather than waiting for the next scheduled interval.
+
+Design note: Do not use OC's built-in agent heartbeat mechanism (heartbeat_prompt_contribution hook) — that still runs the OC agent LLM, which conflicts with R9.3. The OC plugin must schedule and execute the heartbeat call directly, bypassing the agent entirely.
+
+R11: Character Memory Management
+Characters must be able to create and maintain their own persistent memories. The goal is a character that accumulates knowledge over time — facts about users, decisions it has made, summaries of past conversations — without the owner having to manage any of it manually.
+
+Two tiers of lorebook memory are supported, plus a secondary file-based store:
+
+Core facts entry (always-active, Tier 1): A single designated lorebook entry per character that is always injected regardless of keywords. Contains the character's current model of its world — facts about users, key relationship details, standing decisions. Updated deliberately when new information is learned, not frequently. Because it changes slowly, it sits stably in the LLM's prompt cache prefix and has minimal cost impact.
+
+Event memories (keyword-triggered, Tier 2): Specific episodes and context — "the conversation about the bridge project", "when Josh was frustrated with the deploy". These only fire when their keywords appear in context, making them lower-cost than always-active entries.
+
+File memory (secondary): Files written to the OC workspace via the existing file_write action (R5.x). Useful for content too large or irregular for lorebook entries, or for a scratchpad that spans multiple characters.
+
+R11.1 A character must be able to write or update a lorebook memory entry during generation by calling a memory tool. The tool takes an entry_key to target a specific named entry. The entry persists immediately and is available for subsequent generations.
+R11.2 Memory writes must update existing entries in place, not append new ones. A write to an existing entry_key replaces its content. This prevents lorebook bloat and keeps the prompt prefix stable — a character that appends a new entry every session will degrade its own cache hit rate.
+R11.3 A character must not be able to modify lorebook entries not created by the memory tool (author-written entries). Auto-written entries are identified by a consistent namespace prefix (e.g. [auto-memory]) and a programmatic marker field in the lorebook entry metadata.
+R11.4 The Tier 1 always-active entry must be designated as such at creation time and must not require keyword matches to inject. One always-active entry per character is the intended design; additional always-active entries should be strongly discouraged to contain cost.
+R11.5 During a heartbeat or idle-detection session (R10), a character must be able to summarize recent chat history and write the summary as a memory entry, compressing old context into persistent knowledge rather than losing it to context pruning.
+R11.6 The memory write mechanism must work in both connected (extension live) and headless operation. In headless mode, the OC plugin calls a dedicated ST plugin endpoint to write the lorebook entry directly to the lorebook file.
+R11.7 File memory: the existing file_write and file_read (R5.x) actions satisfy the secondary store requirement. No additional mechanism is needed for files.
+
+Design note — lorebook write path: Writing a lorebook entry during generation is most naturally done from within the browser extension (direct access to SillyTavern.getContext() world_info APIs). The extension queues the write as a st_side action; unlike outbound channel actions, st_side actions are executed by the ST plugin before the response is returned to the OC plugin, so the entry is persisted synchronously as part of the same generation cycle.
+
+Design note — core facts entry format: The recommended format for the Tier 1 always-active entry is one subject per line, with facts as a short comma-separated list. This is terse enough for context efficiency, natural enough that the LLM writes and reads it reliably, and easy to update in place without a parser:
+
+  Josh: software engineer, working on openclaw-bridge, has a goose t-shirt, likes frogs and toads
+  Last active: 2026-06-11
+
+Structured triple formats (entity-relationship-entity) were considered and rejected: they require a collation pipeline to produce readable output and LLMs reliably drift from strict format constraints over time. The per-subject line format achieves comparable terseness without any parsing infrastructure. If the memory system grows to require cross-character aggregation or programmatic querying, revisiting a structured format would make sense at that point.
 
 Out of Scope for v1.0
 These are explicitly deferred:
 
 WhatsApp support (scaffold exists, not implemented)
 Matrix/Element support
-Obsidian workspace integration
 Character-to-character communication (multiple characters in one conversation)
 Web UI for OC configuration (terminal + ST UI is sufficient for v1)
-Automated nightly summarization (manual sync acceptable for v1)

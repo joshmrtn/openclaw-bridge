@@ -1,5 +1,6 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { request as httpRequest } from "node:http";
 import { resolve } from "node:path";
@@ -113,6 +114,93 @@ function postJson(
 }
 
 // ---------------------------------------------------------------------------
+// Outbound action execution
+// ---------------------------------------------------------------------------
+
+async function executeCharacterActions(
+    actions: any[],
+    character: string,
+    token: string,
+    api: any,
+    ctx: any,
+): Promise<void> {
+    for (const action of actions) {
+        let outcome = "ok";
+
+        try {
+            switch (action.type) {
+                case "discord_post": {
+                    const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
+                    if (!adapter?.sendText) {
+                        outcome = "no outbound adapter";
+                        break;
+                    }
+                    await adapter.sendText({
+                        cfg: api.config,
+                        to: String(action.channel_id ?? ""),
+                        text: String(action.content ?? ""),
+                        ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
+                    });
+                    outcome = "sent";
+                    break;
+                }
+                case "discord_dm": {
+                    const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
+                    if (!adapter?.sendText) {
+                        outcome = "no outbound adapter";
+                        break;
+                    }
+                    await adapter.sendText({
+                        cfg: api.config,
+                        to: String(action.user_id ?? ""),
+                        text: String(action.content ?? ""),
+                        ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
+                    });
+                    outcome = "sent";
+                    break;
+                }
+                case "telegram_post": {
+                    const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
+                    if (!adapter?.sendText) {
+                        outcome = "no outbound adapter";
+                        break;
+                    }
+                    await adapter.sendText({
+                        cfg: api.config,
+                        to: String(action.channel_id ?? ""),
+                        text: String(action.content ?? ""),
+                        ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
+                    });
+                    outcome = "sent";
+                    break;
+                }
+                case "file_write": {
+                    await writeFile(String(action.path), String(action.content ?? ""), "utf8");
+                    outcome = "written";
+                    break;
+                }
+                default:
+                    console.warn(`[openclaw-bridge] Unknown action type: ${action.type}`);
+                    outcome = "unknown_type";
+            }
+        } catch (err: any) {
+            console.error(`[openclaw-bridge] Action execution failed (${action.type}): ${err.message}`);
+            outcome = `error: ${err.message}`;
+        }
+
+        // R5.5: confirm action outcome back to ST chat history
+        try {
+            await postJson(`${ST_BASE}/api/plugins/openclaw-bridge/log-action`, token, {
+                character,
+                action_description: `${action.type} (${outcome})${action.content ? `: ${String(action.content).substring(0, 200)}` : ""}`,
+            });
+        } catch (logErr: any) {
+            console.warn(`[openclaw-bridge] Failed to log action outcome: ${logErr.message}`);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Plugin entry
 // ---------------------------------------------------------------------------
 
@@ -169,6 +257,14 @@ export default definePluginEntry({
                     console.log(
                         `[openclaw-bridge] ST responded (${result.body.response.length} chars) — delivering synthetic reply`
                     );
+
+                    // R5.1: execute any actions the character requested during generation
+                    const actions: any[] = Array.isArray(result.body.actions) ? result.body.actions : [];
+                    if (actions.length > 0) {
+                        console.log(`[openclaw-bridge] Executing ${actions.length} character action(s)`);
+                        await executeCharacterActions(actions, character, token, api, ctx);
+                    }
+
                     return {
                         handled: true,
                         text: result.body.response,

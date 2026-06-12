@@ -124,9 +124,70 @@ Dev token auto-loaded from `data/openclaw-bridge/bridge-token.txt` when env vars
 
 **LLM strategy:** Unit tests mock all LLM responses. Integration tests use Ollama locally (`ollama pull qwen2.5:3b`) or Gemini Flash (free tier). The WebSocket generation timeout is 900000ms (15 minutes) — do not reduce it; local Ollama models can take 5–10 minutes to respond.
 
+## Adding a new character action tool (R5)
+
+Character action tools let the ST brain instruct the OC body to take outbound actions during generation. Adding a new tool requires changes in two files:
+
+### 1. Register the tool in `st-extension/index.js`
+
+Inside `registerBridgeTools()`, add a new `context.registerFunctionTool(...)` call:
+
+```js
+context.registerFunctionTool({
+    name: 'openclaw_<action_name>',
+    displayName: 'Human-readable name',
+    description: 'What this tool does and when to use it.',
+    parameters: {
+        type: 'object',
+        properties: {
+            my_param: { type: 'string', description: 'What this param is' },
+            // ...
+        },
+        required: ['my_param'],
+    },
+    stealth: true,  // hide tool calls from ST UI
+    action: async (params) => {
+        queueCharacterAction('<action_name>', params);
+        return { queued: true };
+    },
+});
+```
+
+`queueCharacterAction` reads `ctx.characterId` from the ST context to scope the action to the correct character — no additional scoping needed.
+
+### 2. Implement execution in `oc-plugin/src/index.ts`
+
+Add a new `case` in the `switch` inside `executeCharacterActions`:
+
+```ts
+case "<action_name>": {
+    // Use api.config (OpenClawConfig) and api.runtime for OC SDK access.
+    // For channel sends: load the adapter for the current channel account.
+    const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
+    if (!adapter?.sendText) { outcome = "no outbound adapter"; break; }
+    await adapter.sendText({
+        cfg: api.config,
+        to: String(action.my_param ?? ""),
+        text: String(action.content ?? ""),
+        ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
+    });
+    outcome = "sent";
+    break;
+}
+```
+
+**OC SDK key points:**
+- `api.config` — the `OpenClawConfig` object; required by all `ChannelOutboundContext` calls
+- `api.runtime.channel.outbound.loadAdapter(channelId)` — returns a `ChannelOutboundAdapter | undefined`; always guard with `?.sendText` before calling
+- `ctx.channelId` — full OC channel account ID (e.g. `"discord-mybotname"`); routes to the same account that received the inbound message
+- `ctx.accountId` — optional multi-account discriminator; pass through so multi-account deployments route to the right bot
+- Action types are platform-specific: a Discord character uses `discord_*` tools; a Telegram character uses `telegram_*` tools; loading an adapter by `ctx.channelId` will give you the adapter for whichever platform the character is on
+
+No changes are needed to the plugin's `/generate` handler or trust enforcement — the `pendingActions` array is already forwarded to the OC plugin and stripped for guests automatically.
+
 ## Requirements
 
-`docs/planning-requirements.md` is the go/no-go document for v1.0. It defines R1–R9 across channel communication, character fidelity, memory, trust/security, outbound actions, output formatting, multi-character isolation, and installation. R9 lists open problems that must be resolved before v1.0 — notably R9.1 (non-active character generation without UI disruption) and R9.2 (headless operation). Review it before deciding an implementation approach is complete.
+`docs/planning-requirements.md` is the go/no-go document for v1.0. It defines R1–R9 across channel communication, character fidelity, memory, trust/security, outbound actions, output formatting, multi-character isolation, and installation. R9 lists open problems — R9.1, R9.2, and R9.3 are all resolved. R10 (autonomous heartbeat/persistent presence) and R11 (character memory management via lorebook) are v1.0 targets with requirements drafted but not yet implemented. Review it before deciding an implementation approach is complete.
 
 ## Workflow
 

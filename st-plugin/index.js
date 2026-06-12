@@ -337,23 +337,27 @@ async function init(router) {
         try {
             let generatedText;
             let shouldWriteHistory = true;
+            let pendingActions = [];
 
             // Try to label message with owner/guest if link exists
             try {
                 const links = linkState.getLink(character) || {};
                 const ownerIds = links?.owner_user_ids ?? [];
-                const isOwner = user_id && ownerIds.includes(user_id);
+                const isOwner = !!(user_id && ownerIds.includes(user_id));
                 const trustLabel = isOwner ? '[OWNER]' : '[GUEST]';
                 const labeledMessage = `${trustLabel}\n${message}`;
 
                 try {
-                    generatedText = await sessionManager.requestGenerate({
+                    const genResult = await sessionManager.requestGenerate({
                         character,
                         message: labeledMessage,
                         images,
                         channel,
                         user_id,
                     });
+                    generatedText = genResult.response;
+                    // R5.4: only pass actions through for owner-initiated requests
+                    pendingActions = isOwner ? (genResult.actions || []) : [];
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;
@@ -366,7 +370,9 @@ async function init(router) {
             } catch (innerErr) {
                 // No link state or error reading it; try without label
                 try {
-                    generatedText = await sessionManager.requestGenerate({ character, message, images, channel, user_id });
+                    const genResult = await sessionManager.requestGenerate({ character, message, images, channel, user_id });
+                    generatedText = genResult.response;
+                    // No link state means trust cannot be verified — discard actions (R5.4)
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;
@@ -380,6 +386,17 @@ async function init(router) {
 
             if (shouldWriteHistory) {
                 await chatHistory.appendExternalChatToHistory(character, { message, images, user_id }, generatedText);
+
+                // R5.3: log each character-initiated action as an autonomous history entry
+                for (const action of pendingActions) {
+                    try {
+                        const actionMsg = `[Character action queued]: ${action.type}${action.content ? ` — "${action.content}"` : ''}`;
+                        const entry = chatHistory.constructStMessage({ role: 'system', content: actionMsg });
+                        await chatHistory.appendMessage(character, entry);
+                    } catch (actionLogErr) {
+                        console.warn('[openclaw-bridge-plugin] Failed to log action to history:', actionLogErr?.message);
+                    }
+                }
 
                 // Notify extension clients that the chat file was updated.
                 // WS broadcast reaches headless clients; HTTP queue reaches UI browsers that can't
@@ -397,7 +414,7 @@ async function init(router) {
                 }
             }
 
-            const result = { character, response: generatedText };
+            const result = { character, response: generatedText, actions: pendingActions };
             response.json(result);
         } catch (err) {
             const status = err?.statusCode || (isWsUnavailableError(err) ? 503 : 500);

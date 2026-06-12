@@ -25,6 +25,7 @@ const STATE = {
     reconnectTimer: null,
     pending: new Map(),
     characterLocks: new Map(),
+    pendingActions: new Map(), // characterName → action[] during active generation
     notificationRoot: null,
     notificationList: null,
     notificationsCollapsed: false,
@@ -544,6 +545,107 @@ function withCharacterLock(characterName, task) {
     return next;
 }
 
+function queueCharacterAction(actionType, params) {
+    const ctx = getStContext();
+    const charIdx = typeof ctx.characterId === 'number' ? ctx.characterId : -1;
+    const characterName = charIdx >= 0 ? ctx.characters?.[charIdx]?.name : null;
+
+    if (!characterName) {
+        console.warn('[openclaw-bridge] Tool called but no active character in context');
+        return JSON.stringify({ success: false, error: 'No active character' });
+    }
+
+    const pending = STATE.pendingActions.get(characterName);
+    if (!pending) {
+        console.warn('[openclaw-bridge] Tool called outside of an active generation for:', characterName);
+        return JSON.stringify({ success: false, error: 'No active generation context' });
+    }
+
+    pending.push({ type: actionType, ...params });
+    console.info('[openclaw-bridge] Queued character action:', actionType, 'for', characterName);
+    return JSON.stringify({ success: true, message: `Action queued: ${actionType}` });
+}
+
+function registerBridgeTools() {
+    const context = getStContext();
+    if (typeof context?.registerFunctionTool !== 'function') {
+        console.warn('[openclaw-bridge] registerFunctionTool not available in ST context — skipping tool registration');
+        return;
+    }
+
+    const toolDefs = [
+        {
+            name: 'openclaw_discord_post',
+            displayName: 'Post to Discord',
+            description: 'Post a message to a Discord channel on behalf of this character.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    content: { type: 'string', description: 'Message content to post.' },
+                    channel_id: { type: 'string', description: 'Target Discord channel ID. Defaults to the conversation channel if omitted.' },
+                },
+                required: ['content'],
+            },
+            actionType: 'discord_post',
+        },
+        {
+            name: 'openclaw_discord_dm',
+            displayName: 'Send Discord DM',
+            description: 'Send a direct message to a Discord user on behalf of this character.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    user_id: { type: 'string', description: 'Discord user ID to DM.' },
+                    content: { type: 'string', description: 'Message content to send.' },
+                },
+                required: ['user_id', 'content'],
+            },
+            actionType: 'discord_dm',
+        },
+        {
+            name: 'openclaw_telegram_post',
+            displayName: 'Post to Telegram',
+            description: 'Post a message to a Telegram chat on behalf of this character.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    content: { type: 'string', description: 'Message content to post.' },
+                    chat_id: { type: 'string', description: 'Telegram chat ID. Defaults to the conversation chat if omitted.' },
+                },
+                required: ['content'],
+            },
+            actionType: 'telegram_post',
+        },
+        {
+            name: 'openclaw_file_write',
+            displayName: 'Write File',
+            description: "Write content to a file in the character's OC workspace.",
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Relative file path within the workspace.' },
+                    content: { type: 'string', description: 'File content to write.' },
+                },
+                required: ['path', 'content'],
+            },
+            actionType: 'file_write',
+        },
+    ];
+
+    for (const { name, displayName, description, parameters, actionType } of toolDefs) {
+        context.registerFunctionTool({
+            name,
+            displayName,
+            description,
+            parameters,
+            stealth: true,
+            action: async (params) => queueCharacterAction(actionType, params),
+        });
+    }
+
+    console.info('[openclaw-bridge] Registered bridge function tools:', toolDefs.map(t => t.name));
+}
+
 async function generateForCharacter(characterName, message) {
     const context = getStContext();
     let { generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = context;
@@ -825,10 +927,13 @@ async function handleGenerateRequest(payload) {
     const { requestId, character, message } = payload;
     console.info('[openclaw-bridge] handleGenerateRequest received:', { requestId, character, messagePreview: message?.substring(0, 50) });
 
+    STATE.pendingActions.set(character, []);
+
     try {
         console.info('[openclaw-bridge] Starting generation with character lock');
         const response = await withCharacterLock(character, () => generateForCharacter(character, message));
-        console.info('[openclaw-bridge] Generation completed:', { requestId, responseLength: response?.length, responsePreview: response?.substring(0, 100) });
+        const actions = STATE.pendingActions.get(character) || [];
+        console.info('[openclaw-bridge] Generation completed:', { requestId, responseLength: response?.length, actionsCount: actions.length, responsePreview: response?.substring(0, 100) });
         if (!response) {
             sendSocketMessage({ type: 'generate_error', requestId, error: 'Generation returned empty response — check LLM model/connection' });
             return;
@@ -837,6 +942,7 @@ async function handleGenerateRequest(payload) {
             type: 'generate_response',
             requestId,
             response,
+            actions,
         });
     } catch (error) {
         console.error('[openclaw-bridge] Generation failed:', { requestId, error: error?.message || String(error), stack: error?.stack });
@@ -845,6 +951,8 @@ async function handleGenerateRequest(payload) {
             requestId,
             error: error?.message || String(error),
         });
+    } finally {
+        STATE.pendingActions.delete(character);
     }
 }
 
@@ -888,13 +996,21 @@ function startHttpPollingFallback() {
             console.info('[openclaw-bridge] Polled HTTP message:', msg.type, msg.requestId);
             if (msg.type === 'generate') {
                 const payload = msg.payload || {};
-                const responseText = await withCharacterLock(payload.character, () => generateForCharacter(payload.character, payload.message));
+                STATE.pendingActions.set(payload.character, []);
+                let responseText;
+                let actions = [];
+                try {
+                    responseText = await withCharacterLock(payload.character, () => generateForCharacter(payload.character, payload.message));
+                    actions = STATE.pendingActions.get(payload.character) || [];
+                } finally {
+                    STATE.pendingActions.delete(payload.character);
+                }
                 const postHeaders = Object.assign({ 'Content-Type': 'application/json' }, buildPluginHeaders());
                 await fetch('/api/plugins/openclaw-bridge/http-response', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: postHeaders,
-                    body: JSON.stringify({ type: 'generate_response', requestId: msg.requestId, response: responseText }),
+                    body: JSON.stringify({ type: 'generate_response', requestId: msg.requestId, response: responseText, actions }),
                 });
             } else if (msg.type === 'chat_updated') {
                 if (!STATE.connected) {
@@ -1344,6 +1460,8 @@ function init() {
                     console.log('[openclaw-bridge] Step 2: UI client — connecting via SSE');
                     connectSse();
                 }
+                ensureSillyTavernApis();
+                registerBridgeTools();
                 console.log('[openclaw-bridge] Step 3: connection attempt started');
             } catch (e) {
                 console.error('[openclaw-bridge] ❌ ERROR in delayed init():', e);

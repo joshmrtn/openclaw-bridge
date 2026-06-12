@@ -17,7 +17,7 @@ describe('ws integration (mocked)', () => {
 
         // mock session-manager with a resolvable requestGenerate
         const mockSessionManager = {
-            requestGenerate: jest.fn().mockResolvedValue('[EXTENSION MOCK RESPONSE]'),
+            requestGenerate: jest.fn().mockResolvedValue({ response: '[EXTENSION MOCK RESPONSE]', actions: [] }),
             registerClient: jest.fn(),
             unregisterClient: jest.fn(),
             getConnectedClientCount: jest.fn(() => 1),

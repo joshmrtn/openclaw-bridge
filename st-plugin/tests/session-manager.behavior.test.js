@@ -48,7 +48,30 @@ describe('session-manager behavior', () => {
         const msg = JSON.stringify({ type: 'generate_response', requestId, response: 'OK-RESP' });
         sessionManager.handleMessage(Buffer.from(msg));
 
-        await expect(promise).resolves.toBe('OK-RESP');
+        await expect(promise).resolves.toEqual({ response: 'OK-RESP', actions: [] });
+
+        sessionManager.unregisterClient(fakeClient);
+    });
+
+    test('handleMessage resolves with actions when extension sends them', async () => {
+        const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
+        sessionManager.registerClient(fakeClient, { isHeadless: true });
+
+        const promise = sessionManager.requestGenerate({ character: 'Actor' }, 1000);
+        const requestId = JSON.parse(fakeClient.send.mock.calls[0][0]).requestId;
+
+        const msg = JSON.stringify({
+            type: 'generate_response',
+            requestId,
+            response: 'posting now',
+            actions: [{ type: 'discord_post', content: 'Hello!' }],
+        });
+        sessionManager.handleMessage(Buffer.from(msg));
+
+        await expect(promise).resolves.toEqual({
+            response: 'posting now',
+            actions: [{ type: 'discord_post', content: 'Hello!' }],
+        });
 
         sessionManager.unregisterClient(fakeClient);
     });
@@ -164,7 +187,7 @@ describe('session-manager behavior', () => {
             response: 'still-works',
         })));
 
-        await expect(promise).resolves.toBe('still-works');
+        await expect(promise).resolves.toEqual({ response: 'still-works', actions: [] });
 
         sessionManager.unregisterClient(fakeClient);
     });

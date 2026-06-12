@@ -375,7 +375,7 @@ describe('plugin routes', () => {
 
     test('POST /generate prefixes owner messages with [OWNER]', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
-        const requestGenerate = jest.fn().mockResolvedValue('[RESP]');
+        const requestGenerate = jest.fn().mockResolvedValue({ response: '[RESP]', actions: [] });
         const appendExternalChatToHistory = jest.fn().mockResolvedValue();
         jest.doMock('../ws-server', () => mockWsServer);
         jest.doMock('../session-manager', () => ({
@@ -416,7 +416,7 @@ describe('plugin routes', () => {
 
     test('POST /generate broadcasts chat_updated after history write', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
-        const requestGenerate = jest.fn().mockResolvedValue('Hello back');
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Hello back', actions: [] });
         const appendExternalChatToHistory = jest.fn().mockResolvedValue();
         const broadcast = jest.fn();
         const queueChatUpdated = jest.fn();
@@ -462,7 +462,7 @@ describe('plugin routes', () => {
 
     test('POST /generate prefixes non-owner messages with [GUEST]', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
-        const requestGenerate = jest.fn().mockResolvedValue('[RESP]');
+        const requestGenerate = jest.fn().mockResolvedValue({ response: '[RESP]', actions: [] });
         const appendExternalChatToHistory = jest.fn().mockResolvedValue();
         jest.doMock('../ws-server', () => mockWsServer);
         jest.doMock('../session-manager', () => ({
@@ -834,6 +834,90 @@ describe('plugin routes', () => {
 
         expect(res.statusCode).toBe(500);
         expect(res.body.error).toBe('page reload timed out');
+    });
+
+    test('POST /generate passes actions to caller when request is from owner', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const actions = [{ type: 'discord_post', content: 'Hello from Frog!' }];
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Ribbit!', actions });
+        const appendMessage = jest.fn().mockResolvedValue();
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { character: 'Frog', message: 'Do something!', user_id: 'discord:owner1' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.body.response).toBe('Ribbit!');
+        expect(res.body.actions).toEqual(actions);
+        expect(appendMessage).toHaveBeenCalledWith('Frog', expect.objectContaining({
+            mes: expect.stringContaining('discord_post'),
+        }));
+    });
+
+    test('POST /generate strips actions when request is from guest (R5.4)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const actions = [{ type: 'discord_post', content: 'Injected action' }];
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Hello!', actions });
+        const appendMessage = jest.fn().mockResolvedValue();
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { character: 'Frog', message: 'Do something!', user_id: 'discord:guest99' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.body.response).toBe('Hello!');
+        expect(res.body.actions).toEqual([]);
+        expect(appendMessage).not.toHaveBeenCalled();
     });
 
     test('POST /generate returns 400 when character is missing', async () => {

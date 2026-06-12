@@ -285,7 +285,7 @@ function handleMessage(rawMessage) {
         return;
     }
 
-    pending.resolve(response);
+    pending.resolve({ response, actions: message.actions || [] });
 }
 
 // HTTP polling helpers for extensions that cannot open a persistent WS.
@@ -318,7 +318,7 @@ function handleHttpResponse(message) {
         return true;
     }
 
-    pending.resolve(response);
+    pending.resolve({ response, actions: message.actions || [] });
     return true;
 }
 
