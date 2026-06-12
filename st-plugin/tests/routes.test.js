@@ -410,7 +410,14 @@ describe('plugin routes', () => {
         expect(requestGenerate).toHaveBeenCalledWith(expect.objectContaining({
             message: '[OWNER]\nHello',
         }), undefined);
-        expect(appendExternalChatToHistory).toHaveBeenCalledWith('Gerard', { message: 'Hello', images: [], user_id: 'discord:1', user_name: null, user_avatar: null, channel: null }, '[RESP]');
+        expect(appendExternalChatToHistory).toHaveBeenCalledWith(
+            'Gerard',
+            { message: 'Hello', images: [], user_id: 'discord:1', user_name: null, user_avatar: null, channel: null },
+            '[RESP]',
+            expect.any(String),  // DEFAULT_CHATS_DIR
+            null,                // targetFile
+            expect.any(String)   // exchangeId (UUID)
+        );
         expect(res.body.response).toBe('[RESP]');
     });
 

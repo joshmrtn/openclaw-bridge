@@ -46,6 +46,26 @@ async function readLatestChat(characterName, baseDir = DEFAULT_CHATS_DIR) {
     });
 }
 
+// Reads the last ~4 KB of filePath and returns true if any JSONL line has the
+// given exchange_id. Used to skip duplicate writes on retry.
+async function _hasExchangeId(filePath, exchangeId) {
+    try {
+        const stat = await fs.promises.stat(filePath).catch(() => null);
+        if (!stat || stat.size === 0) return false;
+        const bytesToRead = Math.min(stat.size, 4096);
+        const buf = Buffer.alloc(bytesToRead);
+        const fh = await fs.promises.open(filePath, 'r');
+        await fh.read(buf, 0, bytesToRead, stat.size - bytesToRead);
+        await fh.close();
+        for (const line of buf.toString('utf8').split('\n').filter(Boolean)) {
+            try {
+                if (JSON.parse(line).exchange_id === exchangeId) return true;
+            } catch (_) {}
+        }
+    } catch (_) {}
+    return false;
+}
+
 async function appendMessage(characterName, messageObj, baseDir = DEFAULT_CHATS_DIR, targetFile = null) {
     const dir = _charDirFor(baseDir, characterName);
     await fs.promises.mkdir(dir, { recursive: true });
@@ -85,7 +105,7 @@ async function appendMessage(characterName, messageObj, baseDir = DEFAULT_CHATS_
     });
 }
 
-function constructStMessage({ role = 'user', content = '', name = null, user_id = null, time = null, force_avatar = null }) {
+function constructStMessage({ role = 'user', content = '', name = null, user_id = null, time = null, force_avatar = null, exchange_id = null }) {
     const sendDate = new Date(time || Date.now()).toISOString();
     const baseMessage = {
         name,
@@ -93,6 +113,7 @@ function constructStMessage({ role = 'user', content = '', name = null, user_id 
         is_system: false,
         send_date: sendDate,
         mes: content,
+        ...(exchange_id ? { exchange_id } : {}),
     };
 
     if (role === 'user') {
@@ -139,7 +160,7 @@ function buildExternalChatContent(message, images = []) {
     ];
 }
 
-async function appendExternalChatToHistory(characterName, userMessage, response, baseDir = DEFAULT_CHATS_DIR, targetFile = null) {
+async function appendExternalChatToHistory(characterName, userMessage, response, baseDir = DEFAULT_CHATS_DIR, targetFile = null, exchangeId = null) {
     const dir = _charDirFor(baseDir, characterName);
     await fs.promises.mkdir(dir, { recursive: true });
 
@@ -168,13 +189,40 @@ async function appendExternalChatToHistory(characterName, userMessage, response,
     }
 
     const userContent = buildExternalChatContent(userMessage.message || '', userMessage.images || []);
-    const userEntry = constructStMessage({ role: 'user', content: userContent, name: displayName, user_id: userMessage.user_id || null, force_avatar: user_avatar || null });
-    const assistantEntry = constructStMessage({ role: 'assistant', content: response, name: characterName });
+    const userEntry = constructStMessage({ role: 'user', content: userContent, name: displayName, user_id: userMessage.user_id || null, force_avatar: user_avatar || null, exchange_id: exchangeId });
+    const assistantEntry = constructStMessage({ role: 'assistant', content: response, name: characterName, exchange_id: exchangeId });
 
-    // Append both entries. appendMessage handles the case where the file doesn't
-    // end with \n (written by ST's own save path which uses join('\n')).
-    await appendMessage(characterName, userEntry, baseDir, resolvedFile);
-    await appendMessage(characterName, assistantEntry, baseDir, resolvedFile);
+    const filePath = path.join(dir, resolvedFile);
+    const key = path.resolve(filePath);
+
+    return _enqueue(key, async () => {
+        // R3.3: idempotency — skip the write if this exchange_id is already in the file
+        // (handles retries after a crash mid-write or a duplicate delivery from OC).
+        if (exchangeId && await _hasExchangeId(filePath, exchangeId)) {
+            return;
+        }
+
+        // R3.2: write both entries in a single appendFile call to minimise the crash
+        // window. For typical message sizes (<4 KB combined) this is effectively
+        // atomic at the OS page-cache level.
+        let prefix = '';
+        try {
+            const stat = await fs.promises.stat(filePath).catch(() => null);
+            if (stat && stat.size > 0) {
+                const buf = Buffer.alloc(1);
+                const fh = await fs.promises.open(filePath, 'r');
+                await fh.read(buf, 0, 1, stat.size - 1);
+                await fh.close();
+                if (buf[0] !== 0x0a) prefix = '\n'; // file does not end with \n
+            }
+        } catch (_) {}
+
+        await fs.promises.appendFile(
+            filePath,
+            prefix + JSON.stringify(userEntry) + '\n' + JSON.stringify(assistantEntry) + '\n',
+            'utf8'
+        );
+    });
 }
 
 module.exports = {

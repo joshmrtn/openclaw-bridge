@@ -171,4 +171,84 @@ describe('chat-history', () => {
         expect(msgs[1].is_user).toBe(true);
         expect(msgs[2].is_user).toBe(false);
     });
+
+    test('appendExternalChatToHistory stores exchange_id in both written entries', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Hey', images: [], user_id: 'discord:123' },
+            'Hello back',
+            tmpDir,
+            null,
+            'test-exchange-abc'
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        expect(msgs[2].exchange_id).toBe('test-exchange-abc');
+        expect(msgs[3].exchange_id).toBe('test-exchange-abc');
+    });
+
+    test('appendExternalChatToHistory skips duplicate write when exchange_id already written (R3.3)', async () => {
+        const exchangeId = 'dedup-xyz';
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Once', images: [], user_id: 'discord:1' },
+            'Response once',
+            tmpDir,
+            null,
+            exchangeId
+        );
+        // Retry with the same exchange_id — should be a no-op
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Once', images: [], user_id: 'discord:1' },
+            'Response once',
+            tmpDir,
+            null,
+            exchangeId
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        // 2 original + 1 user + 1 assistant = 4; NOT 6
+        expect(msgs.length).toBe(4);
+    });
+
+    test('appendExternalChatToHistory skips write when exchange_id found in partial state (R3.2 recovery)', async () => {
+        const exchangeId = 'partial-scenario';
+        // Simulate: user entry was written (e.g. crash happened after user write, before assistant write)
+        const partialUser = chatHistory.constructStMessage({
+            role: 'user', content: 'Partial', name: 'ExternalChat', exchange_id: exchangeId,
+        });
+        await chatHistory.appendMessage('Gerard', partialUser, tmpDir);
+
+        // Retry — the exchange_id is already in the file, so the whole write is skipped
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Partial', images: [], user_id: null },
+            'Should not appear',
+            tmpDir,
+            null,
+            exchangeId
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        // 2 original + 1 partial user only — assistant entry was NOT added again
+        expect(msgs.length).toBe(3);
+        expect(msgs[2].mes).toBe('Partial');
+        expect(msgs[2].is_user).toBe(true);
+    });
+
+    test('appendExternalChatToHistory without exchangeId writes normally on every call', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'No dedup', images: [], user_id: 'discord:1' },
+            'Response',
+            tmpDir,
+        );
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'No dedup', images: [], user_id: 'discord:1' },
+            'Response',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        // No exchange_id means no dedup — both writes go through: 2 + 2 + 2 = 6
+        expect(msgs.length).toBe(6);
+    });
 });
