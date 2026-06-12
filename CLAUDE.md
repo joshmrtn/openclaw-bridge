@@ -21,6 +21,9 @@ npm test -- --testPathPattern=session-manager
 # Run unit tests for plugin only
 npm test -- st-plugin
 
+# Run unit tests without Playwright startup noise (much faster)
+OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
+
 # Run E2E tests (Playwright — requires ST running)
 npm run test:e2e
 
