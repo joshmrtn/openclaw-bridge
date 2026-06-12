@@ -164,6 +164,25 @@ async function init(router) {
         });
     });
 
+    router.get('/events', (request, response) => {
+        response.setHeader('Content-Type', 'text/event-stream');
+        response.setHeader('Cache-Control', 'no-cache, no-transform');
+        response.setHeader('Connection', 'keep-alive');
+        response.setHeader('X-Accel-Buffering', 'no'); // disable nginx proxy buffering
+        response.flushHeaders();
+
+        sessionManager.registerSseClient(response);
+
+        const heartbeat = setInterval(() => {
+            try { response.write(': heartbeat\n\n'); } catch (e) { clearInterval(heartbeat); }
+        }, 30000);
+
+        request.on('close', () => {
+            clearInterval(heartbeat);
+            sessionManager.unregisterSseClient(response);
+        });
+    });
+
     router.get('/characters', async (request, response) => {
         try {
             const chars = await charLoader.listCharacters();

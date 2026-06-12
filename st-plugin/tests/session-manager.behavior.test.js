@@ -101,6 +101,52 @@ describe('session-manager behavior', () => {
         expect(uiMsg).toMatchObject({ type: 'chat_updated', character: 'Frog' });
     });
 
+    test('registerSseClient and unregisterSseClient track SSE clients', () => {
+        const fakeRes = { write: jest.fn() };
+        expect(sessionManager.getSseClientCount()).toBe(0);
+        sessionManager.registerSseClient(fakeRes);
+        expect(sessionManager.getSseClientCount()).toBe(1);
+        sessionManager.unregisterSseClient(fakeRes);
+        expect(sessionManager.getSseClientCount()).toBe(0);
+    });
+
+    test('broadcastSse writes SSE-formatted data to all registered clients', () => {
+        const res1 = { write: jest.fn() };
+        const res2 = { write: jest.fn() };
+        sessionManager.registerSseClient(res1);
+        sessionManager.registerSseClient(res2);
+
+        sessionManager.broadcastSse({ type: 'chat_updated', character: 'Frog' });
+
+        expect(res1.write).toHaveBeenCalledTimes(1);
+        const written = res1.write.mock.calls[0][0];
+        expect(written).toMatch(/^data: /);
+        expect(written).toMatch(/\n\n$/);
+        const payload = JSON.parse(written.replace(/^data: /, '').trimEnd());
+        expect(payload).toMatchObject({ type: 'chat_updated', character: 'Frog' });
+
+        expect(res2.write).toHaveBeenCalledTimes(1);
+    });
+
+    test('broadcast delivers to both WS and SSE clients', () => {
+        const wsClient = { readyState: WS_OPEN, send: jest.fn() };
+        const sseClient = { write: jest.fn() };
+        sessionManager.registerClient(wsClient, { isHeadless: true });
+        sessionManager.registerSseClient(sseClient);
+
+        const delivered = sessionManager.broadcast({ type: 'notification', text: 'hi' });
+
+        expect(wsClient.send).toHaveBeenCalled();
+        expect(sseClient.write).toHaveBeenCalled();
+        expect(delivered).toBe(2);
+    });
+
+    test('reset clears SSE clients', () => {
+        sessionManager.registerSseClient({ write: jest.fn() });
+        sessionManager.reset();
+        expect(sessionManager.getSseClientCount()).toBe(0);
+    });
+
     test('handleMessage ignores malformed or unrelated messages', async () => {
         const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
         sessionManager.registerClient(fakeClient, { isHeadless: true });

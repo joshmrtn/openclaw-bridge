@@ -26,6 +26,9 @@ const pendingRequests = new Map();
 // HTTP fallback queue for extensions that cannot maintain WS
 const httpOutboundQueue = []; // items: { type, requestId, payload }
 
+// SSE clients for push events over ST's HTTP port (no second port needed)
+const sseClients = new Set();
+
 // Track which client type was last used for generation (for logging)
 let lastPickedClientType = null;
 
@@ -136,14 +139,44 @@ function sendJson(client, payload) {
     client.send(JSON.stringify(payload));
 }
 
+function registerSseClient(res) {
+    sseClients.add(res);
+    console.info('[openclaw-bridge] SSE client registered, total:', sseClients.size);
+}
+
+function unregisterSseClient(res) {
+    sseClients.delete(res);
+    console.info('[openclaw-bridge] SSE client unregistered, total:', sseClients.size);
+}
+
+function getSseClientCount() {
+    return sseClients.size;
+}
+
+function broadcastSse(payload) {
+    if (sseClients.size === 0) return 0;
+    const data = `data: ${JSON.stringify(payload)}\n\n`;
+    let delivered = 0;
+    for (const res of sseClients) {
+        try {
+            res.write(data);
+            delivered++;
+        } catch (e) {
+            sseClients.delete(res);
+        }
+    }
+    return delivered;
+}
+
 function broadcast(payload) {
     let delivered = 0;
-    for (const [socket, meta] of clients.entries()) {
+    for (const [socket] of clients.entries()) {
         if (socket.readyState === WS.OPEN) {
             sendJson(socket, payload);
             delivered += 1;
         }
     }
+    delivered += broadcastSse(payload);
     return delivered;
 }
 
@@ -296,6 +329,7 @@ function reset() {
     }
     pendingRequests.clear();
     clients.clear();
+    sseClients.clear();
     httpOutboundQueue.length = 0;
 }
 
@@ -304,6 +338,7 @@ function getClientStatus() {
         headless: getHeadlessClientCount(),
         ui: getUiClientCount(),
         total: getConnectedClientCount(),
+        sse: getSseClientCount(),
         lastPickedType: lastPickedClientType,
     };
 }
@@ -316,10 +351,15 @@ module.exports = {
     getUiClientCount,
     getClientStatus,
     broadcast,
+    broadcastSse,
     queueChatUpdated,
     requestGenerate,
     handleMessage,
     reset,
+    // SSE helpers
+    registerSseClient,
+    unregisterSseClient,
+    getSseClientCount,
     // HTTP poll helpers
     popHttpOutboundMessage,
     handleHttpResponse,

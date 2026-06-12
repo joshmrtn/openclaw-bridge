@@ -39,8 +39,10 @@ const STATE = {
     pongReceived: true,        // track if we got a pong back
     pollingInterval: null,     // single shared HTTP polling fallback timer
     newMessageBadge: null,     // "new message" badge element for deferred reload
-    connectionId: 0,           // incremented each connect(); stale sockets self-close
-    lastChatUpdatedTs: 0,      // deduplicate chat_updated when multiple WS sockets are active
+    connectionId: 0,           // incremented each connect()/connectSse(); stale connections self-close
+    lastChatUpdatedTs: 0,      // deduplicate chat_updated when multiple connections are active
+    sseAbortController: null,  // AbortController for the active SSE fetch
+    sseReconnectTimer: null,   // reconnect backoff timer for SSE
 };
 
 function getStContext() {
@@ -999,6 +1001,97 @@ function hideNewMessageBadge() {
     }
 }
 
+async function handleSseMessage(payload) {
+    if (payload.type === 'chat_updated') {
+        console.info('[openclaw-bridge] chat_updated received via SSE:', { character: payload.character });
+        await handleChatUpdatedMessage(payload);
+    } else if (payload.type === 'notification') {
+        addNotification(payload);
+    }
+}
+
+// SSE-based connection for UI browsers: push events arrive over ST's existing HTTP port,
+// so no second port needs to be forwarded in SSH/remote deployments.
+// Generation fallback (when headless is unavailable) still uses HTTP polling.
+function connectSse() {
+    if (STATE.sseAbortController) {
+        try { STATE.sseAbortController.abort(); } catch (e) {}
+        STATE.sseAbortController = null;
+    }
+
+    const myConnectionId = ++STATE.connectionId;
+
+    async function attempt() {
+        if (STATE.connectionId !== myConnectionId) return;
+
+        const controller = new AbortController();
+        STATE.sseAbortController = controller;
+
+        try {
+            const headers = Object.assign(
+                { Accept: 'text/event-stream' },
+                buildPluginHeaders({ omitContentType: true }) || {}
+            );
+
+            const response = await fetch('/api/plugins/openclaw-bridge/events', {
+                credentials: 'same-origin',
+                headers,
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                throw new Error(`SSE endpoint responded ${response.status}`);
+            }
+
+            STATE.connected = true;
+            STATE.backoffMs = 1000;
+            // HTTP polling runs alongside SSE: handles generate work when headless is unavailable.
+            // chat_updated events polled over HTTP are silently dropped while SSE is connected.
+            startHttpPollingFallback();
+            console.info('[openclaw-bridge] SSE connected');
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const blocks = buffer.split('\n\n');
+                buffer = blocks.pop(); // hold incomplete block for next chunk
+
+                for (const block of blocks) {
+                    if (!block.trim() || block.startsWith(':')) continue; // skip heartbeat comments
+                    const dataLine = block.split('\n').find(l => l.startsWith('data: '));
+                    if (!dataLine) continue;
+                    try {
+                        const payload = JSON.parse(dataLine.slice(6));
+                        await handleSseMessage(payload);
+                    } catch (e) {
+                        console.warn('[openclaw-bridge] SSE parse error:', e);
+                    }
+                }
+            }
+
+            throw new Error('SSE stream ended');
+        } catch (e) {
+            if (e.name === 'AbortError') return;
+            if (STATE.connectionId !== myConnectionId) return;
+
+            STATE.connected = false;
+            STATE.sseAbortController = null;
+            STATE.backoffMs = Math.min(STATE.backoffMs * 1.5, STATE.maxBackoffMs);
+            console.info(`[openclaw-bridge] SSE disconnected (${e.message}), reconnecting in ${STATE.backoffMs}ms`);
+            startHttpPollingFallback(); // chat_updated falls back to HTTP poll while SSE is down
+            STATE.sseReconnectTimer = setTimeout(attempt, STATE.backoffMs);
+        }
+    }
+
+    attempt();
+}
+
 function connect() {
     console.log('[openclaw-bridge] connect() called, current STATE:', { connected: STATE.connected, hasSocket: !!STATE.socket });
 
@@ -1226,14 +1319,24 @@ function init() {
     console.log('[openclaw-bridge] ===== INIT CALLED =====');
 
     try {
-        console.log('[openclaw-bridge] Step 1: Adding small delay before connecting (ST may still be initializing)');
+        const clientType = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE || 'ui';
+        console.log('[openclaw-bridge] Step 1: Adding small delay before connecting (ST may still be initializing)', { clientType });
 
-        // Give ST a moment to fully initialize before we try to connect
         setTimeout(() => {
             try {
-                console.log('[openclaw-bridge] Step 2: Now attempting WebSocket connection');
-                connect();
-                console.log('[openclaw-bridge] Step 3: connect() returned');
+                if (clientType === 'headless') {
+                    // Headless Playwright browsers run on the same machine as ST, so the dedicated
+                    // WS port (8765) is always reachable without any port forwarding.
+                    console.log('[openclaw-bridge] Step 2: Headless client — attempting WebSocket connection');
+                    connect();
+                } else {
+                    // UI browsers may be on a different machine (SSH, VPN) where only ST's main
+                    // HTTP port is forwarded. Use SSE over that port for push events; HTTP polling
+                    // handles generation work when headless is unavailable.
+                    console.log('[openclaw-bridge] Step 2: UI client — connecting via SSE');
+                    connectSse();
+                }
+                console.log('[openclaw-bridge] Step 3: connection attempt started');
             } catch (e) {
                 console.error('[openclaw-bridge] ❌ ERROR in delayed init():', e);
             }

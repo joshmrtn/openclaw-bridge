@@ -203,6 +203,54 @@ describe('plugin routes', () => {
         expect(res.body).toEqual({ logged: true, character: 'Gerard' });
     });
 
+    test('GET /events sets SSE headers and registers the response as an SSE client', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const registerSseClient = jest.fn();
+        const unregisterSseClient = jest.fn();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+            registerSseClient,
+            unregisterSseClient,
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const headers = {};
+        let closeListener = null;
+        const res = {
+            statusCode: 200,
+            setHeader(k, v) { headers[k] = v; },
+            flushHeaders() {},
+            write: jest.fn(),
+        };
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            on(event, fn) { if (event === 'close') closeListener = fn; },
+        };
+
+        const handler = router.getHandlers.get('/events');
+        await callRoute(router, handler, req, res);
+
+        expect(headers['Content-Type']).toBe('text/event-stream');
+        expect(headers['Cache-Control']).toContain('no-cache');
+        expect(headers['X-Accel-Buffering']).toBe('no');
+        expect(registerSseClient).toHaveBeenCalledWith(res);
+
+        // Simulate client disconnect
+        expect(closeListener).toBeInstanceOf(Function);
+        closeListener();
+        expect(unregisterSseClient).toHaveBeenCalledWith(res);
+    });
+
     test('POST /test-notify broadcasts to connected clients', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
         const broadcast = jest.fn(() => 2);
