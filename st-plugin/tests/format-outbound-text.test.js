@@ -13,7 +13,25 @@ function formatOutboundText(text, channelId, linkEntry) {
         strip = channelType === "telegram";
     }
     if (!strip) return text;
-    return text
+
+    const lines = text.split("\n");
+    const processed = lines
+        .filter(line => !/^\s*\|[-:\s|]+\|\s*$/.test(line))
+        .map(line => {
+            if (/^\s*\|/.test(line) && /\|\s*$/.test(line.trim())) {
+                return line.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
+                    .split("|").map(c => c.trim()).filter(Boolean).join(" | ");
+            }
+            const hMatch = line.match(/^#{1,6}\s+(.*)/);
+            if (hMatch) return hMatch[1];
+            const bqMatch = line.match(/^>\s?(.*)/);
+            if (bqMatch) return bqMatch[1];
+            return line;
+        });
+
+    return processed
+        .join("\n")
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
         .replace(/\*\*([^*\n]+)\*\*/g, "$1")
         .replace(/\*([^*\n]+)\*/g, "$1")
         .replace(/_([^_\n]+)_/g, "$1")
@@ -112,6 +130,94 @@ describe("formatOutboundText", () => {
 
         it("unpaired asterisk — unchanged", () => {
             expect(formatOutboundText("hello * there", "telegram-mybot", telegramEntry)).toBe("hello * there");
+        });
+    });
+
+    describe("Headers (R6.4)", () => {
+        it("strips h1 marker on Telegram", () => {
+            expect(formatOutboundText("# Hello", "telegram-mybot", telegramEntry)).toBe("Hello");
+        });
+
+        it("strips h2 marker on Telegram", () => {
+            expect(formatOutboundText("## Section Title", "telegram-mybot", telegramEntry)).toBe("Section Title");
+        });
+
+        it("strips h3 marker on Telegram", () => {
+            expect(formatOutboundText("### Sub-section", "telegram-mybot", telegramEntry)).toBe("Sub-section");
+        });
+
+        it("passes headers through on Discord", () => {
+            expect(formatOutboundText("# Hello", "discord-mybot", discordEntry)).toBe("# Hello");
+        });
+
+        it("preserves header content after stripping", () => {
+            const result = formatOutboundText("## Frog's Thoughts\nHello there.", "telegram-mybot", telegramEntry);
+            expect(result).toContain("Frog's Thoughts");
+            expect(result).toContain("Hello there.");
+        });
+    });
+
+    describe("Blockquotes (R6.4)", () => {
+        it("strips blockquote marker on Telegram", () => {
+            expect(formatOutboundText("> inner monologue", "telegram-mybot", telegramEntry)).toBe("inner monologue");
+        });
+
+        it("strips blockquote marker without space", () => {
+            expect(formatOutboundText(">inner monologue", "telegram-mybot", telegramEntry)).toBe("inner monologue");
+        });
+
+        it("passes blockquotes through on Discord", () => {
+            expect(formatOutboundText("> inner monologue", "discord-mybot", discordEntry)).toBe("> inner monologue");
+        });
+
+        it("preserves blockquote content after stripping", () => {
+            const result = formatOutboundText("> I wonder about this.", "telegram-mybot", telegramEntry);
+            expect(result).toContain("I wonder about this.");
+        });
+    });
+
+    describe("Markdown links (R6.4)", () => {
+        it("strips link keeping display text on Telegram", () => {
+            expect(formatOutboundText("[click here](http://example.com)", "telegram-mybot", telegramEntry)).toBe("click here");
+        });
+
+        it("strips link in the middle of a sentence", () => {
+            const result = formatOutboundText("Check out [this page](http://example.com) now.", "telegram-mybot", telegramEntry);
+            expect(result).toBe("Check out this page now.");
+        });
+
+        it("passes links through on Discord", () => {
+            expect(formatOutboundText("[click here](http://example.com)", "discord-mybot", discordEntry)).toBe("[click here](http://example.com)");
+        });
+    });
+
+    describe("Tables (R6.4)", () => {
+        it("strips separator row entirely on Telegram", () => {
+            const result = formatOutboundText("|---|---|", "telegram-mybot", telegramEntry);
+            expect(result).toBe("");
+        });
+
+        it("strips aligned separator row", () => {
+            const result = formatOutboundText("| :--- | ---: |", "telegram-mybot", telegramEntry);
+            expect(result).toBe("");
+        });
+
+        it("converts data row to pipe-separated text", () => {
+            const result = formatOutboundText("| foo | bar |", "telegram-mybot", telegramEntry);
+            expect(result).toBe("foo | bar");
+        });
+
+        it("converts full table preserving data content", () => {
+            const table = "| Name | Value |\n|------|-------|\n| Frog | 42 |";
+            const result = formatOutboundText(table, "telegram-mybot", telegramEntry);
+            expect(result).toContain("Name | Value");
+            expect(result).toContain("Frog | 42");
+            expect(result).not.toContain("------");
+        });
+
+        it("passes tables through on Discord", () => {
+            const row = "| foo | bar |";
+            expect(formatOutboundText(row, "discord-mybot", discordEntry)).toBe(row);
         });
     });
 });

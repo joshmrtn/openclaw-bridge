@@ -66,11 +66,34 @@ function shouldStripAsteriskMarkup(channelId: string, linkEntry: LinkEntry): boo
     return channelType === "telegram";
 }
 
-// Strip inline markup (*action*, **bold**, _italic_), preserving inner text. Collapses extra whitespace.
-// Double-asterisk must be processed before single-asterisk to avoid partial matches.
+// Strip inline and block-level markdown, preserving semantic content. Collapses extra whitespace.
 export function formatOutboundText(text: string, channelId: string, linkEntry: LinkEntry): string {
     if (!shouldStripAsteriskMarkup(channelId, linkEntry)) return text;
-    return text
+
+    const lines = text.split("\n");
+    const processed = lines
+        // Remove table separator rows (lines containing only |, -, :, and spaces)
+        .filter(line => !/^\s*\|[-:\s|]+\|\s*$/.test(line))
+        .map(line => {
+            // Table data rows: | foo | bar | → foo | bar
+            if (/^\s*\|/.test(line) && /\|\s*$/.test(line.trim())) {
+                return line.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
+                    .split("|").map(c => c.trim()).filter(Boolean).join(" | ");
+            }
+            // Headers: ## Heading → Heading
+            const hMatch = line.match(/^#{1,6}\s+(.*)/);
+            if (hMatch) return hMatch[1];
+            // Blockquotes: > text → text
+            const bqMatch = line.match(/^>\s?(.*)/);
+            if (bqMatch) return bqMatch[1];
+            return line;
+        });
+
+    return processed
+        .join("\n")
+        // Markdown links [text](url) → text
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        // Inline markup: **bold**, *italic*, _italic_
         .replace(/\*\*([^*\n]+)\*\*/g, "$1")
         .replace(/\*([^*\n]+)\*/g, "$1")
         .replace(/_([^_\n]+)_/g, "$1")
