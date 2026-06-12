@@ -25,12 +25,22 @@ Then set the required environment variables in the agent's OC config:
 {
   "id": "gerard",
   "skills": ["character-bridge"],
+  "tools": {
+    "profile": "minimal",
+    "allow": ["read", "write"]
+  },
   "env": {
     "OPENCLAW_BRIDGE_URL": "http://localhost:8000",
     "OPENCLAW_BRIDGE_TOKEN": "your-token-here"
   }
 }
 ```
+
+`profile: "minimal"` structurally denies all dangerous built-in tools (exec,
+process, cron, gateway, browser, email, calendar, etc.) at the OC config layer.
+`read` and `write` are the only built-in tools this agent needs (workspace file
+access for character memory). The skill's own HTTP tools (`generate_response`,
+`log_action`) are unaffected by the profile.
 
 Restart the OC gateway after installing.
 

@@ -41,25 +41,33 @@ Add to ~/.openclaw/openclaw.json under agents.list:
   "name": "{Character Display Name}",
   "workspace": "~/.openclaw/workspace-{agentname}",
   "skills": ["character-bridge"],
+  "tools": {
+    "profile": "minimal",
+    "allow": ["read", "write"]
+  },
   "env": {
     "OPENCLAW_BRIDGE_URL": "http://localhost:8000",
     "OPENCLAW_BRIDGE_TOKEN": "{token}"
-  },
-  "tools": {
-    "allow": ["message", "read", "write"],
-    "deny": [
-      "exec", "process", "sandbox_exec", "sandbox_process",
-      "browser", "gateway", "cron", "email", "calendar",
-      "edit", "apply_patch"
-    ]
-  },
-  "sandbox": {
-    "mode": "all",
-    "scope": "agent",
-    "docker": { "network": "bridge" }
   }
 }
 ```
+
+**Tool policy explained (`profile: "minimal"` + `allow: ["read", "write"]`):**
+
+`profile: "minimal"` restricts the agent to `session_status` only as its base,
+structurally denying all dangerous built-in and plugin tools at the OC config
+layer — including `exec`/`process`/`code_execution`, `cron`, `gateway`,
+`browser`, email, and calendar tools. The `allow` list then adds back only what
+the bridge legitimately needs: `read` and `write` for workspace file access
+(used by R11 character memory management).
+
+The bridge's skill tools (`generate_response`, `log_action`) are HTTP-defined
+tools from `SKILL.md` — they are not built-in OC tools and are not affected
+by the profile.
+
+This is a structural enforcement: it is not possible to override these
+denials via message content or prompt injection, regardless of what any user
+writes to the character.
 
 ### Step 4: Register the character link in ST
 
