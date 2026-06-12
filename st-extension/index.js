@@ -676,8 +676,17 @@ async function generateForCharacter(characterName, message) {
         hasExecuteSlash: typeof context?.executeSlashCommandsWithOptions === 'function',
     });
 
-    if (needsCharacterSwitch && isHeadless) {
-        console.info('[openclaw-bridge] Headless: switching active character before generation', { from: previousChid, to: chid, characterName });
+    if (isHeadless) {
+        // Always reload via selectCharacterById in headless mode — even when chid hasn't changed.
+        // selectCharacterById calls getChat() internally, loading fresh chat from disk.
+        // Without this, ST's in-memory chat goes stale after every exchange: the plugin writes
+        // new messages to the JSONL file after generation returns, but the headless browser
+        // never sees them unless we explicitly reload before the next request.
+        if (needsCharacterSwitch) {
+            console.info('[openclaw-bridge] Headless: switching active character before generation', { from: previousChid, to: chid, characterName });
+        } else {
+            console.info('[openclaw-bridge] Headless: reloading chat from disk before generation', { chid, characterName });
+        }
 
         // Primary: selectCharacterById (awaits getChat internally, sets name2 on completion)
         if (typeof selectCharacterById === 'function') {
@@ -689,7 +698,7 @@ async function generateForCharacter(characterName, message) {
             }
         }
 
-        // Verify the switch worked by reading a fresh context snapshot
+        // Verify the reload/switch worked by reading a fresh context snapshot
         await new Promise(r => setTimeout(r, 300)); // let any async side-effects settle
         const postSwitchCtx = getStContext();
         const postSwitchChid = Number(postSwitchCtx?.characterId);
@@ -699,7 +708,7 @@ async function generateForCharacter(characterName, message) {
             postSwitchChid, postSwitchName2, targetChid: chid, targetName: characterName,
             switchOk: postSwitchChid === chid });
 
-        // Fallback: /go command if primary switch failed
+        // Fallback: /go command if primary reload/switch failed
         if (postSwitchChid !== chid && typeof context?.executeSlashCommandsWithOptions === 'function') {
             console.info('[openclaw-bridge] Headless: primary switch failed, trying /go command');
             try {
