@@ -44,6 +44,7 @@ const STATE = {
     lastChatUpdatedTs: 0,      // deduplicate chat_updated when multiple connections are active
     sseAbortController: null,  // AbortController for the active SSE fetch
     sseReconnectTimer: null,   // reconnect backoff timer for SSE
+    csrfToken: null,           // explicitly fetched CSRF token for HTTP plugin requests
 };
 
 function getStContext() {
@@ -156,13 +157,35 @@ function resolveCharacterName() {
 
 function buildPluginHeaders({ omitContentType = false } = {}) {
     const contextHeaders = getStContext()?.getRequestHeaders;
+    let headers = {};
     if (typeof contextHeaders === 'function') {
-        return contextHeaders({ omitContentType });
+        headers = contextHeaders({ omitContentType });
+    } else if (typeof getRequestHeaders === "function") {
+        headers = getRequestHeaders({ omitContentType });
     }
-    if (typeof getRequestHeaders === "function") {
-        return getRequestHeaders({ omitContentType });
+    // When the ST context doesn't include a CSRF token (or after a restart clears the
+    // session), supplement with our own explicitly fetched token so HTTP POSTs don't 403.
+    if (STATE.csrfToken && !headers['x-csrf-token'] && !headers['X-CSRF-Token']) {
+        headers = Object.assign({}, headers, { 'X-CSRF-Token': STATE.csrfToken });
     }
-    return {};
+    return headers;
+}
+
+// Fetch a fresh CSRF token from ST and cache it in STATE.csrfToken.
+// Called at init and after any 403 (e.g. ST restarted and cleared its session store).
+// The browser handles the session cookie automatically via credentials:'same-origin'.
+async function fetchCsrfToken() {
+    try {
+        const resp = await fetch('/csrf-token', { credentials: 'same-origin' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (typeof data?.token === 'string') {
+            STATE.csrfToken = data.token;
+            console.info('[openclaw-bridge] CSRF token refreshed');
+        }
+    } catch (e) {
+        // Silent fail — context-provided headers or retry on 403 will handle it
+    }
 }
 
 function setManagementStatus(message, tone = 'info') {
@@ -1014,13 +1037,27 @@ function startHttpPollingFallback() {
                 } finally {
                     STATE.pendingActions.delete(payload.character);
                 }
-                const postHeaders = Object.assign({ 'Content-Type': 'application/json' }, buildPluginHeaders());
-                await fetch('/api/plugins/openclaw-bridge/http-response', {
+                const responseBody = JSON.stringify({ type: 'generate_response', requestId: msg.requestId, response: responseText, actions });
+                let postResp = await fetch('/api/plugins/openclaw-bridge/http-response', {
                     method: 'POST',
                     credentials: 'same-origin',
-                    headers: postHeaders,
-                    body: JSON.stringify({ type: 'generate_response', requestId: msg.requestId, response: responseText, actions }),
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, buildPluginHeaders()),
+                    body: responseBody,
                 });
+                if (postResp.status === 403) {
+                    // CSRF token expired (ST may have restarted) — refresh and retry once.
+                    STATE.csrfToken = null;
+                    await fetchCsrfToken();
+                    postResp = await fetch('/api/plugins/openclaw-bridge/http-response', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: Object.assign({ 'Content-Type': 'application/json' }, buildPluginHeaders()),
+                        body: responseBody,
+                    });
+                    if (!postResp.ok) {
+                        console.warn('[openclaw-bridge] HTTP response POST retry failed:', postResp.status);
+                    }
+                }
             } else if (msg.type === 'chat_updated') {
                 if (!STATE.connected) {
                     console.info('[openclaw-bridge] chat_updated received via HTTP poll:', { character: msg.character });
@@ -1288,6 +1325,9 @@ function connect() {
                 console.info('[openclaw-bridge] ✅ WebSocket connected!');
                 stopHttpPollingFallback();
                 startHealthCheck();
+                // Refresh CSRF token on each connect — ST may have restarted between connects,
+                // which would have cleared its session store and invalidated the old token.
+                fetchCsrfToken().catch(() => {});
                 const clientType = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE || 'ui';
                 try { ws.send(JSON.stringify({ type: 'register', clientType })); } catch (e) {}
             });
@@ -1332,6 +1372,11 @@ function connect() {
             ws.addEventListener('close', (ev) => {
                 if (STATE.connectionId !== myConnectionId) return; // stale socket, ignore
                 STATE.connected = false;
+                // Refresh CSRF token in the background — don't null it first. The old token
+                // stays valid across ST restarts (cookie-session stores state in the cookie,
+                // not server-side). Keeping the old value means the HTTP polling POST can
+                // succeed immediately without a round-trip 403→refresh→retry cycle.
+                fetchCsrfToken().catch(() => {});
                 if (STATE.reconnectTimer) {
                     clearTimeout(STATE.reconnectTimer);
                 }
@@ -1455,8 +1500,12 @@ function init() {
         const clientType = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE || 'ui';
         console.log('[openclaw-bridge] Step 1: Adding small delay before connecting (ST may still be initializing)', { clientType });
 
-        setTimeout(() => {
+        setTimeout(async () => {
             try {
+                // Fetch CSRF token before any HTTP POSTs to plugin endpoints.
+                // Both headless and UI clients may need to POST via HTTP polling.
+                await fetchCsrfToken();
+
                 if (clientType === 'headless') {
                     // Headless Playwright browsers run on the same machine as ST, so the dedicated
                     // WS port (8765) is always reachable without any port forwarding.

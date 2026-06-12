@@ -369,6 +369,12 @@ async function init(router) {
                     shouldWriteHistory = false;
                 }
             } catch (innerErr) {
+                // If the inner try threw a WS/generation error (not a link-state read error),
+                // don't retry — propagate the 503 directly so OC gets one clean failure
+                // instead of a second duplicate generate request being sent to the extension.
+                if (innerErr.statusCode === 503 || isWsUnavailableError(innerErr)) {
+                    throw innerErr;
+                }
                 // No link state or error reading it; try without label
                 try {
                     const genResult = await sessionManager.requestGenerate({ character, message, images, channel, user_id }, timeoutMs);
@@ -424,6 +430,15 @@ async function init(router) {
     });
 }
 
+async function exit() {
+    console.info('[openclaw-bridge-plugin] Shutting down headless service...');
+    try {
+        await headlessService.stop();
+    } catch (err) {
+        console.warn('[openclaw-bridge-plugin] Headless service stop error:', err?.message);
+    }
+}
+
 module.exports = {
     info: {
         id: PLUGIN_ID,
@@ -431,4 +446,5 @@ module.exports = {
         description: 'Server plugin for bridging SillyTavern characters to OpenClaw.',
     },
     init,
+    exit,
 };

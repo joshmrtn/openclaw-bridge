@@ -245,9 +245,14 @@ function requestGenerate(payload, timeoutMs = 900000) { // 15 minutes for local 
                     ...payload,
                 });
             } catch (err) {
+                // The socket closed between getClient() and send (zombie race condition).
+                // Remove the dead socket and retry — the next attempt will pick a different
+                // client or fall through to HTTP polling after waitForClientMs.
                 pendingRequests.delete(requestId);
                 clearTimeout(timer);
-                return reject(err);
+                clients.delete(client);
+                console.warn('[openclaw-bridge] WS send failed; removing dead socket and retrying:', err.message);
+                return setTimeout(attemptSend, 200);
             }
         }
 

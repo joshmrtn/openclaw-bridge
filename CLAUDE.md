@@ -27,7 +27,7 @@ OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
 # Run E2E tests (Playwright — requires ST running)
 npm run test:e2e
 
-# Wire plugin into local ST checkout for development
+# Wire plugin and extension into local ST checkout, and symlink OC plugin into OpenClaw
 bash ./dev-setup.sh
 
 # Generate bridge token and set up data directory
@@ -42,10 +42,23 @@ st-plugin/tests/        Jest unit tests (auto-discovered by jest.config.cjs)
 st-plugin/tools/        Manual test helpers — NOT picked up by Jest testMatch globs
 st-extension/           Browser JS extension loaded by SillyTavern's extension system
 st-extension/tests/     Extension tests (manual/Playwright)
+oc-plugin/              OpenClaw plugin (TypeScript); compiled to oc-plugin/dist/index.js
 skills/character-bridge/ OC skill definitions — YAML frontmatter + Markdown
 sillytavern/            Git submodule — ST vendor checkout for local dev
 data/                   Runtime data (bridge token, character-links.json)
 ```
+
+### OC plugin deployment — critical
+
+OC loads the plugin from `~/.openclaw/extensions/openclaw-bridge/`, **not** from `oc-plugin/` in this repo. Changes to `oc-plugin/` are invisible to a running OC process until that installed copy is updated.
+
+`dev-setup.sh` handles this by replacing the installed copy with a symlink to `oc-plugin/` (OC still needs a restart to pick it up). Always run `dev-setup.sh` when setting up a new checkout. After making changes to `oc-plugin/src/index.ts`, recompile with:
+
+```bash
+/path/to/openclaw/node_modules/typescript/bin/tsc --project oc-plugin/tsconfig.json
+```
+
+then restart OC. If an OC plugin fix appears to have no effect, check `~/.openclaw/extensions/openclaw-bridge/dist/index.js` — it may be a stale installed copy.
 
 ### Key files
 

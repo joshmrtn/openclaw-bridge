@@ -205,7 +205,10 @@ function postJsonRaw(
     });
 }
 
-// CSRF token cache. Populated on first POST, cleared on 403 (session expired).
+// CSRF token cache. Populated on first use, cleared on 403 so the next call
+// fetches a fresh token. Works when CSRF is enabled (fetches real token) and
+// when disabled (ST returns {token:"disabled"} with no cookie — the header is
+// sent but ignored by ST's middleware).
 type CsrfState = { token: string; cookie: string };
 let csrfCache: CsrfState | null = null;
 
@@ -213,7 +216,7 @@ async function getCsrfState(): Promise<CsrfState> {
     if (csrfCache) return csrfCache;
     const result = await getJson(`${ST_BASE}/csrf-token`);
     const token = typeof result.body?.token === "string" ? result.body.token : "";
-    // Extract the name=value portion of each Set-Cookie entry (drop attributes like Path, HttpOnly)
+    // Extract name=value from each Set-Cookie entry, stripping Path/HttpOnly/etc attributes.
     const cookie = result.setCookie
         .map((c) => c.split(";")[0].trim())
         .filter(Boolean)
@@ -222,12 +225,11 @@ async function getCsrfState(): Promise<CsrfState> {
     return csrfCache;
 }
 
-// Public POST helper — transparently adds CSRF token + session cookie, retries
-// once on 403 (covers session expiry; also handles disableCsrf:true gracefully
-// since /csrf-token then returns {token:"disabled"} with no cookie).
+// Public POST — transparently fetches a CSRF token on first call and caches it.
+// Retries once on 403 (session expiry / token rotation) with a fresh token.
 async function postJson(
     url: string,
-    token: string,
+    authToken: string,
     body: object
 ): Promise<{ status: number; body: any }> {
     const csrf = await getCsrfState();
@@ -236,17 +238,17 @@ async function postJson(
         ...(csrf.cookie ? { Cookie: csrf.cookie } : {}),
     };
 
-    const result = await postJsonRaw(url, token, body, csrfHeaders);
+    const result = await postJsonRaw(url, authToken, body, csrfHeaders);
 
     if (result.status === 403) {
-        // Session expired or CSRF mismatch — refresh and retry once.
+        // Token stale — refresh and retry once.
         csrfCache = null;
         const fresh = await getCsrfState();
         const freshHeaders: Record<string, string> = {
             "x-csrf-token": fresh.token,
             ...(fresh.cookie ? { Cookie: fresh.cookie } : {}),
         };
-        return postJsonRaw(url, token, body, freshHeaders);
+        return postJsonRaw(url, authToken, body, freshHeaders);
     }
 
     return result;
