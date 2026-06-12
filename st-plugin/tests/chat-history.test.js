@@ -49,4 +49,81 @@ describe('chat-history', () => {
         const contents = msgs.slice(2).map(m => m.mes);
         for (let i = 0; i < 10; i++) expect(contents).toContain(`C${i}`);
     });
+
+    test('readLatestChat returns empty array when no files exist', async () => {
+        const msgs = await chatHistory.readLatestChat('NoSuchChar', tmpDir);
+        expect(msgs).toEqual([]);
+    });
+
+    test('appendMessage creates a new file when no chat exists for character', async () => {
+        const msg = chatHistory.constructStMessage({ role: 'assistant', content: 'First ever message' });
+        await chatHistory.appendMessage('BrandNew', msg, tmpDir);
+        const msgs = await chatHistory.readLatestChat('BrandNew', tmpDir);
+        expect(msgs.length).toBe(1);
+        expect(msgs[0].mes).toBe('First ever message');
+    });
+
+    test('appendMessage handles file that does not end with a newline', async () => {
+        // Simulate ST's join('\\n') save format — no trailing newline
+        const charDir = path.join(tmpDir, 'Gerard');
+        const filePath = path.join(charDir, 'initial.jsonl');
+        const existing = fs.readFileSync(filePath, 'utf8').trimEnd();
+        fs.writeFileSync(filePath, existing); // strip trailing newline
+
+        const msg = chatHistory.constructStMessage({ role: 'assistant', content: 'After no-newline' });
+        await chatHistory.appendMessage('Gerard', msg, tmpDir);
+
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const lines = raw.split('\n').filter(Boolean);
+        expect(lines.length).toBe(3); // 2 original + 1 appended
+        // every line must be valid JSON on its own
+        expect(() => lines.forEach(l => JSON.parse(l))).not.toThrow();
+    });
+
+    test('buildExternalChatContent returns plain string when no images', () => {
+        const result = chatHistory.buildExternalChatContent('Hello there', []);
+        expect(result).toBe('Hello there');
+    });
+
+    test('buildExternalChatContent returns multimodal array when images present', () => {
+        const result = chatHistory.buildExternalChatContent('Look at this', ['http://example.com/img.png']);
+        expect(result).toEqual([
+            { type: 'text', text: 'Look at this' },
+            { type: 'image_url', image_url: { url: 'http://example.com/img.png' } },
+        ]);
+    });
+
+    test('appendExternalChatToHistory appends user and assistant entries to existing file', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Hey Gerard', images: [], user_id: 'discord:123' },
+            'Hello back',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        expect(msgs.length).toBe(4); // 2 original + user + assistant
+        const user = msgs[2];
+        const assistant = msgs[3];
+        expect(user.is_user).toBe(true);
+        expect(user.mes).toBe('Hey Gerard');
+        expect(user.user_id).toBe('discord:123');
+        expect(assistant.is_user).toBe(false);
+        expect(assistant.mes).toBe('Hello back');
+        expect(assistant.name).toBe('Gerard');
+    });
+
+    test('appendExternalChatToHistory bootstraps a new file with ST header when no chat exists', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'FreshChar',
+            { message: 'First message', images: [], user_id: null },
+            'First response',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('FreshChar', tmpDir);
+        // header entry + user entry + assistant entry
+        expect(msgs.length).toBe(3);
+        expect(msgs[0].chat_metadata).toBeDefined();
+        expect(msgs[1].is_user).toBe(true);
+        expect(msgs[2].is_user).toBe(false);
+    });
 });
