@@ -36,6 +36,9 @@ type LinkEntry = {
     oc_agent_id: string;
     active: boolean;
     owner_user_ids: string[];
+    formatting?: {
+        strip_asterisk_markup?: boolean;
+    };
 };
 
 function readLinkState(): Record<string, LinkEntry> {
@@ -49,6 +52,33 @@ function readLinkState(): Record<string, LinkEntry> {
         return {};
     }
 }
+
+// ---------------------------------------------------------------------------
+// Output formatting (R6)
+// ---------------------------------------------------------------------------
+
+// Default strip behaviour: on for Telegram (asterisks are literal), off for Discord (renders as italics).
+function shouldStripAsteriskMarkup(channelId: string, linkEntry: LinkEntry): boolean {
+    if (linkEntry.formatting?.strip_asterisk_markup !== undefined) {
+        return linkEntry.formatting.strip_asterisk_markup;
+    }
+    const channelType = channelId.split("-")[0];
+    return channelType === "telegram";
+}
+
+// Strip inline markup (*action*, **bold**, _italic_), preserving inner text. Collapses extra whitespace.
+// Double-asterisk must be processed before single-asterisk to avoid partial matches.
+export function formatOutboundText(text: string, channelId: string, linkEntry: LinkEntry): string {
+    if (!shouldStripAsteriskMarkup(channelId, linkEntry)) return text;
+    return text
+        .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+        .replace(/\*([^*\n]+)\*/g, "$1")
+        .replace(/_([^_\n]+)_/g, "$1")
+        .replace(/ {2,}/g, " ")
+        .trim();
+}
+
+// ---------------------------------------------------------------------------
 
 // Reverse lookup: OC accountId → ST character name.
 // event.accountId is the OC Discord/Telegram account name (e.g. "frog", "toad")
@@ -207,6 +237,7 @@ async function executeCharacterActions(
     token: string,
     api: any,
     ctx: any,
+    linkEntry: LinkEntry,
 ): Promise<void> {
     for (const action of actions) {
         let outcome = "ok";
@@ -222,7 +253,7 @@ async function executeCharacterActions(
                     await adapter.sendText({
                         cfg: api.config,
                         to: String(action.channel_id ?? ""),
-                        text: String(action.content ?? ""),
+                        text: formatOutboundText(String(action.content ?? ""), ctx.channelId, linkEntry),
                         ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
                     });
                     outcome = "sent";
@@ -237,7 +268,7 @@ async function executeCharacterActions(
                     await adapter.sendText({
                         cfg: api.config,
                         to: String(action.user_id ?? ""),
-                        text: String(action.content ?? ""),
+                        text: formatOutboundText(String(action.content ?? ""), ctx.channelId, linkEntry),
                         ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
                     });
                     outcome = "sent";
@@ -252,7 +283,7 @@ async function executeCharacterActions(
                     await adapter.sendText({
                         cfg: api.config,
                         to: String(action.channel_id ?? ""),
-                        text: String(action.content ?? ""),
+                        text: formatOutboundText(String(action.content ?? ""), ctx.channelId, linkEntry),
                         ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
                     });
                     outcome = "sent";
@@ -304,6 +335,8 @@ export default definePluginEntry({
             const character = characterForAccount(accountId);
             if (!character) return; // No active ST link for this account — don't intercept
 
+            const linkEntry: LinkEntry = readLinkState()[character] ?? { oc_agent_id: accountId, active: true, owner_user_ids: [] };
+
             if (!event.content) return;
 
             // Let OC handle its own slash commands (/new, /reset, etc.)
@@ -346,12 +379,13 @@ export default definePluginEntry({
                     const actions: any[] = Array.isArray(result.body.actions) ? result.body.actions : [];
                     if (actions.length > 0) {
                         console.log(`[openclaw-bridge] Executing ${actions.length} character action(s)`);
-                        await executeCharacterActions(actions, character, token, api, ctx);
+                        await executeCharacterActions(actions, character, token, api, ctx, linkEntry);
                     }
 
+                    const channelId: string = ctx.channelId ?? "";
                     return {
                         handled: true,
-                        text: result.body.response,
+                        text: formatOutboundText(result.body.response, channelId, linkEntry),
                     };
                 }
 
