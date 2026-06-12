@@ -40,12 +40,21 @@ function createRequestId() {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function reapDeadClients() {
+    for (const [socket] of clients.entries()) {
+        if (socket.readyState !== WS.OPEN) {
+            clients.delete(socket);
+        }
+    }
+}
+
 /**
  * Register a client (browser extension or headless)
  * @param {WebSocket} client - The WebSocket client
  * @param {object} metadata - Client metadata { isHeadless, isUi }
  */
 function registerClient(client, metadata = {}) {
+    reapDeadClients();
     const { isHeadless = false, isUi = false } = metadata;
     clients.set(client, {
         socket: client,
@@ -55,7 +64,7 @@ function registerClient(client, metadata = {}) {
     });
     console.info('[openclaw-bridge] Client registered', {
         type: isHeadless ? 'headless' : isUi ? 'ui' : 'unknown',
-        totalClients: clients.size,
+        activeClients: clients.size,
     });
 }
 

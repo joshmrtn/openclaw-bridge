@@ -28,7 +28,6 @@ function startWebSocketServer({ port = 8765, sessionManager }) {
     server.on('connection', socket => {
         const remote = (socket._socket && socket._socket.remoteAddress) ? socket._socket.remoteAddress : 'unknown';
         console.info('[openclaw-bridge] ✅ WS client connected from', remote);
-        sessionManager.registerClient(socket);
 
         socket.on('message', message => {
             let parsed;
