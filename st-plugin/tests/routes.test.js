@@ -409,7 +409,7 @@ describe('plugin routes', () => {
 
         expect(requestGenerate).toHaveBeenCalledWith(expect.objectContaining({
             message: '[OWNER]\nHello',
-        }));
+        }), undefined);
         expect(appendExternalChatToHistory).toHaveBeenCalledWith('Gerard', { message: 'Hello', images: [], user_id: 'discord:1' }, '[RESP]');
         expect(res.body.response).toBe('[RESP]');
     });
@@ -498,7 +498,7 @@ describe('plugin routes', () => {
 
         expect(requestGenerate).toHaveBeenCalledWith(expect.objectContaining({
             message: '[GUEST]\nHello',
-        }));
+        }), undefined);
         expect(res.body.response).toBe('[RESP]');
     });
 
@@ -918,6 +918,77 @@ describe('plugin routes', () => {
         expect(res.body.response).toBe('Hello!');
         expect(res.body.actions).toEqual([]);
         expect(appendMessage).not.toHaveBeenCalled();
+    });
+
+    test('POST /generate passes timeout_ms to requestGenerate when provided', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Hello!', actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null) }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { character: 'Frog', message: 'Hello', timeout_ms: 30000 },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(requestGenerate).toHaveBeenCalledWith(expect.any(Object), 30000);
+    });
+
+    test('POST /generate uses default timeout when timeout_ms is absent or invalid', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Hello!', actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null) }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { character: 'Frog', message: 'Hello' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        // undefined means requestGenerate uses its own default
+        expect(requestGenerate).toHaveBeenCalledWith(expect.any(Object), undefined);
     });
 
     test('POST /generate returns 400 when character is missing', async () => {

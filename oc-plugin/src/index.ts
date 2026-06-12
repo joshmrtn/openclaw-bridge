@@ -39,6 +39,8 @@ type LinkEntry = {
     formatting?: {
         strip_asterisk_markup?: boolean;
     };
+    timeout_ms?: number;
+    fallback_message?: string;
 };
 
 function readLinkState(): Record<string, LinkEntry> {
@@ -381,6 +383,24 @@ export default definePluginEntry({
                 `[openclaw-bridge] Intercepting message — account=${accountId} character=${character} userId=${userId ?? "unknown"}`
             );
 
+            const channelId: string = ctx.channelId ?? "";
+
+            const deliverFallback = async (reason: string): Promise<{ handled: true; text: string } | undefined> => {
+                const msg = linkEntry.fallback_message;
+                if (!msg) return undefined;
+                console.log(`[openclaw-bridge] ${reason} — delivering fallback message for ${character}`);
+                try {
+                    await postJson(`${ST_BASE}/api/plugins/openclaw-bridge/log-action`, token, {
+                        character,
+                        action_description: `Generation failed (${reason}) — fallback message sent`,
+                        channel: channelId || null,
+                    });
+                } catch (logErr: any) {
+                    console.warn(`[openclaw-bridge] Failed to log fallback to history: ${logErr.message}`);
+                }
+                return { handled: true, text: formatOutboundText(msg, channelId, linkEntry) };
+            };
+
             try {
                 const result = await postJson(
                     `${ST_BASE}/api/plugins/openclaw-bridge/generate`,
@@ -389,7 +409,8 @@ export default definePluginEntry({
                         character,
                         message: event.content,
                         user_id: userId,
-                        channel: ctx.channelId ?? null,
+                        channel: channelId || null,
+                        ...(linkEntry.timeout_ms ? { timeout_ms: linkEntry.timeout_ms } : {}),
                     }
                 );
 
@@ -405,7 +426,6 @@ export default definePluginEntry({
                         await executeCharacterActions(actions, character, token, api, ctx, linkEntry);
                     }
 
-                    const channelId: string = ctx.channelId ?? "";
                     return {
                         handled: true,
                         text: formatOutboundText(result.body.response, channelId, linkEntry),
@@ -420,13 +440,13 @@ export default definePluginEntry({
                 console.warn(
                     `[openclaw-bridge] ST returned ${result.status} — not intercepting, agent will handle with skill`
                 );
+                return await deliverFallback(`ST returned ${result.status}`);
             } catch (err: any) {
                 console.error(
                     `[openclaw-bridge] ST request failed (${err.message}) — not intercepting, agent will handle with skill`
                 );
+                return await deliverFallback(err.message);
             }
-
-            // Returning undefined = don't intercept; agent routing proceeds normally
         });
     },
 });

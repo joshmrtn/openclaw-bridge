@@ -326,7 +326,8 @@ async function init(router) {
     });
 
     router.post('/generate', async (request, response) => {
-        const { character, message, images = [], channel = null, user_id = null } = request.body || {};
+        const { character, message, images = [], channel = null, user_id = null, timeout_ms = null } = request.body || {};
+        const timeoutMs = (Number.isFinite(timeout_ms) && timeout_ms > 0) ? timeout_ms : undefined;
         const allowFallback = String(process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK || '').toLowerCase() === 'true';
 
         if (!character || !message) {
@@ -354,7 +355,7 @@ async function init(router) {
                         images,
                         channel,
                         user_id,
-                    });
+                    }, timeoutMs);
                     generatedText = genResult.response;
                     // R5.4: only pass actions through for owner-initiated requests
                     pendingActions = isOwner ? (genResult.actions || []) : [];
@@ -370,7 +371,7 @@ async function init(router) {
             } catch (innerErr) {
                 // No link state or error reading it; try without label
                 try {
-                    const genResult = await sessionManager.requestGenerate({ character, message, images, channel, user_id });
+                    const genResult = await sessionManager.requestGenerate({ character, message, images, channel, user_id }, timeoutMs);
                     generatedText = genResult.response;
                     // No link state means trust cannot be verified — discard actions (R5.4)
                 } catch (wsError) {
