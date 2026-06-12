@@ -1316,6 +1316,14 @@ function startHealthCheck() {
 }
 
 function init() {
+    if (typeof window !== 'undefined') {
+        if (window.__openclawBridgeLoaded) {
+            console.warn('[openclaw-bridge] init() skipped — extension already loaded on this page');
+            return;
+        }
+        window.__openclawBridgeLoaded = true;
+    }
+
     console.log('[openclaw-bridge] ===== INIT CALLED =====');
 
     try {
@@ -1355,4 +1363,4 @@ export {
 
 // Expose a test-friendly global so E2E tests can observe state and trigger actions
 globalThis.openclawBridge = globalThis.openclawBridge || { state: STATE, connect, sendSocketMessage };
-globalThis.openclawBridgeInit = init;
+globalThis.openclawBridgeInit = globalThis.openclawBridgeInit || init;
