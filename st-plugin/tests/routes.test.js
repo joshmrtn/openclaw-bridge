@@ -29,6 +29,7 @@ describe('plugin routes', () => {
             body: null,
             status(code) { this.statusCode = code; return this; },
             json(payload) { this.body = payload; return this; },
+            end() { return this; },
         };
     }
 
@@ -86,6 +87,7 @@ describe('plugin routes', () => {
             registerClient: jest.fn(),
             unregisterClient: jest.fn(),
             getConnectedClientCount,
+            getSseClientCount: jest.fn(() => 0),
             broadcast: jest.fn(),
         }));
 
@@ -106,6 +108,60 @@ describe('plugin routes', () => {
 
         expect(res.statusCode).toBe(200);
         expect(res.body.status).toBe('ok');
+        expect(res.body.connected_ws_clients).toBe(0);
+        expect(res.body.connected_sse_clients).toBe(0);
+    });
+
+    test('GET /status reflects current WS and SSE client counts', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 3),
+            getSseClientCount: jest.fn(() => 2),
+            broadcast: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/status');
+        const res = makeRes();
+        const req = { get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; } };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.body.connected_ws_clients).toBe(3);
+        expect(res.body.connected_sse_clients).toBe(2);
+    });
+
+    test('bearer token auth rejects invalid token with 401', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/status');
+        const res = makeRes();
+        const req = { get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer wrong-token' : ''; } };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(401);
+        expect(res.body.error).toMatch(/Unauthorized/);
     });
 
     test('POST /characters/:name/link validates and saves link state', async () => {
@@ -145,6 +201,32 @@ describe('plugin routes', () => {
             character: 'Gerard',
             link: { oc_agent_id: 'gerard', active: true, owner_user_ids: [] },
         });
+    });
+
+    test('DELETE /characters/:name/link removes existing link', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../link-state', () => ({
+            removeLink: jest.fn(() => true),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.deleteHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            params: { name: 'Gerard' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ character: 'Gerard', removed: true });
     });
 
     test('DELETE /characters/:name/link returns 404 when missing', async () => {
@@ -367,5 +449,163 @@ describe('plugin routes', () => {
             character: 'Frog',
         }));
         expect(queueChatUpdated).toHaveBeenCalledWith('Frog', 'discord:user1');
+    });
+
+    test('POST /generate prefixes non-owner messages with [GUEST]', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const requestGenerate = jest.fn().mockResolvedValue('[RESP]');
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner'] })),
+        }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            body: { character: 'Gerard', message: 'Hello', user_id: 'discord:guest' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(requestGenerate).toHaveBeenCalledWith(expect.objectContaining({
+            message: '[GUEST]\nHello',
+        }));
+        expect(res.body.response).toBe('[RESP]');
+    });
+
+    test('GET /http-message returns 204 when queue is empty', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+            popHttpOutboundMessage: jest.fn(() => null),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/http-message');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            query: {},
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(204);
+    });
+
+    test('GET /http-message returns the queued message', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const queued = { requestId: 'r1', character: 'Gerard', message: 'Hi' };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+            popHttpOutboundMessage: jest.fn(() => queued),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/http-message');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            query: { clientType: 'ui' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual(queued);
+    });
+
+    test('POST /http-response returns handled: true when response is matched', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+            handleHttpResponse: jest.fn(() => true),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/http-response');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { requestId: 'r1', response: 'Hello back' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ handled: true });
+    });
+
+    test('POST /http-response returns 404 when response is unhandled', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+            handleHttpResponse: jest.fn(() => false),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/http-response');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { requestId: 'unknown', response: 'Hello' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(404);
+        expect(res.body.handled).toBe(false);
     });
 });

@@ -148,6 +148,7 @@ async function init(router) {
             version: PLUGIN_VERSION,
             plugin: PLUGIN_ID,
             connected_ws_clients: sessionManager.getConnectedClientCount(),
+            connected_sse_clients: sessionManager.getSseClientCount(),
         });
     });
 
