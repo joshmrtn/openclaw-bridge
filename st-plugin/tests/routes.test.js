@@ -835,4 +835,120 @@ describe('plugin routes', () => {
         expect(res.statusCode).toBe(500);
         expect(res.body.error).toBe('page reload timed out');
     });
+
+    test('POST /generate returns 400 when character is missing', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { message: 'Hello' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/character and message are required/);
+    });
+
+    test('POST /generate returns 400 when message is missing', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { character: 'Gerard' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/character and message are required/);
+    });
+
+    test('POST /characters/:name/link returns 400 when oc_agent_id is missing', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Gerard' }]),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => null),
+            upsertLink: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Gerard' },
+            body: { owner_user_ids: [] },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/oc_agent_id is required/);
+    });
+
+    test('POST /characters/:name/link returns 404 when character does not exist in ST', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([]),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => null),
+            upsertLink: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Unknown' },
+            body: { oc_agent_id: 'unknown-agent' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(404);
+        expect(res.body.error).toMatch(/Character not found: Unknown/);
+    });
 });
