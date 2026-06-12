@@ -733,4 +733,106 @@ describe('plugin routes', () => {
         expect(res.statusCode).toBe(200);
         expect(res.body.headlessError).toBe('runtime crash');
     });
+
+    test('POST /reload-headless returns 503 when headless service is not connected', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+        }));
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn().mockResolvedValue(),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => false),
+            getStatus: jest.fn(() => ({ available: false, isRunning: false, isConnected: false, lastError: null })),
+            reloadPage: jest.fn().mockResolvedValue(),
+        }));
+
+        process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS = 'false';
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/reload-headless');
+        const res = makeRes();
+        const req = { get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; } };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(503);
+        expect(res.body.error).toMatch(/not connected/);
+    });
+
+    test('POST /reload-headless returns 200 when reloadPage resolves', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+        }));
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn().mockResolvedValue(),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => true),
+            getStatus: jest.fn(() => ({ available: true, isRunning: true, isConnected: true, lastError: null })),
+            reloadPage: jest.fn().mockResolvedValue(),
+        }));
+
+        process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS = 'false';
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/reload-headless');
+        const res = makeRes();
+        const req = { get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; } };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.reloaded).toBe(true);
+    });
+
+    test('POST /reload-headless returns 500 when reloadPage throws', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+        }));
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn().mockResolvedValue(),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => true),
+            getStatus: jest.fn(() => ({ available: true, isRunning: true, isConnected: true, lastError: null })),
+            reloadPage: jest.fn().mockRejectedValue(new Error('page reload timed out')),
+        }));
+
+        process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS = 'false';
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/reload-headless');
+        const res = makeRes();
+        const req = { get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; } };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(500);
+        expect(res.body.error).toBe('page reload timed out');
+    });
 });
