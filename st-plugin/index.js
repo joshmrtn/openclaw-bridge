@@ -326,7 +326,7 @@ async function init(router) {
     });
 
     router.post('/generate', async (request, response) => {
-        const { character, message, images = [], channel = null, user_id = null, timeout_ms = null } = request.body || {};
+        const { character, message, images = [], channel = null, user_id = null, user_name = null, user_avatar = null, timeout_ms = null } = request.body || {};
         const timeoutMs = (Number.isFinite(timeout_ms) && timeout_ms > 0) ? timeout_ms : undefined;
         const allowFallback = String(process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK || '').toLowerCase() === 'true';
 
@@ -386,7 +386,7 @@ async function init(router) {
             }
 
             if (shouldWriteHistory) {
-                await chatHistory.appendExternalChatToHistory(character, { message, images, user_id }, generatedText);
+                await chatHistory.appendExternalChatToHistory(character, { message, images, user_id, user_name, user_avatar, channel }, generatedText);
 
                 // R5.3: log each character-initiated action as an autonomous history entry
                 for (const action of pendingActions) {

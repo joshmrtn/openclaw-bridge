@@ -112,6 +112,51 @@ describe('chat-history', () => {
         expect(assistant.name).toBe('Gerard');
     });
 
+    test('appendExternalChatToHistory uses ExternalChat as name when no user_name provided', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Hello', images: [], user_id: 'discord:123' },
+            'Hi',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        expect(msgs[2].name).toBe('ExternalChat');
+    });
+
+    test('appendExternalChatToHistory builds display name from user_name and channel', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Hello', images: [], user_id: 'discord:123', user_name: 'Josh', channel: 'discord' },
+            'Hi',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        expect(msgs[2].name).toBe('Josh (Discord)');
+    });
+
+    test('appendExternalChatToHistory uses user_name alone when no channel provided', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Hello', images: [], user_id: 'discord:123', user_name: 'Josh' },
+            'Hi',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        expect(msgs[2].name).toBe('Josh');
+    });
+
+    test('appendExternalChatToHistory sets force_avatar when user_avatar provided', async () => {
+        const avatarUrl = 'https://cdn.discordapp.com/avatars/123/abc.png';
+        await chatHistory.appendExternalChatToHistory(
+            'Gerard',
+            { message: 'Hello', images: [], user_id: 'discord:123', user_avatar: avatarUrl },
+            'Hi',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Gerard', tmpDir);
+        expect(msgs[2].force_avatar).toBe(avatarUrl);
+    });
+
     test('appendExternalChatToHistory bootstraps a new file with ST header when no chat exists', async () => {
         await chatHistory.appendExternalChatToHistory(
             'FreshChar',

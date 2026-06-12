@@ -25,6 +25,18 @@ tools:
           description: >
             Sender identifier including platform prefix,
             e.g. "discord:123456789" or "telegram:987654321"
+        user_name:
+          type: string
+          description: >
+            Optional. The sender's display name on their platform,
+            e.g. "Josh" or "Ribbit42". Used as the chat history label
+            so ST shows "Josh (Discord)" instead of "ExternalChat".
+        user_avatar:
+          type: string
+          description: >
+            Optional. Full URL to the sender's avatar image, e.g. a
+            Discord CDN URL. Stored in chat history so ST can display
+            the correct profile picture alongside the message.
         images:
           type: array
           items:

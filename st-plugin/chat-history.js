@@ -85,7 +85,7 @@ async function appendMessage(characterName, messageObj, baseDir = DEFAULT_CHATS_
     });
 }
 
-function constructStMessage({ role = 'user', content = '', name = null, user_id = null, time = null }) {
+function constructStMessage({ role = 'user', content = '', name = null, user_id = null, time = null, force_avatar = null }) {
     const sendDate = new Date(time || Date.now()).toISOString();
     const baseMessage = {
         name,
@@ -103,7 +103,7 @@ function constructStMessage({ role = 'user', content = '', name = null, user_id 
         if (user_id) {
             baseMessage.user_id = user_id;
         }
-        baseMessage.force_avatar = '/thumbnail?type=persona&file=user-default.png';
+        baseMessage.force_avatar = force_avatar || '/thumbnail?type=persona&file=user-default.png';
     } else if (role === 'assistant') {
         const now = new Date().toISOString();
         baseMessage.extra = {
@@ -159,8 +159,16 @@ async function appendExternalChatToHistory(characterName, userMessage, response,
         }
     }
 
+    const { user_name = null, user_avatar = null, channel = null } = userMessage;
+    let displayName = 'ExternalChat';
+    if (user_name) {
+        displayName = channel
+            ? `${user_name} (${channel.charAt(0).toUpperCase() + channel.slice(1)})`
+            : user_name;
+    }
+
     const userContent = buildExternalChatContent(userMessage.message || '', userMessage.images || []);
-    const userEntry = constructStMessage({ role: 'user', content: userContent, name: 'ExternalChat', user_id: userMessage.user_id || null });
+    const userEntry = constructStMessage({ role: 'user', content: userContent, name: displayName, user_id: userMessage.user_id || null, force_avatar: user_avatar || null });
     const assistantEntry = constructStMessage({ role: 'assistant', content: response, name: characterName });
 
     // Append both entries. appendMessage handles the case where the file doesn't

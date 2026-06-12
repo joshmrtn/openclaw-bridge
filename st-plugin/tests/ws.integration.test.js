@@ -48,6 +48,6 @@ describe('ws integration (mocked)', () => {
         expect(res.body).toBeDefined();
         expect(res.body.response).toBe('[EXTENSION MOCK RESPONSE]');
         expect(mockSessionManager.requestGenerate).toHaveBeenCalled();
-        expect(appendSpy).toHaveBeenCalledWith('Gerard', { message: 'Hello from test', images: [], user_id: null }, '[EXTENSION MOCK RESPONSE]');
+        expect(appendSpy).toHaveBeenCalledWith('Gerard', { message: 'Hello from test', images: [], user_id: null, user_name: null, user_avatar: null, channel: null }, '[EXTENSION MOCK RESPONSE]');
     });
 });
