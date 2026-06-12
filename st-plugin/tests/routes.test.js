@@ -1,5 +1,6 @@
 describe('plugin routes', () => {
     const originalToken = process.env.OPENCLAW_BRIDGE_AUTH_TOKEN;
+    const originalHeadless = process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS;
 
     function makeRouter() {
         return {
@@ -48,6 +49,7 @@ describe('plugin routes', () => {
     afterEach(() => {
         jest.clearAllMocks();
         process.env.OPENCLAW_BRIDGE_AUTH_TOKEN = originalToken;
+        process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS = originalHeadless;
     });
 
     test('GET /characters returns merged link state', async () => {
@@ -692,5 +694,43 @@ describe('plugin routes', () => {
 
         expect(res.statusCode).toBe(200);
         expect(res.body.headlessError).toBe('browser launch failed');
+    });
+
+    test('GET /health surfaces headlessError set via onError callback', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            getClientStatus: jest.fn(() => ({ headless: 0, ui: 0, total: 0, sse: 0, lastPickedType: null })),
+            broadcast: jest.fn(),
+        }));
+        let capturedOnError;
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn((opts) => { capturedOnError = opts.onError; return Promise.resolve(); }),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => false),
+            getStatus: jest.fn(() => ({ available: false, isRunning: false, isConnected: false, lastError: null })),
+            reloadPage: jest.fn().mockResolvedValue(),
+        }));
+
+        process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS = 'true';
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+        await new Promise(resolve => setImmediate(resolve));
+        capturedOnError(new Error('runtime crash'));
+
+        const handler = router.getHandlers.get('/health');
+        const res = makeRes();
+        const req = { get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; } };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.headlessError).toBe('runtime crash');
     });
 });
