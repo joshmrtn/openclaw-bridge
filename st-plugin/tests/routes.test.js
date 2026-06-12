@@ -36,6 +36,13 @@ describe('plugin routes', () => {
     beforeEach(() => {
         jest.resetModules();
         process.env.OPENCLAW_BRIDGE_AUTH_TOKEN = 'token';
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn().mockResolvedValue(),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => false),
+            getStatus: jest.fn(() => ({ available: false, isRunning: false, isConnected: false, lastError: null })),
+            reloadPage: jest.fn().mockResolvedValue(),
+        }));
     });
 
     afterEach(() => {

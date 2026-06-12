@@ -1,6 +1,13 @@
 describe('ws integration (mocked)', () => {
     beforeEach(() => {
         jest.resetModules();
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn().mockResolvedValue(),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => false),
+            getStatus: jest.fn(() => ({ available: false, isRunning: false, isConnected: false, lastError: null })),
+            reloadPage: jest.fn().mockResolvedValue(),
+        }));
     });
 
     test('POST /generate uses sessionManager.requestGenerate and writes history', async () => {

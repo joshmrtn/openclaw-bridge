@@ -5,6 +5,13 @@ describe('plugin generate fallback behavior', () => {
         jest.resetModules();
         previousFallback = process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK;
         delete process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK;
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn().mockResolvedValue(),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => false),
+            getStatus: jest.fn(() => ({ available: false, isRunning: false, isConnected: false, lastError: null })),
+            reloadPage: jest.fn().mockResolvedValue(),
+        }));
     });
     afterEach(() => {
         jest.clearAllMocks();
