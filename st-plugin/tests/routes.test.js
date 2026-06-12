@@ -615,4 +615,82 @@ describe('plugin routes', () => {
         expect(res.statusCode).toBe(404);
         expect(res.body.handled).toBe(false);
     });
+
+    test('GET /health returns clients, headless, and headlessError fields', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        const mockClientStatus = { headless: 1, ui: 0, total: 1, sse: 0, lastPickedType: 'headless' };
+        const mockHeadlessStatus = { available: true, isRunning: true, isConnected: true, lastError: null };
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            getSseClientCount: jest.fn(() => 0),
+            getClientStatus: jest.fn(() => mockClientStatus),
+            broadcast: jest.fn(),
+        }));
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn().mockResolvedValue(),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => true),
+            getStatus: jest.fn(() => mockHeadlessStatus),
+            reloadPage: jest.fn().mockResolvedValue(),
+        }));
+
+        process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS = 'false';
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/health');
+        const res = makeRes();
+        const req = { get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; } };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.clients).toEqual(mockClientStatus);
+        expect(res.body.headless).toEqual(mockHeadlessStatus);
+        expect(res.body.headlessError).toBeNull();
+        expect(res.body.plugin).toBeDefined();
+        expect(res.body.uptime).toBeDefined();
+    });
+
+    test('GET /health surfaces headlessError when startup fails', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            getClientStatus: jest.fn(() => ({ headless: 0, ui: 0, total: 0, sse: 0, lastPickedType: null })),
+            broadcast: jest.fn(),
+        }));
+        const startupError = new Error('browser launch failed');
+        jest.doMock('../headless-service', () => ({
+            start: jest.fn().mockRejectedValue(startupError),
+            stop: jest.fn().mockResolvedValue(),
+            isConnected: jest.fn(() => false),
+            getStatus: jest.fn(() => ({ available: false, isRunning: false, isConnected: false, lastError: null })),
+            reloadPage: jest.fn().mockResolvedValue(),
+        }));
+
+        process.env.OPENCLAW_BRIDGE_ENABLE_HEADLESS = 'true';
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+        await new Promise(resolve => setImmediate(resolve));
+
+        const handler = router.getHandlers.get('/health');
+        const res = makeRes();
+        const req = { get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; } };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.headlessError).toBe('browser launch failed');
+    });
 });
