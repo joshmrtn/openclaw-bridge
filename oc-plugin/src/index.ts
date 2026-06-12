@@ -75,10 +75,46 @@ function getToken(): string {
     }
 }
 
-function postJson(
+// ---------------------------------------------------------------------------
+// HTTP helpers + CSRF token management
+// ---------------------------------------------------------------------------
+
+// Raw GET — returns body, status, and any Set-Cookie headers.
+function getJson(url: string): Promise<{ status: number; body: any; setCookie: string[] }> {
+    return new Promise((resolve, reject) => {
+        const parsed = new URL(url);
+        const req = httpRequest(
+            {
+                hostname: parsed.hostname,
+                port: Number(parsed.port) || 80,
+                path: parsed.pathname,
+                method: "GET",
+            },
+            (res) => {
+                let data = "";
+                res.on("data", (chunk: string) => (data += chunk));
+                res.on("end", () => {
+                    const raw = res.headers["set-cookie"] ?? [];
+                    const setCookie = Array.isArray(raw) ? raw : [raw];
+                    try {
+                        resolve({ status: res.statusCode ?? 0, body: JSON.parse(data), setCookie });
+                    } catch {
+                        resolve({ status: res.statusCode ?? 0, body: data, setCookie });
+                    }
+                });
+            }
+        );
+        req.on("error", reject);
+        req.end();
+    });
+}
+
+// Raw POST — callers supply all headers explicitly.
+function postJsonRaw(
     url: string,
-    token: string,
-    body: object
+    authToken: string,
+    body: object,
+    extraHeaders: Record<string, string> = {}
 ): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
         const bodyStr = JSON.stringify(body);
@@ -92,7 +128,8 @@ function postJson(
                 headers: {
                     "Content-Type": "application/json",
                     "Content-Length": Buffer.byteLength(bodyStr),
-                    Authorization: `Bearer ${token}`,
+                    Authorization: `Bearer ${authToken}`,
+                    ...extraHeaders,
                 },
             },
             (res) => {
@@ -111,6 +148,53 @@ function postJson(
         req.write(bodyStr);
         req.end();
     });
+}
+
+// CSRF token cache. Populated on first POST, cleared on 403 (session expired).
+type CsrfState = { token: string; cookie: string };
+let csrfCache: CsrfState | null = null;
+
+async function getCsrfState(): Promise<CsrfState> {
+    if (csrfCache) return csrfCache;
+    const result = await getJson(`${ST_BASE}/csrf-token`);
+    const token = typeof result.body?.token === "string" ? result.body.token : "";
+    // Extract the name=value portion of each Set-Cookie entry (drop attributes like Path, HttpOnly)
+    const cookie = result.setCookie
+        .map((c) => c.split(";")[0].trim())
+        .filter(Boolean)
+        .join("; ");
+    csrfCache = { token, cookie };
+    return csrfCache;
+}
+
+// Public POST helper — transparently adds CSRF token + session cookie, retries
+// once on 403 (covers session expiry; also handles disableCsrf:true gracefully
+// since /csrf-token then returns {token:"disabled"} with no cookie).
+async function postJson(
+    url: string,
+    token: string,
+    body: object
+): Promise<{ status: number; body: any }> {
+    const csrf = await getCsrfState();
+    const csrfHeaders: Record<string, string> = {
+        "x-csrf-token": csrf.token,
+        ...(csrf.cookie ? { Cookie: csrf.cookie } : {}),
+    };
+
+    const result = await postJsonRaw(url, token, body, csrfHeaders);
+
+    if (result.status === 403) {
+        // Session expired or CSRF mismatch — refresh and retry once.
+        csrfCache = null;
+        const fresh = await getCsrfState();
+        const freshHeaders: Record<string, string> = {
+            "x-csrf-token": fresh.token,
+            ...(fresh.cookie ? { Cookie: fresh.cookie } : {}),
+        };
+        return postJsonRaw(url, token, body, freshHeaders);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------

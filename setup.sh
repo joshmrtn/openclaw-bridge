@@ -108,10 +108,6 @@ else
 fi
 
 echo
-echo "IMPORTANT — if you haven't already, disable CSRF in SillyTavern's config.yaml:"
-echo "  disableCsrf: true"
-echo "Without this, all plugin requests will return 403. Restart ST after changing it."
-echo
 echo "Next steps:"
 echo "- Link each SillyTavern character to an OC agent:"
 echo "  ./scripts/link-character.sh --character \"My Character\" --agent my-agent --owner \"discord:YOUR_USER_ID\""
