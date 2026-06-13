@@ -7,12 +7,19 @@
 #     [--plugin-url http://localhost:8000] [--token YOUR_TOKEN]
 #
 # Options:
-#   --character   Exact ST character name (case-sensitive)
-#   --agent       OC agent ID (e.g. "gerard")
-#   --owner       Owner user ID in "platform:id" format; repeat for multiple owners
-#   --plugin-url  Base URL of the ST plugin (default: http://localhost:8000)
-#   --token       Bridge auth token (default: read from data/openclaw-bridge/bridge-token.txt)
-#   --unlink      Remove the link instead of creating/updating it
+#   --character              Exact ST character name (case-sensitive)
+#   --agent                  OC agent ID (e.g. "gerard")
+#   --owner                  Owner user ID in "platform:id" format; repeat for multiple owners
+#   --plugin-url             Base URL of the ST plugin (default: http://localhost:8000)
+#   --token                  Bridge auth token (default: read from data/openclaw-bridge/bridge-token.txt)
+#   --unlink                 Remove the link instead of creating/updating it
+#   --heartbeat-channel ID   OC channel account ID for heartbeat posts (required to enable heartbeat)
+#   --heartbeat-interval-ms  Scheduled heartbeat interval in ms (default: 7200000 / 2h)
+#   --heartbeat-idle-ms      Idle-trigger threshold in ms; 0 = disabled (default: 7200000 / 2h)
+#   --heartbeat-prompt TEXT  Custom heartbeat prompt (default: set by skill)
+#   --heartbeat-target ID    Target channel or user for heartbeat posts (optional)
+#   --heartbeat-account ID   OC account ID for multi-account deployments (optional)
+#   --disable-heartbeat      Remove existing heartbeat config from this character
 
 set -euo pipefail
 
@@ -26,6 +33,14 @@ AGENT_ID=""
 UNLINK=false
 declare -a OWNER_IDS=()
 
+HEARTBEAT_CHANNEL=""
+HEARTBEAT_INTERVAL_MS=""
+HEARTBEAT_IDLE_MS=""
+HEARTBEAT_PROMPT=""
+HEARTBEAT_TARGET=""
+HEARTBEAT_ACCOUNT=""
+DISABLE_HEARTBEAT=false
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --character) CHARACTER="$2"; shift 2 ;;
@@ -34,6 +49,13 @@ while [[ $# -gt 0 ]]; do
         --plugin-url) PLUGIN_URL="$2"; shift 2 ;;
         --token)     TOKEN="$2"; shift 2 ;;
         --unlink)    UNLINK=true; shift ;;
+        --heartbeat-channel)     HEARTBEAT_CHANNEL="$2"; shift 2 ;;
+        --heartbeat-interval-ms) HEARTBEAT_INTERVAL_MS="$2"; shift 2 ;;
+        --heartbeat-idle-ms)     HEARTBEAT_IDLE_MS="$2"; shift 2 ;;
+        --heartbeat-prompt)      HEARTBEAT_PROMPT="$2"; shift 2 ;;
+        --heartbeat-target)      HEARTBEAT_TARGET="$2"; shift 2 ;;
+        --heartbeat-account)     HEARTBEAT_ACCOUNT="$2"; shift 2 ;;
+        --disable-heartbeat)     DISABLE_HEARTBEAT=true; shift ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -77,6 +99,14 @@ if [[ -z "${AGENT_ID}" ]]; then
     exit 1
 fi
 
+# Validate heartbeat flags
+if [[ "${DISABLE_HEARTBEAT}" == false && -n "${HEARTBEAT_CHANNEL}${HEARTBEAT_INTERVAL_MS}${HEARTBEAT_IDLE_MS}${HEARTBEAT_PROMPT}${HEARTBEAT_TARGET}${HEARTBEAT_ACCOUNT}" ]]; then
+    if [[ -z "${HEARTBEAT_CHANNEL}" ]]; then
+        echo "Error: --heartbeat-channel is required when configuring heartbeat" >&2
+        exit 1
+    fi
+fi
+
 # Build owner_user_ids JSON array
 owner_json="["
 first=true
@@ -90,11 +120,65 @@ for oid in "${OWNER_IDS[@]+"${OWNER_IDS[@]}"}"; do
 done
 owner_json+="]"
 
-body="{\"oc_agent_id\":\"${AGENT_ID}\",\"owner_user_ids\":${owner_json}}"
+# Determine if any heartbeat flags were passed
+HEARTBEAT_GIVEN=false
+if [[ "${DISABLE_HEARTBEAT}" == true || -n "${HEARTBEAT_CHANNEL}" || -n "${HEARTBEAT_INTERVAL_MS}" || \
+      -n "${HEARTBEAT_IDLE_MS}" || -n "${HEARTBEAT_PROMPT}" || -n "${HEARTBEAT_TARGET}" || \
+      -n "${HEARTBEAT_ACCOUNT}" ]]; then
+    HEARTBEAT_GIVEN=true
+fi
+
+if [[ "${HEARTBEAT_GIVEN}" == true ]]; then
+    # Use python3 to safely build JSON (handles prompt escaping and numeric fields)
+    body=$(python3 -c "
+import json, sys
+
+disable   = sys.argv[1] == 'true'
+agent_id  = sys.argv[2]
+owners    = json.loads(sys.argv[3])
+channel   = sys.argv[4]
+interval  = sys.argv[5]
+idle      = sys.argv[6]
+prompt    = sys.argv[7]
+target    = sys.argv[8]
+account   = sys.argv[9]
+
+data = {'oc_agent_id': agent_id, 'owner_user_ids': owners}
+
+if disable:
+    data['heartbeat'] = None
+else:
+    hb = {'enabled': True, 'channel_id': channel}
+    if interval: hb['interval_ms'] = int(interval)
+    if idle:     hb['idle_threshold_ms'] = int(idle)
+    if prompt:   hb['prompt'] = prompt
+    if target:   hb['target'] = target
+    if account:  hb['account_id'] = account
+    data['heartbeat'] = hb
+
+print(json.dumps(data))
+" \
+    "${DISABLE_HEARTBEAT}" \
+    "${AGENT_ID}" \
+    "${owner_json}" \
+    "${HEARTBEAT_CHANNEL}" \
+    "${HEARTBEAT_INTERVAL_MS}" \
+    "${HEARTBEAT_IDLE_MS}" \
+    "${HEARTBEAT_PROMPT}" \
+    "${HEARTBEAT_TARGET}" \
+    "${HEARTBEAT_ACCOUNT}")
+else
+    body="{\"oc_agent_id\":\"${AGENT_ID}\",\"owner_user_ids\":${owner_json}}"
+fi
 
 echo "Linking '${CHARACTER}' → agent '${AGENT_ID}'..."
 if [[ ${#OWNER_IDS[@]} -gt 0 ]]; then
     echo "Owners: ${OWNER_IDS[*]}"
+fi
+if [[ "${DISABLE_HEARTBEAT}" == true ]]; then
+    echo "Heartbeat: disabling"
+elif [[ -n "${HEARTBEAT_CHANNEL}" ]]; then
+    echo "Heartbeat: enabled on channel '${HEARTBEAT_CHANNEL}'"
 fi
 echo
 

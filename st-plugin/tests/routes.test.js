@@ -1248,6 +1248,63 @@ describe('plugin routes', () => {
         expect(res.body.error).toMatch(/oc_agent_id is required/);
     });
 
+    test('POST /characters/:name/link passes heartbeat config to upsertLink (#32)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const heartbeat = { enabled: true, channel_id: 'discord-bot', interval_ms: 3600000 };
+        const upsertLink = jest.fn(() => ({ oc_agent_id: 'frog', active: true, owner_user_ids: [], heartbeat }));
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => null),
+            upsertLink,
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', owner_user_ids: [], heartbeat },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(upsertLink).toHaveBeenCalledWith('Frog', expect.objectContaining({ heartbeat }));
+        expect(res.body.link.heartbeat).toEqual(heartbeat);
+    });
+
+    test('POST /characters/:name/link returns 400 when heartbeat is not an object', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', heartbeat: 'invalid' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/heartbeat must be an object or null/);
+    });
+
     test('POST /characters/:name/link returns 404 when character does not exist in ST', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
         jest.doMock('../ws-server', () => mockWsServer);

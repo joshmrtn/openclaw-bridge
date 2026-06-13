@@ -53,4 +53,47 @@ describe('link-state', () => {
         expect(linkState.removeLink('Gerard')).toBe(true);
         expect(linkState.getLink('Gerard')).toBeNull();
     });
+
+    test('upsertLink stores heartbeat config and getLink returns it (#32)', () => {
+        const linkState = require('../link-state');
+
+        const hb = { enabled: true, channel_id: 'discord-bot', interval_ms: 3600000 };
+        const written = linkState.upsertLink('Frog', {
+            oc_agent_id: 'frog',
+            active: true,
+            heartbeat: hb,
+        });
+
+        expect(written.heartbeat).toEqual(hb);
+        expect(linkState.getLink('Frog').heartbeat).toEqual(hb);
+    });
+
+    test('upsertLink without heartbeat field preserves existing heartbeat config (#32)', () => {
+        const linkState = require('../link-state');
+
+        const hb = { enabled: true, channel_id: 'discord-bot', interval_ms: 3600000 };
+        linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true, heartbeat: hb });
+
+        // Second upsert — no heartbeat field in patch
+        linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: false });
+
+        const link = linkState.getLink('Frog');
+        expect(link.active).toBe(false);
+        expect(link.heartbeat).toEqual(hb);
+    });
+
+    test('upsertLink with heartbeat: null removes existing heartbeat config (#32)', () => {
+        const linkState = require('../link-state');
+
+        linkState.upsertLink('Frog', {
+            oc_agent_id: 'frog',
+            active: true,
+            heartbeat: { enabled: true, channel_id: 'discord-bot' },
+        });
+
+        linkState.upsertLink('Frog', { oc_agent_id: 'frog', heartbeat: null });
+
+        const link = linkState.getLink('Frog');
+        expect(link.heartbeat).toBeUndefined();
+    });
 });

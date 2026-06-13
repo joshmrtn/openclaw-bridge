@@ -147,6 +147,75 @@ generations without further setup.
 
 ---
 
+## Heartbeat / Autonomous presence (R10)
+
+A character can post on a schedule or when a conversation goes quiet, without waiting for a user to send a message. Two triggers are available:
+
+- **Scheduled**: fires every `interval_ms` milliseconds (default: 2 hours)
+- **Idle**: fires once when no messages have arrived for `idle_threshold_ms` milliseconds (default: 2 hours), then resets after the next incoming message
+
+Both triggers run in the OC plugin's background polling loop (every 60 seconds).
+
+### Enable heartbeat via `link-character.sh`
+
+```bash
+./scripts/link-character.sh \
+  --character "Gerard Fontaine" \
+  --agent gerard \
+  --owner "discord:YOUR_USER_ID" \
+  --heartbeat-channel "discord-mybotname" \
+  --heartbeat-interval-ms 7200000 \
+  --heartbeat-idle-ms 7200000 \
+  --heartbeat-prompt "You have been quiet for a while. Reflect on what you know and share something meaningful."
+```
+
+**`--heartbeat-channel`** is required when enabling heartbeat. It must be the OC channel account ID (e.g. `discord-mybotname`) — the same value you see in `openclaw.json` under `channels`. All other flags are optional.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--heartbeat-channel ID` | — | OC channel account ID to post to (required) |
+| `--heartbeat-interval-ms MS` | 7200000 (2h) | Scheduled heartbeat interval |
+| `--heartbeat-idle-ms MS` | 7200000 (2h) | Idle trigger threshold; set to `0` to disable idle heartbeats |
+| `--heartbeat-prompt TEXT` | _(skill default)_ | Custom prompt sent to the character for heartbeat generation |
+| `--heartbeat-target ID` | — | Target channel or user ID within the OC channel (platform-specific) |
+| `--heartbeat-account ID` | — | OC account ID for multi-account deployments |
+| `--disable-heartbeat` | — | Remove heartbeat config from this character |
+
+### Enable heartbeat via curl
+
+```bash
+TOKEN=$(cat data/openclaw-bridge/bridge-token.txt)
+curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/characters/{STCharacterName}/link \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "oc_agent_id": "{agentname}",
+    "owner_user_ids": ["{platform}:{ownerUserId}"],
+    "heartbeat": {
+      "enabled": true,
+      "channel_id": "discord-mybotname",
+      "interval_ms": 7200000,
+      "idle_threshold_ms": 7200000,
+      "prompt": "Reflect on what you know and share something meaningful."
+    }
+  }'
+```
+
+To remove heartbeat config, pass `"heartbeat": null`.
+
+### What heartbeat does
+
+When a trigger fires, the OC plugin sends a `/generate` request with `is_heartbeat: true` and a `[HEARTBEAT]` prefix on the prompt. The ST plugin:
+
+- Bypasses owner/guest trust labels (heartbeat is always autonomous)
+- Allows outbound actions (e.g. `discord_post`) in the response — the character can initiate posts, not just reply
+- Logs the generated response as a system entry in chat history (so the ST UI shows it)
+- Writes nothing to history if the response is empty (the character chose not to speak)
+
+Heartbeat responses that call `openclaw_write_memory` work the same as in a normal conversation — memories are written before returning to OC.
+
+---
+
 ## After changing ST model or API settings
 
 The headless browser caches its session at startup. If you change the LLM,

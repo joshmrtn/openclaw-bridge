@@ -206,7 +206,7 @@ async function init(router) {
 
     router.post('/characters/:name/link', async (request, response) => {
         const characterName = normalizeCharacterName(request?.params?.name);
-        const { oc_agent_id = null, owner_user_ids = null } = request.body || {};
+        const { oc_agent_id = null, owner_user_ids = null, heartbeat = undefined } = request.body || {};
 
         if (!characterName) {
             response.status(400).json({ error: 'Character name is required' });
@@ -215,6 +215,12 @@ async function init(router) {
 
         if (typeof oc_agent_id !== 'string' || !oc_agent_id.trim()) {
             response.status(400).json({ error: 'oc_agent_id is required' });
+            return;
+        }
+
+        if (heartbeat !== undefined && heartbeat !== null &&
+            (typeof heartbeat !== 'object' || Array.isArray(heartbeat))) {
+            response.status(400).json({ error: 'heartbeat must be an object or null' });
             return;
         }
 
@@ -227,11 +233,15 @@ async function init(router) {
 
             const current = linkState.getLink(characterName);
             const requestedActive = parseActiveFlag(request?.body?.active, current?.active ?? true);
-            const link = linkState.upsertLink(characterName, {
+            const patch = {
                 oc_agent_id,
                 active: requestedActive,
                 owner_user_ids,
-            });
+            };
+            if (heartbeat !== undefined) {
+                patch.heartbeat = heartbeat;
+            }
+            const link = linkState.upsertLink(characterName, patch);
 
             response.json({ character: characterName, link });
         } catch (err) {

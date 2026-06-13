@@ -124,7 +124,8 @@ via OpenClaw.
 
 Follow `AGENT-SETUP.md` for the complete OC-side steps: creating the agent,
 installing the `character-bridge` skill, configuring the agent environment, and
-binding it to a channel.
+binding it to a channel. `AGENT-SETUP.md` also covers optional features:
+heartbeat / autonomous presence and per-character memory.
 
 ---
 

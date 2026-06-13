@@ -40,28 +40,39 @@ function getLink(characterName) {
         return null;
     }
 
-    return {
+    const result = {
         oc_agent_id: typeof link.oc_agent_id === 'string' ? link.oc_agent_id : null,
         active: Boolean(link.active),
         owner_user_ids: Array.isArray(link.owner_user_ids) ? link.owner_user_ids.slice() : [],
     };
+
+    if (link.heartbeat && typeof link.heartbeat === 'object' && !Array.isArray(link.heartbeat)) {
+        result.heartbeat = { ...link.heartbeat };
+    }
+
+    return result;
 }
 
 function upsertLink(characterName, patch) {
     const state = readState();
-    const current = getLink(characterName) || {
-        oc_agent_id: null,
-        active: false,
-        owner_user_ids: [],
-    };
+    const existing = state[characterName] || {};
 
     const next = {
-        oc_agent_id: typeof patch.oc_agent_id === 'string' ? patch.oc_agent_id.trim() : current.oc_agent_id,
-        active: typeof patch.active === 'boolean' ? patch.active : current.active,
+        ...existing,
+        oc_agent_id: typeof patch.oc_agent_id === 'string' ? patch.oc_agent_id.trim() : (typeof existing.oc_agent_id === 'string' ? existing.oc_agent_id : null),
+        active: typeof patch.active === 'boolean' ? patch.active : Boolean(existing.active),
         owner_user_ids: Array.isArray(patch.owner_user_ids)
             ? patch.owner_user_ids.filter(x => typeof x === 'string').map(x => x.trim())
-            : (Array.isArray(current.owner_user_ids) ? current.owner_user_ids.slice() : []),
+            : (Array.isArray(existing.owner_user_ids) ? existing.owner_user_ids.slice() : []),
     };
+
+    if ('heartbeat' in patch) {
+        if (patch.heartbeat === null) {
+            delete next.heartbeat;
+        } else if (patch.heartbeat && typeof patch.heartbeat === 'object' && !Array.isArray(patch.heartbeat)) {
+            next.heartbeat = { ...patch.heartbeat };
+        }
+    }
 
     state[characterName] = next;
     writeState(state);
