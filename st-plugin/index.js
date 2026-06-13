@@ -13,6 +13,7 @@ const linkState = require('./link-state');
 const sessionManager = require('./session-manager');
 const { startWebSocketServer } = require('./ws-server');
 const headlessService = require('./headless-service');
+const lorebook = require('./lorebook');
 
 let wsBundle = null;
 let headlessStartupError = null;
@@ -351,6 +352,18 @@ async function init(router) {
                 }, timeoutMs);
                 const generatedText = genResult.response;
                 const actions = genResult.actions || [];
+                const stSideActions = genResult.st_side_actions || [];
+
+                // R11.6: process memory writes synchronously before returning
+                for (const action of stSideActions) {
+                    if (action.type === 'write_memory') {
+                        try {
+                            lorebook.upsertMemoryEntry(character, action);
+                        } catch (memErr) {
+                            console.warn('[openclaw-bridge-plugin] Heartbeat memory write failed:', memErr?.message);
+                        }
+                    }
+                }
 
                 if (generatedText) {
                     // R10.6: log heartbeat response as autonomous action entry
@@ -389,6 +402,7 @@ async function init(router) {
             let generatedText;
             let shouldWriteHistory = true;
             let pendingActions = [];
+            let stSideActions = [];
 
             // Try to label message with owner/guest if link exists
             try {
@@ -409,6 +423,7 @@ async function init(router) {
                     generatedText = genResult.response;
                     // R5.4: only pass actions through for owner-initiated requests
                     pendingActions = isOwner ? (genResult.actions || []) : [];
+                    stSideActions = genResult.st_side_actions || [];
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;
@@ -429,6 +444,7 @@ async function init(router) {
                 try {
                     const genResult = await sessionManager.requestGenerate({ character, message, images, channel, user_id }, timeoutMs);
                     generatedText = genResult.response;
+                    stSideActions = genResult.st_side_actions || [];
                     // No link state means trust cannot be verified — discard actions (R5.4)
                 } catch (wsError) {
                     if (!allowFallback) {
@@ -438,6 +454,18 @@ async function init(router) {
                     const result = await generator.generate(character, message, { images, channel, user_id });
                     generatedText = typeof result === 'string' ? result : result?.response;
                     shouldWriteHistory = false;
+                }
+            }
+
+            // R11.6: process lorebook memory writes synchronously before returning to OC
+            for (const action of stSideActions) {
+                if (action.type === 'write_memory') {
+                    try {
+                        lorebook.upsertMemoryEntry(character, action);
+                        console.info(`[openclaw-bridge-plugin] Memory written: entry_key=${action.entry_key} character=${character}`);
+                    } catch (memErr) {
+                        console.warn('[openclaw-bridge-plugin] Memory write failed:', memErr?.message);
+                    }
                 }
             }
 

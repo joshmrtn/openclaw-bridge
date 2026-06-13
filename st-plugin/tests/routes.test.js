@@ -998,6 +998,45 @@ describe('plugin routes', () => {
         expect(requestGenerate).toHaveBeenCalledWith(expect.any(Object), undefined);
     });
 
+    test('POST /generate processes st_side write_memory actions before returning (R11.1, R11.6)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const stSideActions = [{ type: 'write_memory', entry_key: 'core_facts', content: 'Josh: engineer', tier: 1 }];
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'I remember you now.', actions: [], st_side_actions: stSideActions });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'core_facts', tier: 1, created: true });
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => ({ owner_user_ids: ['discord:1'] })) }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory };
+        });
+        jest.doMock('../lorebook', () => ({ upsertMemoryEntry }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { character: 'Frog', message: 'Hi', user_id: 'discord:1' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', stSideActions[0]);
+        expect(res.body.response).toBe('I remember you now.');
+    });
+
     test('POST /generate with is_heartbeat=true uses [HEARTBEAT] prefix and writes log entry (R10)', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
         const requestGenerate = jest.fn().mockResolvedValue({ response: 'Hello from the void!', actions: [] });

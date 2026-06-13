@@ -25,7 +25,8 @@ const STATE = {
     reconnectTimer: null,
     pending: new Map(),
     characterLocks: new Map(),
-    pendingActions: new Map(), // characterName → action[] during active generation
+    pendingActions: new Map(),     // characterName → action[] during active generation
+    pendingStSideActions: new Map(), // characterName → st_side action[] (lorebook writes, etc.)
     notificationRoot: null,
     notificationList: null,
     notificationsCollapsed: false,
@@ -589,6 +590,27 @@ function queueCharacterAction(actionType, params) {
     return JSON.stringify({ success: true, message: `Action queued: ${actionType}` });
 }
 
+function queueStSideAction(actionType, params) {
+    const ctx = getStContext();
+    const charIdx = typeof ctx.characterId === 'number' ? ctx.characterId : -1;
+    const characterName = charIdx >= 0 ? ctx.characters?.[charIdx]?.name : null;
+
+    if (!characterName) {
+        console.warn('[openclaw-bridge] st_side tool called but no active character');
+        return JSON.stringify({ success: false, error: 'No active character' });
+    }
+
+    const pending = STATE.pendingStSideActions.get(characterName);
+    if (!pending) {
+        console.warn('[openclaw-bridge] st_side tool called outside active generation for:', characterName);
+        return JSON.stringify({ success: false, error: 'No active generation context' });
+    }
+
+    pending.push({ type: actionType, ...params });
+    console.info('[openclaw-bridge] Queued st_side action:', actionType, 'for', characterName);
+    return JSON.stringify({ success: true, message: `Memory queued: ${actionType}` });
+}
+
 function registerBridgeTools() {
     const context = getStContext();
     if (typeof context?.registerFunctionTool !== 'function') {
@@ -665,6 +687,28 @@ function registerBridgeTools() {
             action: async (params) => queueCharacterAction(actionType, params),
         });
     }
+
+    // Memory tool — st_side action: executed by ST plugin before response returns to OC (R11)
+    context.registerFunctionTool({
+        name: 'openclaw_write_memory',
+        displayName: 'Write Memory',
+        description: "Write or update a persistent memory entry in this character's lorebook. " +
+            'Use entry_key="core_facts" for the always-active Tier 1 memory (injected every generation — keep it concise). ' +
+            'Use a descriptive key for Tier 2 episode memories that fire on keywords. ' +
+            'Updates the existing entry in place; never creates duplicates.',
+        parameters: {
+            type: 'object',
+            properties: {
+                entry_key: { type: 'string', description: 'Unique identifier for this memory, e.g. "core_facts" or "conversation_bridge_project".' },
+                content: { type: 'string', description: 'The memory content to store. For core_facts: one subject per line with comma-separated facts.' },
+                tier: { type: 'number', description: '1 = always injected (no keywords, default), 2 = keyword-triggered. Use 1 for core facts, 2 for episode memories.' },
+                keywords: { type: 'string', description: 'Comma-separated trigger keywords for tier 2 entries. Ignored for tier 1.' },
+            },
+            required: ['entry_key', 'content'],
+        },
+        stealth: true,
+        action: async (params) => queueStSideAction('write_memory', params),
+    });
 
     console.info('[openclaw-bridge] Registered bridge function tools:', toolDefs.map(t => t.name));
 }
@@ -960,12 +1004,14 @@ async function handleGenerateRequest(payload) {
     console.info('[openclaw-bridge] handleGenerateRequest received:', { requestId, character, messagePreview: message?.substring(0, 50) });
 
     STATE.pendingActions.set(character, []);
+    STATE.pendingStSideActions.set(character, []);
 
     try {
         console.info('[openclaw-bridge] Starting generation with character lock');
         const response = await withCharacterLock(character, () => generateForCharacter(character, message));
         const actions = STATE.pendingActions.get(character) || [];
-        console.info('[openclaw-bridge] Generation completed:', { requestId, responseLength: response?.length, actionsCount: actions.length, responsePreview: response?.substring(0, 100) });
+        const stSideActions = STATE.pendingStSideActions.get(character) || [];
+        console.info('[openclaw-bridge] Generation completed:', { requestId, responseLength: response?.length, actionsCount: actions.length, stSideActionsCount: stSideActions.length, responsePreview: response?.substring(0, 100) });
         if (!response) {
             sendSocketMessage({ type: 'generate_error', requestId, error: 'Generation returned empty response — check LLM model/connection' });
             return;
@@ -975,6 +1021,7 @@ async function handleGenerateRequest(payload) {
             requestId,
             response,
             actions,
+            st_side_actions: stSideActions,
         });
     } catch (error) {
         console.error('[openclaw-bridge] Generation failed:', { requestId, error: error?.message || String(error), stack: error?.stack });
@@ -985,6 +1032,7 @@ async function handleGenerateRequest(payload) {
         });
     } finally {
         STATE.pendingActions.delete(character);
+        STATE.pendingStSideActions.delete(character);
     }
 }
 
@@ -1029,15 +1077,19 @@ function startHttpPollingFallback() {
             if (msg.type === 'generate') {
                 const payload = msg.payload || {};
                 STATE.pendingActions.set(payload.character, []);
+                STATE.pendingStSideActions.set(payload.character, []);
                 let responseText;
                 let actions = [];
+                let stSideActions = [];
                 try {
                     responseText = await withCharacterLock(payload.character, () => generateForCharacter(payload.character, payload.message));
                     actions = STATE.pendingActions.get(payload.character) || [];
+                    stSideActions = STATE.pendingStSideActions.get(payload.character) || [];
                 } finally {
                     STATE.pendingActions.delete(payload.character);
+                    STATE.pendingStSideActions.delete(payload.character);
                 }
-                const responseBody = JSON.stringify({ type: 'generate_response', requestId: msg.requestId, response: responseText, actions });
+                const responseBody = JSON.stringify({ type: 'generate_response', requestId: msg.requestId, response: responseText, actions, st_side_actions: stSideActions });
                 let postResp = await fetch('/api/plugins/openclaw-bridge/http-response', {
                     method: 'POST',
                     credentials: 'same-origin',

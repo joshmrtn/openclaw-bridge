@@ -299,7 +299,7 @@ function handleMessage(rawMessage) {
         return;
     }
 
-    pending.resolve({ response, actions: message.actions || [] });
+    pending.resolve({ response, actions: message.actions || [], st_side_actions: message.st_side_actions || [] });
 }
 
 // HTTP polling helpers for extensions that cannot open a persistent WS.
@@ -332,7 +332,7 @@ function handleHttpResponse(message) {
         return true;
     }
 
-    pending.resolve({ response, actions: message.actions || [] });
+    pending.resolve({ response, actions: message.actions || [], st_side_actions: message.st_side_actions || [] });
     return true;
 }
 

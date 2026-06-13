@@ -48,7 +48,7 @@ describe('session-manager behavior', () => {
         const msg = JSON.stringify({ type: 'generate_response', requestId, response: 'OK-RESP' });
         sessionManager.handleMessage(Buffer.from(msg));
 
-        await expect(promise).resolves.toEqual({ response: 'OK-RESP', actions: [] });
+        await expect(promise).resolves.toEqual({ response: 'OK-RESP', actions: [], st_side_actions: [] });
 
         sessionManager.unregisterClient(fakeClient);
     });
@@ -71,6 +71,7 @@ describe('session-manager behavior', () => {
         await expect(promise).resolves.toEqual({
             response: 'posting now',
             actions: [{ type: 'discord_post', content: 'Hello!' }],
+            st_side_actions: [],
         });
 
         sessionManager.unregisterClient(fakeClient);
@@ -187,7 +188,7 @@ describe('session-manager behavior', () => {
             response: 'still-works',
         })));
 
-        await expect(promise).resolves.toEqual({ response: 'still-works', actions: [] });
+        await expect(promise).resolves.toEqual({ response: 'still-works', actions: [], st_side_actions: [] });
 
         sessionManager.unregisterClient(fakeClient);
     });

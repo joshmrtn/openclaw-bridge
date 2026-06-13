@@ -125,6 +125,28 @@ openclaw skills list --agent {agentname}
 
 ---
 
+## Character memory (R11)
+
+During generation, a character can call the `openclaw_write_memory` tool to persist facts
+to a dedicated per-character lorebook. Entries are written to:
+
+```
+data/default-user/worlds/{character}-auto-memory.json
+```
+
+For those entries to be injected into future generations, SillyTavern must know about the
+lorebook. Link it once in the ST UI:
+
+1. Open the character's card in SillyTavern → **Creator** tab → **Books** section.
+2. Add `{character}-auto-memory` as an attached lorebook.
+   (The file is created automatically on the character's first `openclaw_write_memory` call.)
+3. Save the character.
+
+After linking, all memory entries the character writes will be available in subsequent
+generations without further setup.
+
+---
+
 ## After changing ST model or API settings
 
 The headless browser caches its session at startup. If you change the LLM,
