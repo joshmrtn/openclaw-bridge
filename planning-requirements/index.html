@@ -1,0 +1,660 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bridge OpenClaw and SillyTavern so AI companion characters maintain a single identity across all communication channels.">
+      
+      
+      
+        <link rel="canonical" href="https://joshmrtn.github.io/openclaw-bridge/planning-requirements/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>OpenClaw Bridge — Requirements - openclaw-bridge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#openclaw-bridge-requirements" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="openclaw-bridge" class="md-header__button md-logo" aria-label="openclaw-bridge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            openclaw-bridge
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              OpenClaw Bridge — Requirements
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/joshmrtn/openclaw-bridge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    joshmrtn/openclaw-bridge
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="openclaw-bridge" class="md-nav__button md-logo" aria-label="openclaw-bridge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    openclaw-bridge
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/joshmrtn/openclaw-bridge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    joshmrtn/openclaw-bridge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding-a-character/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a character
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../oc-security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/joshmrtn/openclaw-bridge/edit/main/docs/planning-requirements.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="openclaw-bridge-requirements">OpenClaw Bridge — Requirements<a class="headerlink" href="#openclaw-bridge-requirements" title="Permanent link">&para;</a></h1>
+<p>R1: Channel Communication
+R1.1 A user message sent to a character's bot on any OC-supported channel (Discord, Telegram, etc.) must produce a response from that specific character — not from the base LLM, not from the OC agent, not from a different character.
+R1.2 The response must be generated using the character's full SillyTavern context: character card, lorebook, active persona, author's notes, and chat history. Partial context is not acceptable.
+R1.3 The system must support multiple characters simultaneously, each with their own channel presence (e.g. separate Discord bots). A message to Frog's bot must never produce a response in Toad's voice and vice versa.
+R1.4 Channel messages must be processed without disrupting the user's active SillyTavern session. If she is chatting with Frog in ST's UI and a Discord message arrives for Toad, her active Frog session must remain exactly as it was — no page switches, no interruptions, no chat reloads.
+R1.5 If no SillyTavern session is open at all (browser closed, ST running headless), the system must handle this gracefully — either queue the message and process it when a session opens, or return a configurable "unavailable" message to the channel. It must not respond as the ST Assistant or any default character.
+R1.6 Response time must be bounded. If generation does not complete within a configurable timeout, the system returns a fallback message to the channel and logs the failure. It does not hang indefinitely.</p>
+<p>R2: Character Fidelity
+R2.1 The generated response must be indistinguishable in voice and personality from a response generated directly in SillyTavern's UI for the same character. If there is a detectable difference in character fidelity between a Discord response and a direct ST response, the requirement is not met.
+R2.2 The system must not require the character to be the "active" character in ST's UI in order to generate a response. Generation must be possible for any character regardless of which character is currently open in the browser.
+R2.3 The generation mechanism must not produce responses from the "SillyTavern Assistant" or any default/fallback character under any normal operating condition.</p>
+<p>R3: Memory and Continuity
+R3.1 Every inbound channel message and its response must be written to that character's SillyTavern chat history. After a Discord conversation, opening that character in ST must show the complete exchange as part of the chat record.
+R3.2 Chat history writes must be atomic. A partial write (e.g. the user message was written but the response was not due to a crash) must not corrupt the chat file.
+R3.3 History writes must not produce duplicate entries. If a write is retried, the result must be identical to a single successful write.
+R3.4 Autonomous actions taken by the OC agent on a character's behalf (posting, creating content, scheduled tasks) must also be recorded in that character's ST chat history, clearly marked as autonomous actions.
+R3.5 The chat history written by this system must be in a format fully compatible with ST's native JSONL format. Opening the character in ST must show the history correctly with no errors or malformed entries.</p>
+<p>R4: Trust and Security
+R4.1 The system must distinguish between the character's owner and other users on any channel. The owner's identity is configured per character and per platform (e.g. discord:USER_ID).
+R4.2 Owner messages must be labeled structurally before reaching generation. The label must be injected by code, not inferred by the model.
+R4.3 Guest messages must be labeled structurally before reaching generation. A guest must not be able to elevate their trust level to owner through any message content, regardless of what they write.
+R4.4 Guest messages must never trigger outbound actions (posting to channels, scheduling tasks, modifying configuration). Only owner messages and autonomous scheduled sessions may trigger actions.
+R4.5 The bridge auth token must never be stored in browser localStorage, browser sessionStorage, or any other client-side persistent storage. The extension must not hold the token.
+R4.6 The plugin endpoints must reject requests without a valid Bearer token with HTTP 401. No endpoint may be accessible without authentication.
+R4.7 OC agent tool policy must structurally deny exec, process, email, calendar, gateway reconfiguration, and cron creation. These denials must be enforced at the OC config layer, not solely by AGENTS.md instructions.</p>
+<p>R5: Outbound Actions (Character → OC Body)
+R5.1 A character in SillyTavern must be able to instruct the OC agent to perform an action on their behalf (e.g. post a message to Discord, write a file to their workspace).
+R5.2 Outbound action requests must originate from the ST character's generation — either through ST's function calling system or through a mechanism triggered by the character's response.
+R5.3 Every outbound action must be logged to ST chat history as an autonomous action entry (satisfying R3.4).
+R5.4 Outbound actions triggered from a guest conversation must be blocked. Only owner-initiated or scheduled sessions may trigger outbound actions.
+R5.5 The OC agent must confirm action completion back to the character's context in some form, so the character's memory reflects whether the action succeeded or failed.</p>
+<p>R6: Channel Output Formatting
+R6.1 Markup transformation must be toggleable per channel type. Some channels render markdown natively (Discord renders <code>*text*</code> as italics, which looks acceptable for action notation). Others do not (Telegram renders asterisks as literal characters, which is ugly). The default for each channel type should reflect how that channel actually renders markdown.
+R6.2 When transformation is enabled for a channel, SillyTavern roleplay markup (asterisk action notation, e.g. <em>Frog claps his hands</em>) must be converted to natural prose or cleanly removed — not left as raw asterisks.
+R6.3 The transformation must preserve semantic content. Removing action descriptions wholesale is not acceptable — the information they contain must be either converted to natural prose or consciously discarded with a documented rationale.
+R6.4 Markdown elements that render correctly on the target platform may be preserved. Markdown that does not render (e.g. tables in Discord) must be converted or removed when transformation is enabled.</p>
+<p>R7: Multi-Character Isolation
+R7.1 Characters must be fully isolated at every layer: OC agent workspace, ST chat history, trust configuration, channel bindings, and session state.
+R7.2 A message or action for one character must have zero effect on any other character's state, history, or channel presence.
+R7.3 Concurrent messages for different characters must be processed independently and simultaneously without interference.
+R7.4 Concurrent messages for the same character must be serialized — processed one at a time in arrival order. No message must be dropped or produce a corrupted response due to concurrency.</p>
+<p>R8: Installation and Operation
+R8.1 Installation on a supported platform (macOS, Ubuntu) must be completable by following setup.sh and README.md without requiring knowledge of Node.js, Python, or OC internals.
+R8.2 Adding a new character must be completable entirely through SillyTavern's UI after initial setup. No terminal commands must be required for routine character management.
+R8.3 The system must start reliably via start.sh. If a required dependency (Docker, OC gateway) is not running, the script must produce a clear error message identifying what is missing rather than failing silently.
+R8.4 The system must continue operating if SillyTavern is restarted. The OC agents and channel connections must reconnect or queue messages appropriately.
+R8.5 The system must continue operating if the OC gateway is restarted. The ST plugin and extension must reconnect or handle the unavailability gracefully.</p>
+<p>R9: Known Open Problems (Must Be Resolved Before v1.0)
+These are requirements where the correct implementation is not yet determined. They are listed explicitly because they represent open technical risk.
+R9.1 — Non-active character generation without UI disruption
+The current implementation requires a character to be active in ST's UI to generate a response without producing incorrect output. Switching active characters disrupts the user's session. A solution must be found that:</p>
+<p>Generates a correct, full-fidelity response for any character
+Does not switch the active character in ST's UI
+Does not interrupt an in-progress chat session
+Does not produce responses from the wrong character or the ST Assistant</p>
+<p>Candidate approaches to investigate:</p>
+<p>Opening a character's chat in a background/hidden context without affecting the visible UI
+Using ST's generateRaw() with a fully assembled prompt constructed from the character's data, bypassing the active character dependency
+Running a second headless ST instance for background generation
+Finding an ST internal API that accepts a character ID without requiring UI state change</p>
+<p>This is the highest priority open problem. R2.2 and R2.3 cannot be met until R9.1 is resolved.
+R9.2 — Headless operation
+The extension runs in ST's browser UI. If the browser is closed, generation cannot occur. The system must define its behavior when no browser session is active:</p>
+<p>Queue messages and process when a session opens (requires persistent queue)
+Return a configurable unavailable message
+Run ST in a headless browser (Playwright/Puppeteer) for background generation</p>
+<p>The chosen approach must be documented and implemented. R1.5 depends on this.
+R9.3 — OC agent must not be in the inbound message path
+Spike result (2026-06-09): internal <code>message:received</code> hooks are additive — the OC agent LLM runs regardless of what the hook pushes to <code>event.messages</code>. There is no OC config option to force exclusive tool use. Typed plugin hooks with cancel/claim semantics are required.</p>
+<p>The inbound message path must bypass the OC agent LLM entirely. The solution is an OC typed plugin hook using <code>before_dispatch</code>, which intercepts the message before agent routing and returns a synthetic reply, preventing the agent from running at all.</p>
+<p>Implementation: an OC plugin (<code>oc-plugin/</code>) registers <code>before_dispatch</code>. When a message arrives for an agent that has an active linked ST character (per <code>character-links.json</code>), the plugin:
+1. Intercepts the message by returning <code>{ handled: true, text }</code> — preventing agent routing and LLM invocation
+2. Calls the ST plugin <code>/generate</code> endpoint and awaits the response
+3. Returns the ST-generated response as a synthetic reply delivered to the channel
+4. If ST is unavailable or generation fails, returns <code>undefined</code> — the agent handles it with its character-bridge skill as a fallback</p>
+<p>Status: Implemented in <code>oc-plugin/src/index.ts</code>.</p>
+<p>The OC agent LLM is only involved for outbound character actions (R5.x), where it receives instructions from ST and uses the character-bridge skill to act on them. Minimum model requirements for that surface are a separate concern documented under R5.x implementation.</p>
+<p>R10: Autonomous Presence (Heartbeat)
+The character must be able to maintain a persistent presence — acting on its own initiative on a schedule, not only in response to inbound messages. OC's scheduler is the clock; ST's generation pipeline is the brain; the existing outbound action tools (R5.x) are the hands.</p>
+<p>R10.1 Each character link may be configured with a heartbeat schedule (e.g. "every 2 hours", "daily at 9am"). When the schedule fires, the OC plugin calls ST's /generate endpoint with an autonomous trigger — not a user message.
+R10.2 The trigger payload must carry a clear signal that this is a scheduled wake, not an inbound user message. The character must be able to distinguish a heartbeat session from a conversation in its prompt context.
+R10.3 Heartbeat sessions are autonomous: they may trigger outbound actions (R5.x) without an owner user_id present. Guest-message action blocking (R4.4, R5.4) must not apply to heartbeat sessions.
+R10.4 If the character returns an empty response during a heartbeat, nothing is posted to any channel and no history entry is written. A non-empty response follows normal outbound delivery and history rules.
+R10.5 The most recent N messages of the character's chat history must be injected into the heartbeat context so the character has a sense of recent events when it wakes. N is configurable; default is enough to cover roughly the last day of conversation.
+R10.6 Heartbeat activity must be logged to ST chat history as an autonomous action entry (satisfying R3.4), including what the character said and which actions it took.
+R10.7 A second heartbeat trigger — conversation idle detection — must fire when a conversation goes quiet after an active exchange (configurable threshold, default 2 hours of no messages). This lets the character summarize what just happened while the context is still fresh, rather than waiting for the next scheduled interval.</p>
+<p>Design note: Do not use OC's built-in agent heartbeat mechanism (heartbeat_prompt_contribution hook) — that still runs the OC agent LLM, which conflicts with R9.3. The OC plugin must schedule and execute the heartbeat call directly, bypassing the agent entirely.</p>
+<p>R11: Character Memory Management
+Characters must be able to create and maintain their own persistent memories. The goal is a character that accumulates knowledge over time — facts about users, decisions it has made, summaries of past conversations — without the owner having to manage any of it manually.</p>
+<p>Two tiers of lorebook memory are supported, plus a secondary file-based store:</p>
+<p>Core facts entry (always-active, Tier 1): A single designated lorebook entry per character that is always injected regardless of keywords. Contains the character's current model of its world — facts about users, key relationship details, standing decisions. Updated deliberately when new information is learned, not frequently. Because it changes slowly, it sits stably in the LLM's prompt cache prefix and has minimal cost impact.</p>
+<p>Event memories (keyword-triggered, Tier 2): Specific episodes and context — "the conversation about the bridge project", "when Josh was frustrated with the deploy". These only fire when their keywords appear in context, making them lower-cost than always-active entries.</p>
+<p>File memory (secondary): Files written to the OC workspace via the existing file_write action (R5.x). Useful for content too large or irregular for lorebook entries, or for a scratchpad that spans multiple characters.</p>
+<p>R11.1 A character must be able to write or update a lorebook memory entry during generation by calling a memory tool. The tool takes an entry_key to target a specific named entry. The entry persists immediately and is available for subsequent generations.
+R11.2 Memory writes must update existing entries in place, not append new ones. A write to an existing entry_key replaces its content. This prevents lorebook bloat and keeps the prompt prefix stable — a character that appends a new entry every session will degrade its own cache hit rate.
+R11.3 A character must not be able to modify lorebook entries not created by the memory tool (author-written entries). Auto-written entries are identified by a consistent namespace prefix (e.g. [auto-memory]) and a programmatic marker field in the lorebook entry metadata.
+R11.4 The Tier 1 always-active entry must be designated as such at creation time and must not require keyword matches to inject. One always-active entry per character is the intended design; additional always-active entries should be strongly discouraged to contain cost.
+R11.5 During a heartbeat or idle-detection session (R10), a character must be able to summarize recent chat history and write the summary as a memory entry, compressing old context into persistent knowledge rather than losing it to context pruning.
+R11.6 The memory write mechanism must work in both connected (extension live) and headless operation. In headless mode, the OC plugin calls a dedicated ST plugin endpoint to write the lorebook entry directly to the lorebook file.
+R11.7 File memory: the existing file_write and file_read (R5.x) actions satisfy the secondary store requirement. No additional mechanism is needed for files.</p>
+<p>Design note — lorebook write path: Writing a lorebook entry during generation is most naturally done from within the browser extension (direct access to SillyTavern.getContext() world_info APIs). The extension queues the write as a st_side action; unlike outbound channel actions, st_side actions are executed by the ST plugin before the response is returned to the OC plugin, so the entry is persisted synchronously as part of the same generation cycle.</p>
+<p>Design note — core facts entry format: The recommended format for the Tier 1 always-active entry is one subject per line, with facts as a short comma-separated list. This is terse enough for context efficiency, natural enough that the LLM writes and reads it reliably, and easy to update in place without a parser:</p>
+<p>Josh: software engineer, working on openclaw-bridge, has a goose t-shirt, likes frogs and toads
+  Last active: 2026-06-11</p>
+<p>Structured triple formats (entity-relationship-entity) were considered and rejected: they require a collation pipeline to produce readable output and LLMs reliably drift from strict format constraints over time. The per-subject line format achieves comparable terseness without any parsing infrastructure. If the memory system grows to require cross-character aggregation or programmatic querying, revisiting a structured format would make sense at that point.</p>
+<p>Out of Scope for v1.0
+These are explicitly deferred:</p>
+<p>WhatsApp support (scaffold exists, not implemented)
+Matrix/Element support
+Character-to-character communication (multiple characters in one conversation)
+Web UI for OC configuration (terminal + ST UI is sufficient for v1)</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "search.suggest", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
