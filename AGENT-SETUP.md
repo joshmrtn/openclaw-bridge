@@ -3,7 +3,7 @@
 This guide walks through creating an OpenClaw agent for a SillyTavern character
 so it can respond via Discord, Telegram, or other OC channels.
 
-Complete `README.md` steps 1–5 (one-time setup) before following this guide.
+Complete the `README.md` one-time setup (run `./setup.sh`) before following this guide.
 
 ---
 

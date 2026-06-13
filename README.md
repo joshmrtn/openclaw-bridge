@@ -17,7 +17,7 @@ Before starting, ensure:
 
 ## One-time setup
 
-### 1. Clone and bootstrap
+### 1. Clone and run setup
 
 ```bash
 git clone https://github.com/joshmrtn/openclaw-bridge.git
@@ -25,44 +25,34 @@ cd openclaw-bridge
 ./setup.sh
 ```
 
-`setup.sh` installs npm dependencies, generates a bridge auth token at
-`data/openclaw-bridge/bridge-token.txt`, and (if `./sillytavern` exists)
-symlinks the plugin and extension into your local ST checkout.
+`setup.sh` does the following automatically:
 
-### 2. Install the ST plugin
+- Checks Node.js 22+ and the OpenClaw CLI
+- Installs plugin dependencies
+- Finds your SillyTavern installation and copies the plugin and extension into it
+  (it checks common locations and prompts you to confirm or enter a path if needed)
+- Generates a bridge auth token at `data/openclaw-bridge/bridge-token.txt`
+- Symlinks the token and character-links file into `~/.openclaw/openclaw-bridge/`
+  so the OC gateway plugin can find them without extra configuration
+- Installs the OC gateway plugin if the `openclaw` CLI is in your PATH
 
-Copy `st-plugin/` into SillyTavern's `plugins/` directory:
-
-```bash
-cp -r st-plugin /path/to/SillyTavern/plugins/openclaw-bridge
-```
-
-If you cloned the repo into `./sillytavern`, `./setup.sh` already created a
-development symlink — no copy needed.
-
-Restart SillyTavern. Verify the plugin loaded:
+After setup, **restart SillyTavern** and **refresh your browser tab**. Verify the plugin loaded:
 
 ```bash
 curl http://localhost:8000/api/plugins/openclaw-bridge/status
 # Expected: {"status":"ok",...}
 ```
 
-### 3. Install the ST extension
-
-Copy `st-extension/` into SillyTavern's extensions directory:
+If `setup.sh` could not find or install into SillyTavern automatically, install manually:
 
 ```bash
+cp -r st-plugin /path/to/SillyTavern/plugins/openclaw-bridge
 cp -r st-extension /path/to/SillyTavern/public/scripts/extensions/openclaw-bridge
 ```
 
-If `./sillytavern` exists, `./setup.sh` already symlinked this.
+### 2. Install the OC gateway plugin
 
-Refresh the SillyTavern browser tab. The extension connects to the plugin's
-WebSocket automatically.
-
-### 4. Install the OC gateway plugin
-
-`./setup.sh` installs the plugin automatically if `openclaw` is in your PATH.
+`./setup.sh` installs this automatically when `openclaw` is in your PATH.
 To install or reinstall manually:
 
 ```bash
@@ -78,10 +68,10 @@ openclaw plugins list
 ```
 
 The plugin reads data from `~/.openclaw/openclaw-bridge/` by default.
-`setup.sh` creates symlinks there pointing at `data/openclaw-bridge/`, so
-the token and character links are shared automatically.
+`setup.sh` symlinks `data/openclaw-bridge/` there so the token and character
+links are shared without any extra configuration.
 
-### 5. Headless mode
+### 3. Headless mode
 
 The plugin launches a headless Playwright browser automatically when ST starts,
 so generation always works even without an open browser tab. No extra
