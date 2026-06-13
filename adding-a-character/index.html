@@ -881,7 +881,7 @@
 <h2 id="step-1-create-the-oc-agent">Step 1 — Create the OC agent<a class="headerlink" href="#step-1-create-the-oc-agent" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>openclaw<span class="w"> </span>agents<span class="w"> </span>add<span class="w"> </span><span class="o">{</span>agentname<span class="o">}</span><span class="w"> </span>--workspace<span class="w"> </span>~/.openclaw/workspace-<span class="o">{</span>agentname<span class="o">}</span>
 </code></pre></div>
-<p>Use the character's name in lowercase with hyphens: <code>gerard-fontaine</code> for "Gerard Fontaine".</p>
+<p>Use the character's name in lowercase, e.g. <code>frog</code> for "Frog".</p>
 <hr />
 <h2 id="step-2-install-the-character-bridge-skill">Step 2 — Install the character-bridge skill<a class="headerlink" href="#step-2-install-the-character-bridge-skill" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>cp<span class="w"> </span>-r<span class="w"> </span>/path/to/openclaw-bridge/skills/character-bridge<span class="w"> </span><span class="se">\</span>
@@ -954,8 +954,8 @@
 <p>Both triggers run inside the OC plugin's 60-second polling loop.</p>
 <h3 id="enable-heartbeat">Enable heartbeat<a class="headerlink" href="#enable-heartbeat" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Gerard Fontaine&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--agent<span class="w"> </span>gerard<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--owner<span class="w"> </span><span class="s2">&quot;discord:YOUR_USER_ID&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>--heartbeat-channel<span class="w"> </span><span class="s2">&quot;discord-mybotname&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>--heartbeat-interval-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
