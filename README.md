@@ -12,7 +12,6 @@ Before starting, ensure:
 - **SillyTavern** is installed and running (default: `http://localhost:8000`)
 - **OpenClaw gateway** is installed and running (`openclaw health` returns ok)
 - **Node.js 22+** is available (`node -v`)
-- **CSRF:** the bridge fetches ST's CSRF token automatically — you do not need to set `disableCsrf: true`
 
 ---
 
