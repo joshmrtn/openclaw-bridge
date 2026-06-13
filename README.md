@@ -25,6 +25,13 @@ cd openclaw-bridge
 ./setup.sh
 ```
 
+If you know where SillyTavern is installed, pass it directly to skip all prompts
+(useful for scripted or agent-driven installs):
+
+```bash
+./setup.sh --st-path ~/SillyTavern
+```
+
 `setup.sh` does the following automatically:
 
 - Checks Node.js 22+ and the OpenClaw CLI

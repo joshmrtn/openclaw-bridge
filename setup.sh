@@ -1,7 +1,40 @@
 #!/usr/bin/env bash
+# setup.sh — one-time bootstrap for openclaw-bridge
+#
+# Usage:
+#   ./setup.sh [options]
+#
+# Options:
+#   --st-path PATH   Path to your SillyTavern installation (skips auto-discovery
+#                    and all interactive prompts; safe for agent/CI use)
+#   --yes            Auto-confirm all prompts (uses the first auto-detected ST
+#                    installation without asking; ignored if --st-path is set)
+#   --skip-st        Skip plugin/extension installation entirely
+#   --help           Show this help
+#
+# Non-interactive example (agent or CI):
+#   ./setup.sh --st-path ~/SillyTavern
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ─── Argument parsing ─────────────────────────────────────────────────────────
+
+ARG_ST_PATH=""
+ARG_YES=false
+ARG_SKIP_ST=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --st-path)  ARG_ST_PATH="${2:-}"; ARG_ST_PATH="${ARG_ST_PATH/#\~/$HOME}"; shift 2 ;;
+        --yes|-y)   ARG_YES=true; shift ;;
+        --skip-st)  ARG_SKIP_ST=true; shift ;;
+        --help|-h)
+            sed -n '2,/^set -/{ /^set -/d; s/^# \{0,1\}//; p }' "$0"
+            exit 0 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
 
 echo "openclaw-bridge setup"
 echo "=============================="
@@ -86,13 +119,28 @@ install_into_st() {
 echo "--- SillyTavern plugin + extension ---"
 echo
 
-if [[ -d "${script_dir}/sillytavern" ]]; then
+if [[ "${ARG_SKIP_ST}" == true ]]; then
+    echo "Skipping ST installation (--skip-st)."
+
+elif [[ -d "${script_dir}/sillytavern" ]]; then
     # Developer checkout: ST is a submodule in the repo — use symlinks so edits
     # to the source are reflected immediately without re-running setup.
     echo "Developer mode: SillyTavern submodule detected — installing as symlinks."
     bash "${script_dir}/dev-setup.sh"
+
+elif [[ -n "${ARG_ST_PATH}" ]]; then
+    # Non-interactive: path supplied via --st-path; install directly.
+    echo "Using provided path: ${ARG_ST_PATH}"
+    if ! is_st_dir "${ARG_ST_PATH}"; then
+        echo "Warning: '${ARG_ST_PATH}' does not look like a SillyTavern installation."
+        echo "(Expected to find plugins/ and public/scripts/extensions/ inside it.)"
+        echo "Installing anyway as --st-path was explicit."
+        mkdir -p "${ARG_ST_PATH}/plugins" "${ARG_ST_PATH}/public/scripts/extensions"
+    fi
+    install_into_st "${ARG_ST_PATH}"
+
 else
-    # End-user mode: find ST, confirm, and copy.
+    # Interactive mode: auto-discover, then confirm or prompt.
 
     st_found=()
     for candidate in \
@@ -119,19 +167,19 @@ else
 
     elif [[ ${#st_found[@]} -eq 1 ]]; then
         echo "Found SillyTavern at: ${st_found[0]}"
-        _answer=""
-        if [[ -t 0 ]]; then
+        if [[ "${ARG_YES}" == true ]]; then
+            ST_PATH="${st_found[0]}"
+        elif [[ -t 0 ]]; then
+            _answer=""
             read -r -p "Install plugin and extension here? [Y/n] " _answer || _answer=""
-        fi
-        case "${_answer}" in
-            [nN]*)
-                if [[ -t 0 ]]; then
+            case "${_answer}" in
+                [nN]*)
                     read -r -p "Enter the path to your SillyTavern installation: " ST_PATH || ST_PATH=""
                     ST_PATH="${ST_PATH/#\~/$HOME}"
-                fi
-                ;;
-            *) ST_PATH="${st_found[0]}" ;;
-        esac
+                    ;;
+                *) ST_PATH="${st_found[0]}" ;;
+            esac
+        fi
 
     else
         echo "Found multiple SillyTavern installations:"
@@ -143,23 +191,25 @@ else
             fi
         done
         echo
-        _sel="1"
-        if [[ -t 0 ]]; then
-            read -r -p "Select installation [1]: " _sel || _sel="1"
+        if [[ "${ARG_YES}" == true ]]; then
+            ST_PATH="${st_found[0]}"
+            echo "Using default: ${ST_PATH}"
+        elif [[ -t 0 ]]; then
+            _sel=""
+            read -r -p "Select installation [1]: " _sel || _sel=""
             _sel="${_sel:-1}"
-        fi
-        if [[ "${_sel}" =~ ^[0-9]+$ ]] && (( _sel >= 1 && _sel <= ${#st_found[@]} )); then
-            ST_PATH="${st_found[$((_sel-1))]}"
-        else
-            # treat non-numeric input as a custom path
-            ST_PATH="${_sel/#\~/$HOME}"
+            if [[ "${_sel}" =~ ^[0-9]+$ ]] && (( _sel >= 1 && _sel <= ${#st_found[@]} )); then
+                ST_PATH="${st_found[$((_sel-1))]}"
+            else
+                ST_PATH="${_sel/#\~/$HOME}"
+            fi
         fi
     fi
 
     if [[ -z "${ST_PATH}" ]]; then
         echo
         echo "No path provided — skipping plugin installation."
-        echo "Install manually after setup:"
+        echo "Re-run with --st-path to install non-interactively, or install manually:"
         echo "  cp -r '${script_dir}/st-plugin'    /path/to/SillyTavern/plugins/openclaw-bridge"
         echo "  cp -r '${script_dir}/st-extension' /path/to/SillyTavern/public/scripts/extensions/openclaw-bridge"
     elif ! is_st_dir "${ST_PATH}"; then
@@ -177,7 +227,7 @@ else
                 ;;
             *)
                 echo "Skipping plugin installation."
-                echo "Install manually after setup:"
+                echo "Re-run with --st-path to install non-interactively, or install manually:"
                 echo "  cp -r '${script_dir}/st-plugin'    ${ST_PATH}/plugins/openclaw-bridge"
                 echo "  cp -r '${script_dir}/st-extension' ${ST_PATH}/public/scripts/extensions/openclaw-bridge"
                 ;;
