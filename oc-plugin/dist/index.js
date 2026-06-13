@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { resolve } from "node:path";
 // ---------------------------------------------------------------------------
 // Config
@@ -30,6 +31,77 @@ function readLinkState() {
     catch {
         return {};
     }
+}
+const senderCache = new Map();
+const SENDER_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+function senderCacheKey(channelId, senderId) {
+    return `${channelId}\x00${senderId}`;
+}
+function pruneExpiredSenderCache() {
+    const now = Date.now();
+    for (const [key, entry] of senderCache) {
+        if (now - entry.cachedAt > SENDER_CACHE_TTL_MS)
+            senderCache.delete(key);
+    }
+}
+// Read the Discord bot token from the OC config for the given account.
+// Returns null if no plain-string token is found (SecretRef values cannot be
+// resolved without the OC secrets runtime).
+function resolveDiscordToken(cfg, accountId) {
+    const discordCfg = cfg?.channels?.discord;
+    if (!discordCfg)
+        return null;
+    const effectiveId = accountId ?? discordCfg.defaultAccount;
+    const raw = effectiveId
+        ? (discordCfg.accounts?.[effectiveId]?.token ?? discordCfg.token)
+        : discordCfg.token;
+    return typeof raw === "string" ? raw : null;
+}
+// Fetch the sender's avatar URL from the Discord REST API.
+// Returns the CDN URL (animated GIF for animated avatars) or a default colour
+// avatar URL when the user has no custom avatar. Returns null on any error.
+async function fetchDiscordAvatar(userId, botToken) {
+    return new Promise((resolve) => {
+        const req = httpsRequest({
+            hostname: "discord.com",
+            path: `/api/v10/users/${userId}`,
+            method: "GET",
+            headers: {
+                Authorization: `Bot ${botToken}`,
+                "User-Agent": "openclaw-bridge/0.1 (+https://github.com/joshmrtn/openclaw-bridge)",
+            },
+        }, (res) => {
+            let data = "";
+            res.on("data", (chunk) => (data += chunk));
+            res.on("end", () => {
+                try {
+                    const user = JSON.parse(data);
+                    if (!user?.id) {
+                        resolve(null);
+                        return;
+                    }
+                    if (user.avatar) {
+                        const ext = user.avatar.startsWith("a_") ? "gif" : "png";
+                        resolve(`https://cdn.discordapp.com/avatars/${userId}/${user.avatar}.${ext}?size=128`);
+                    }
+                    else {
+                        // Default avatar: new (pomelo) accounts use snowflake-based index;
+                        // legacy accounts with a non-zero discriminator use discriminator % 5.
+                        const idx = (user.discriminator && user.discriminator !== "0")
+                            ? Number(user.discriminator) % 5
+                            : Number(BigInt(userId) >> 22n) % 6;
+                        resolve(`https://cdn.discordapp.com/embed/avatars/${idx}.png`);
+                    }
+                }
+                catch {
+                    resolve(null);
+                }
+            });
+        });
+        req.setTimeout(3000, () => { req.destroy(); resolve(null); });
+        req.on("error", () => resolve(null));
+        req.end();
+    });
 }
 // ---------------------------------------------------------------------------
 // Output formatting (R6)
@@ -287,6 +359,46 @@ export default definePluginEntry({
     name: "OpenClaw Bridge",
     description: "Routes inbound messages to SillyTavern for character generation, bypassing the OC agent LLM",
     register(api) {
+        // inbound_claim fires when a message arrives and is claimed by an agent.
+        // It provides senderName — not available in before_dispatch — so we cache
+        // it here and fire an async Discord avatar fetch that resolves long before
+        // the ST generation cycle completes.
+        api.on("inbound_claim", (event, ctx) => {
+            const senderId = event.senderId ?? ctx.senderId;
+            const channelId = event.channel ?? ctx.channelId;
+            if (!senderId || !channelId)
+                return;
+            const accountId = ctx.accountId;
+            if (!characterForAccount(accountId ?? ""))
+                return; // only cache for our characters
+            if (senderCache.size > 500)
+                pruneExpiredSenderCache();
+            const key = senderCacheKey(channelId, senderId);
+            const existing = senderCache.get(key);
+            if (existing && Date.now() - existing.cachedAt < SENDER_CACHE_TTL_MS) {
+                existing.cachedAt = Date.now();
+                return;
+            }
+            const entry = {
+                name: event.senderName ?? null,
+                avatarUrl: existing?.avatarUrl ?? null, // preserve cached avatar on name refresh
+                cachedAt: Date.now(),
+            };
+            senderCache.set(key, entry);
+            // Kick off an async Discord avatar fetch. It resolves well within
+            // the ST generation window (Discord API ≈ 100-500ms; generation ≥ 5s).
+            const channelType = channelId.split("-")[0];
+            if (channelType === "discord") {
+                const token = resolveDiscordToken(api.config, accountId);
+                if (token) {
+                    fetchDiscordAvatar(senderId, token).then(avatarUrl => {
+                        const e = senderCache.get(key);
+                        if (e)
+                            e.avatarUrl = avatarUrl;
+                    }).catch(() => { });
+                }
+            }
+        });
         // before_dispatch fires before the message is dispatched to the agent.
         // Returning { handled: true, text } delivers the text as the reply and
         // prevents the OC agent LLM from running at all.
@@ -309,6 +421,13 @@ export default definePluginEntry({
             const senderId = ctx.senderId ?? event.senderId;
             const channelType = (ctx.channelId ?? event.channel ?? "").split("-")[0] || "unknown";
             const userId = senderId ? `${channelType}:${senderId}` : null;
+            // Resolve cached sender name and avatar (populated by inbound_claim hook)
+            const _cid = ctx.channelId ?? "";
+            const senderEntry = (senderId && _cid)
+                ? senderCache.get(senderCacheKey(_cid, senderId)) ?? null
+                : null;
+            const resolvedUserName = senderEntry?.name ?? null;
+            const resolvedUserAvatar = senderEntry?.avatarUrl ?? null;
             const token = getToken();
             if (!token) {
                 console.error("[openclaw-bridge] No auth token configured — cannot intercept message");
@@ -338,6 +457,8 @@ export default definePluginEntry({
                     character,
                     message: event.content,
                     user_id: userId,
+                    ...(resolvedUserName ? { user_name: resolvedUserName } : {}),
+                    ...(resolvedUserAvatar ? { user_avatar: resolvedUserAvatar } : {}),
                     channel: channelId || null,
                     ...(linkEntry.timeout_ms ? { timeout_ms: linkEntry.timeout_ms } : {}),
                 });
