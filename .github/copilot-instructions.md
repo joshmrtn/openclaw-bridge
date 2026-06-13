@@ -60,7 +60,7 @@ Do not attempt to move generation into the plugin. Do not attempt to call ST's L
 
 ### `force_chid` is what makes multi-character work
 
-`generateForCharacter()` passes `force_chid` to ST's `Generate()` to target a specific character by index regardless of which character is currently active in ST's UI. This is what allows Gerard to respond on Discord while the user is actively chatting with Edward in ST — no character switching, no UI disruption.
+`generateForCharacter()` passes `force_chid` to ST's `Generate()` to target a specific character by index regardless of which character is currently active in ST's UI. This is what allows Frog to respond on Discord while the user is actively chatting with Toad in ST — no character switching, no UI disruption.
 
 `characters.findIndex(c => c.name === characterName)` is how the name maps to a chid. If this returns -1 the character doesn't exist in ST — return a clean error, do not proceed.
 
@@ -90,8 +90,8 @@ Persisted JSON via `st-plugin/link-state.js`. Maps character name → `{ oc_agen
 
 ```json
 {
-  "Gerard": {
-    "oc_agent_id": "gerard",
+  "Frog": {
+    "oc_agent_id": "frog",
     "active": true,
     "owner_user_ids": ["discord:123456789012345678"]
   }

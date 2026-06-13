@@ -3,9 +3,9 @@
 #
 # Usage:
 #   ./scripts/verify.sh
-#   ./scripts/verify.sh --character "Gerard Fontaine"
-#   ./scripts/verify.sh --character "Gerard Fontaine" --test
-#   ./scripts/verify.sh --st-url http://myserver:8000 --character "Gerard Fontaine"
+#   ./scripts/verify.sh --character "Frog"
+#   ./scripts/verify.sh --character "Frog" --test
+#   ./scripts/verify.sh --st-url http://myserver:8000 --character "Frog"
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

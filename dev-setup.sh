@@ -92,6 +92,6 @@ Next steps:
    curl -X POST http://localhost:8000/api/plugins/openclaw-bridge/generate \
      -H 'Authorization: Bearer YOUR_TOKEN' \
      -H 'Content-Type: application/json' \
-     -d '{"character":"Gerard","message":"Hello!","channel":"test","user_id":"u001"}'
-4. Refresh or reopen Gerard's chat in ST to confirm the message and mock response are in the UI.
+     -d '{"character":"Frog","message":"Hello!","channel":"test","user_id":"u001"}'
+4. Refresh or reopen Frog's chat in ST to confirm the message and mock response are in the UI.
 EOF

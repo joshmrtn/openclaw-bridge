@@ -23,7 +23,7 @@ Then set the required environment variables in the agent's OC config:
 
 ```json
 {
-  "id": "gerard",
+  "id": "frog",
   "skills": ["character-bridge"],
   "tools": {
     "profile": "minimal",

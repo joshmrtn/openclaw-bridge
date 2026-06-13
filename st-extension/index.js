@@ -260,7 +260,7 @@ function ensureManagementPanel() {
     const ocAgentInput = document.createElement('input');
     ocAgentInput.type = 'text';
     ocAgentInput.className = 'text_pole';
-    ocAgentInput.placeholder = 'e.g. gerard';
+    ocAgentInput.placeholder = 'e.g. frog';
     agentField.append(agentLabel, ocAgentInput);
 
     const ownerField = document.createElement('div');

@@ -40,7 +40,7 @@ describe('ws integration (mocked)', () => {
 
         const appendSpy = jest.spyOn(chatHistory, 'appendExternalChatToHistory').mockResolvedValue();
 
-        const req = { get() { return 'Bearer token'; }, body: { character: 'Gerard', message: 'Hello from test' }, query: {} };
+        const req = { get() { return 'Bearer token'; }, body: { character: 'Frog', message: 'Hello from test' }, query: {} };
         const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
 
         await router.postHandler(req, res);
@@ -49,7 +49,7 @@ describe('ws integration (mocked)', () => {
         expect(res.body.response).toBe('[EXTENSION MOCK RESPONSE]');
         expect(mockSessionManager.requestGenerate).toHaveBeenCalled();
         expect(appendSpy).toHaveBeenCalledWith(
-            'Gerard',
+            'Frog',
             { message: 'Hello from test', images: [], user_id: null, user_name: null, user_avatar: null, channel: null },
             '[EXTENSION MOCK RESPONSE]',
             expect.any(String),  // DEFAULT_CHATS_DIR

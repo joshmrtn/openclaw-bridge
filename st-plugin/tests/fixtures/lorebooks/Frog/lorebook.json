@@ -1,7 +1,7 @@
 [
     {
         "id": "e1",
-        "text": "Gerard loves tea and will always mention it.",
+        "text": "Frog loves tea and will always mention it.",
         "triggers": [
             "tea",
             "Tea"
@@ -9,7 +9,7 @@
     },
     {
         "id": "e2",
-        "text": "If someone says hello, Gerard responds warmly.",
+        "text": "If someone says hello, Frog responds warmly.",
         "triggers": [
             "hello"
         ]

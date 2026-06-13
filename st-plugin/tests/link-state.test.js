@@ -25,18 +25,18 @@ describe('link-state', () => {
     test('upsert creates and reads link state', () => {
         const linkState = require('../link-state');
 
-        const written = linkState.upsertLink('Gerard', {
-            oc_agent_id: 'gerard',
+        const written = linkState.upsertLink('Frog', {
+            oc_agent_id: 'frog',
             active: true,
         });
 
         expect(written).toEqual({
-            oc_agent_id: 'gerard',
+            oc_agent_id: 'frog',
             active: true,
             owner_user_ids: [],
         });
-        expect(linkState.getLink('Gerard')).toEqual({
-            oc_agent_id: 'gerard',
+        expect(linkState.getLink('Frog')).toEqual({
+            oc_agent_id: 'frog',
             active: true,
             owner_user_ids: [],
         });
@@ -45,13 +45,13 @@ describe('link-state', () => {
     test('remove deletes existing links', () => {
         const linkState = require('../link-state');
 
-        linkState.upsertLink('Gerard', {
-            oc_agent_id: 'gerard',
+        linkState.upsertLink('Frog', {
+            oc_agent_id: 'frog',
             active: true,
         });
 
-        expect(linkState.removeLink('Gerard')).toBe(true);
-        expect(linkState.getLink('Gerard')).toBeNull();
+        expect(linkState.removeLink('Frog')).toBe(true);
+        expect(linkState.getLink('Frog')).toBeNull();
     });
 
     test('upsertLink stores heartbeat config and getLink returns it (#32)', () => {

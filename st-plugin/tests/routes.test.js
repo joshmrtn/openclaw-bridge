@@ -56,10 +56,10 @@ describe('plugin routes', () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
         jest.doMock('../ws-server', () => mockWsServer);
         jest.doMock('../character-loader', () => ({
-            listCharacters: jest.fn().mockResolvedValue([{ name: 'Gerard' }, { name: 'Edward' }]),
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }, { name: 'Toad' }]),
         }));
         jest.doMock('../link-state', () => ({
-            getLink: jest.fn(name => (name === 'Gerard' ? { oc_agent_id: 'gerard', active: true, owner_user_ids: [] } : null)),
+            getLink: jest.fn(name => (name === 'Frog' ? { oc_agent_id: 'frog', active: true, owner_user_ids: [] } : null)),
         }));
 
         const plugin = require('..');
@@ -80,8 +80,8 @@ describe('plugin routes', () => {
         expect(res.statusCode).toBe(200);
         expect(res.body).toEqual([
             {
-                name: 'Gerard',
-                link: { oc_agent_id: 'gerard', active: true, owner_user_ids: [] },
+                name: 'Frog',
+                link: { oc_agent_id: 'frog', active: true, owner_user_ids: [] },
                 active: true,
             },
         ]);
@@ -175,10 +175,10 @@ describe('plugin routes', () => {
 
     test('POST /characters/:name/link validates and saves link state', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
-        const upsertLink = jest.fn(() => ({ oc_agent_id: 'gerard', active: true, owner_user_ids: [] }));
+        const upsertLink = jest.fn(() => ({ oc_agent_id: 'frog', active: true, owner_user_ids: [] }));
         jest.doMock('../ws-server', () => mockWsServer);
         jest.doMock('../character-loader', () => ({
-            listCharacters: jest.fn().mockResolvedValue([{ name: 'Gerard' }]),
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
         }));
         jest.doMock('../link-state', () => ({
             getLink: jest.fn(() => null),
@@ -195,20 +195,20 @@ describe('plugin routes', () => {
             get(header) {
                 return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
             },
-            params: { name: 'Gerard' },
-            body: { oc_agent_id: 'gerard', owner_user_ids: ['discord:1'] },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', owner_user_ids: ['discord:1'] },
         };
 
         await callRoute(router, handler, req, res);
 
-        expect(upsertLink).toHaveBeenCalledWith('Gerard', {
-            oc_agent_id: 'gerard',
+        expect(upsertLink).toHaveBeenCalledWith('Frog', {
+            oc_agent_id: 'frog',
             active: true,
             owner_user_ids: ['discord:1'],
         });
         expect(res.body).toEqual({
-            character: 'Gerard',
-            link: { oc_agent_id: 'gerard', active: true, owner_user_ids: [] },
+            character: 'Frog',
+            link: { oc_agent_id: 'frog', active: true, owner_user_ids: [] },
         });
     });
 
@@ -229,13 +229,13 @@ describe('plugin routes', () => {
             get(header) {
                 return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
             },
-            params: { name: 'Gerard' },
+            params: { name: 'Frog' },
         };
 
         await callRoute(router, handler, req, res);
 
         expect(res.statusCode).toBe(200);
-        expect(res.body).toEqual({ character: 'Gerard', removed: true });
+        expect(res.body).toEqual({ character: 'Frog', removed: true });
     });
 
     test('DELETE /characters/:name/link returns 404 when missing', async () => {
@@ -255,7 +255,7 @@ describe('plugin routes', () => {
             get(header) {
                 return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
             },
-            params: { name: 'Gerard' },
+            params: { name: 'Frog' },
         };
 
         await callRoute(router, handler, req, res);
@@ -283,7 +283,7 @@ describe('plugin routes', () => {
             get(header) {
                 return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
             },
-            body: { character: 'Gerard', action_description: 'Posted a drawing', channel: 'discord' },
+            body: { character: 'Frog', action_description: 'Posted a drawing', channel: 'discord' },
         };
 
         await callRoute(router, handler, req, res);
@@ -291,7 +291,7 @@ describe('plugin routes', () => {
         expect(appendMessage).toHaveBeenCalled();
         const loggedMessage = appendMessage.mock.calls[0][1];
         expect(loggedMessage.mes).toMatch(/Autonomous action on discord/);
-        expect(res.body).toEqual({ logged: true, character: 'Gerard' });
+        expect(res.body).toEqual({ logged: true, character: 'Frog' });
     });
 
     test('GET /events sets SSE headers and registers the response as an SSE client', async () => {
@@ -364,7 +364,7 @@ describe('plugin routes', () => {
             get(header) {
                 return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
             },
-            body: { character: 'Gerard', text: 'Hello' },
+            body: { character: 'Frog', text: 'Hello' },
         };
 
         await callRoute(router, handler, req, res);
@@ -402,7 +402,7 @@ describe('plugin routes', () => {
             get(header) {
                 return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
             },
-            body: { character: 'Gerard', message: 'Hello', user_id: 'discord:1' },
+            body: { character: 'Frog', message: 'Hello', user_id: 'discord:1' },
         };
 
         await callRoute(router, handler, req, res);
@@ -411,7 +411,7 @@ describe('plugin routes', () => {
             message: '[OWNER]\nHello',
         }), undefined);
         expect(appendExternalChatToHistory).toHaveBeenCalledWith(
-            'Gerard',
+            'Frog',
             { message: 'Hello', images: [], user_id: 'discord:1', user_name: null, user_avatar: null, channel: null },
             '[RESP]',
             expect.any(String),  // DEFAULT_CHATS_DIR
@@ -498,7 +498,7 @@ describe('plugin routes', () => {
             get(header) {
                 return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
             },
-            body: { character: 'Gerard', message: 'Hello', user_id: 'discord:guest' },
+            body: { character: 'Frog', message: 'Hello', user_id: 'discord:guest' },
         };
 
         await callRoute(router, handler, req, res);
@@ -539,7 +539,7 @@ describe('plugin routes', () => {
 
     test('GET /http-message returns the queued message', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
-        const queued = { requestId: 'r1', character: 'Gerard', message: 'Hi' };
+        const queued = { requestId: 'r1', character: 'Frog', message: 'Hi' };
         jest.doMock('../ws-server', () => mockWsServer);
         jest.doMock('../session-manager', () => ({
             requestGenerate: jest.fn(),
@@ -1210,7 +1210,7 @@ describe('plugin routes', () => {
         const res = makeRes();
         const req = {
             get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
-            body: { character: 'Gerard' },
+            body: { character: 'Frog' },
         };
 
         await callRoute(router, handler, req, res);
@@ -1223,7 +1223,7 @@ describe('plugin routes', () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
         jest.doMock('../ws-server', () => mockWsServer);
         jest.doMock('../character-loader', () => ({
-            listCharacters: jest.fn().mockResolvedValue([{ name: 'Gerard' }]),
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
         }));
         jest.doMock('../link-state', () => ({
             getLink: jest.fn(() => null),
@@ -1238,7 +1238,7 @@ describe('plugin routes', () => {
         const res = makeRes();
         const req = {
             get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
-            params: { name: 'Gerard' },
+            params: { name: 'Frog' },
             body: { owner_user_ids: [] },
         };
 
