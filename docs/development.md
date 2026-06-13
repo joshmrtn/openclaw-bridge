@@ -73,7 +73,7 @@ node st-plugin/tools/mock-openclaw.js --test-scenario
 
 # Send a single message
 node st-plugin/tools/mock-openclaw.js \
-  --character "Gerard" \
+  --character "Frog" \
   --message "Hello!" \
   --user-id "discord:123456"
 ```

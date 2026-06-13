@@ -24,9 +24,9 @@ openclaw-bridge uses OC's `profile` setting to enforce a tight tool baseline. In
 
 ```json
 {
-  "id": "gerard",
-  "name": "Gerard",
-  "workspace": "~/.openclaw/workspace-gerard",
+  "id": "frog",
+  "name": "Frog",
+  "workspace": "~/.openclaw/workspace-frog",
   "skills": ["character-bridge"],
   "tools": {
     "profile": "minimal",
@@ -84,7 +84,7 @@ Docker sandboxing runs each agent in an isolated container where the host filesy
 }
 ```
 
-`mode: "all"` sandboxes everything. `scope: "agent"` gives each agent its own container — Gerard cannot access Edward's workspace. `network: "bridge"` allows outbound HTTP (needed for the ST plugin call); use `"none"` to block networking entirely if you don't need it.
+`mode: "all"` sandboxes everything. `scope: "agent"` gives each agent its own container — Frog cannot access Toad's workspace. `network: "bridge"` allows outbound HTTP (needed for the ST plugin call); use `"none"` to block networking entirely if you don't need it.
 
 > **Note:** Do not use `network: "host"`. That gives the container the same network access as your host machine.
 
@@ -156,7 +156,7 @@ After setting this up, use OC's built-in tools to confirm restrictions are actua
 
 ```bash
 openclaw doctor
-openclaw sandbox explain --agent gerard
+openclaw sandbox explain --agent frog
 ```
 
 `openclaw doctor` checks for common configuration problems. `openclaw sandbox explain` shows exactly which tools are available to a specific agent after all policy layers are resolved.
@@ -189,9 +189,9 @@ openclaw sandbox explain --agent gerard
     },
     "list": [
       {
-        "id": "gerard",
-        "name": "Gerard",
-        "workspace": "~/.openclaw/workspace-gerard",
+        "id": "frog",
+        "name": "Frog",
+        "workspace": "~/.openclaw/workspace-frog",
         "skills": ["character-bridge"],
         "tools": {
           "profile": "minimal",
@@ -203,9 +203,9 @@ openclaw sandbox explain --agent gerard
         }
       },
       {
-        "id": "edward",
-        "name": "Edward",
-        "workspace": "~/.openclaw/workspace-edward",
+        "id": "toad",
+        "name": "Toad",
+        "workspace": "~/.openclaw/workspace-toad",
         "skills": ["character-bridge"],
         "tools": {
           "profile": "minimal",

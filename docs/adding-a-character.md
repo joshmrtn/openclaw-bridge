@@ -12,7 +12,7 @@ Complete [Getting started](getting-started.md) before following this guide.
 openclaw agents add {agentname} --workspace ~/.openclaw/workspace-{agentname}
 ```
 
-Use the character's name in lowercase with hyphens: `gerard-fontaine` for "Gerard Fontaine".
+Use the character's name in lowercase, e.g. `frog` for "Frog".
 
 ---
 
@@ -115,8 +115,8 @@ Both triggers run inside the OC plugin's 60-second polling loop.
 
 ```bash
 ./scripts/link-character.sh \
-  --character "Gerard Fontaine" \
-  --agent gerard \
+  --character "Frog" \
+  --agent frog \
   --owner "discord:YOUR_USER_ID" \
   --heartbeat-channel "discord-mybotname" \
   --heartbeat-interval-ms 7200000 \
