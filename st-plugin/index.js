@@ -327,7 +327,8 @@ async function init(router) {
     });
 
     router.post('/generate', async (request, response) => {
-        const { character, message, images = [], channel = null, user_id = null, user_name = null, user_avatar = null, timeout_ms = null } = request.body || {};
+        const { character, message, images = [], channel = null, user_id = null, user_name = null, user_avatar = null, timeout_ms = null, is_heartbeat = false } = request.body || {};
+        const isHeartbeat = Boolean(is_heartbeat);
         const timeoutMs = (Number.isFinite(timeout_ms) && timeout_ms > 0) ? timeout_ms : undefined;
         const allowFallback = String(process.env.OPENCLAW_BRIDGE_ALLOW_FALLBACK || '').toLowerCase() === 'true';
         const exchangeId = randomUUID();
@@ -335,6 +336,53 @@ async function init(router) {
         if (!character || !message) {
             response.status(400).json({ error: 'character and message are required' });
             return;
+        }
+
+        // R10: heartbeat path — autonomous scheduled trigger, bypasses trust labels (R10.3)
+        if (isHeartbeat) {
+            try {
+                const heartbeatMessage = `[HEARTBEAT]\n${message}`;
+                const genResult = await sessionManager.requestGenerate({
+                    character,
+                    message: heartbeatMessage,
+                    images,
+                    channel,
+                    user_id,
+                }, timeoutMs);
+                const generatedText = genResult.response;
+                const actions = genResult.actions || [];
+
+                if (generatedText) {
+                    // R10.6: log heartbeat response as autonomous action entry
+                    try {
+                        const msg = `[Heartbeat on ${channel || 'unknown channel'}]: ${generatedText}`;
+                        const entry = chatHistory.constructStMessage({ role: 'system', content: msg });
+                        await chatHistory.appendMessage(character, entry);
+                        for (const action of actions) {
+                            try {
+                                const actionMsg = `[Character action queued]: ${action.type}${action.content ? ` — "${action.content}"` : ''}`;
+                                const aEntry = chatHistory.constructStMessage({ role: 'system', content: actionMsg });
+                                await chatHistory.appendMessage(character, aEntry);
+                            } catch (actionLogErr) {
+                                console.warn('[openclaw-bridge-plugin] Failed to log heartbeat action to history:', actionLogErr?.message);
+                            }
+                        }
+                    } catch (histErr) {
+                        console.warn('[openclaw-bridge-plugin] Failed to write heartbeat history:', histErr?.message);
+                    }
+                    try {
+                        sessionManager.broadcast({ type: 'chat_updated', character, user_id: null, timestamp: Date.now() });
+                        sessionManager.queueChatUpdated(character, null);
+                    } catch (bcastErr) {
+                        console.warn('[openclaw-bridge-plugin] Failed to notify chat_updated:', bcastErr?.message || bcastErr);
+                    }
+                }
+                // R10.4: empty response → no history write, no channel post
+                return response.json({ character, response: generatedText, actions });
+            } catch (err) {
+                const status = err?.statusCode || (isWsUnavailableError(err) ? 503 : 500);
+                return response.status(status).json({ error: err.message });
+            }
         }
 
         try {

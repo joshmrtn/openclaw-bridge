@@ -42,6 +42,15 @@ type LinkEntry = {
     };
     timeout_ms?: number;
     fallback_message?: string;
+    heartbeat?: {
+        enabled: boolean;
+        interval_ms?: number;        // default 7200000 (2h)
+        idle_threshold_ms?: number;  // default 7200000 (2h); 0 = disabled
+        channel_id: string;          // OC channel account ID to post to
+        target?: string;             // Discord channel ID / Telegram chat ID
+        account_id?: string;         // OC account discriminator for multi-bot setups
+        prompt?: string;             // custom prompt; omit for built-in default
+    };
 };
 
 function readLinkState(): Record<string, LinkEntry> {
@@ -77,6 +86,30 @@ function pruneExpiredSenderCache(): void {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Heartbeat state (R10)
+// ---------------------------------------------------------------------------
+
+type HeartbeatState = {
+    lastHeartbeatAt: number;
+    lastMessageAt: number;
+    idleHeartbeatFiredAt: number;  // tracks when we last fired an idle heartbeat
+};
+const heartbeatState = new Map<string, HeartbeatState>();
+const runningHeartbeats = new Set<string>();
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+function getOrCreateHeartbeatState(character: string): HeartbeatState {
+    let s = heartbeatState.get(character);
+    if (!s) {
+        const now = Date.now();
+        s = { lastHeartbeatAt: now, lastMessageAt: now, idleHeartbeatFiredAt: 0 };
+        heartbeatState.set(character, s);
+    }
+    return s;
+}
+
+// ---------------------------------------------------------------------------
 // Read the Discord bot token from the OC config for the given account.
 // Returns null if no plain-string token is found (SecretRef values cannot be
 // resolved without the OC secrets runtime).
@@ -333,6 +366,83 @@ async function postJson(
 }
 
 // ---------------------------------------------------------------------------
+// Heartbeat execution (R10)
+// ---------------------------------------------------------------------------
+
+async function runHeartbeat(
+    character: string,
+    link: LinkEntry,
+    trigger: "scheduled" | "idle",
+    api: any
+): Promise<void> {
+    if (runningHeartbeats.has(character)) return;
+    runningHeartbeats.add(character);
+
+    const hb = link.heartbeat!;
+    const token = getToken();
+    const channelId = hb.channel_id;
+
+    const defaultPrompt = trigger === "idle"
+        ? "The channel has been quiet for a while. You may reach out if you feel inspired, or return an empty response to remain quiet."
+        : "Some time has passed. Post to your channel if you have something to say, or return an empty response to stay quiet.";
+    const prompt = hb.prompt ?? defaultPrompt;
+
+    console.log(`[openclaw-bridge] Heartbeat trigger=${trigger} character=${character} channel=${channelId}`);
+
+    try {
+        const result = await postJson(
+            `${ST_BASE}/api/plugins/openclaw-bridge/generate`,
+            token,
+            {
+                character,
+                message: prompt,
+                user_id: "heartbeat:system",
+                is_heartbeat: true,
+                channel: channelId || null,
+            }
+        );
+
+        if (result.status !== 200) {
+            console.warn(`[openclaw-bridge] Heartbeat ST returned ${result.status} for ${character}`);
+            return;
+        }
+
+        const responseText: string = result.body?.response ?? "";
+        if (!responseText) {
+            // R10.4: empty response → stay quiet, no channel post
+            console.log(`[openclaw-bridge] Heartbeat quiet response for ${character} — staying quiet`);
+            return;
+        }
+
+        // Post response to channel
+        try {
+            const adapter = await api.runtime.channel.outbound.loadAdapter(channelId);
+            if (!adapter?.sendText) {
+                console.warn(`[openclaw-bridge] Heartbeat: no outbound adapter for ${channelId}`);
+            } else {
+                await adapter.sendText({
+                    cfg: api.config,
+                    to: hb.target ?? "",
+                    text: formatOutboundText(responseText, channelId, link),
+                    ...(hb.account_id ? { accountId: hb.account_id } : {}),
+                });
+            }
+        } catch (postErr: any) {
+            console.error(`[openclaw-bridge] Heartbeat channel post failed: ${postErr.message}`);
+        }
+
+        // Execute character actions (R10.3: heartbeat = autonomous = owner-level for actions)
+        const actions: any[] = Array.isArray(result.body?.actions) ? result.body.actions : [];
+        if (actions.length > 0) {
+            const ctx = { channelId, accountId: hb.account_id ?? null };
+            await executeCharacterActions(actions, character, token, api, ctx, link);
+        }
+    } finally {
+        runningHeartbeats.delete(character);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Outbound action execution
 // ---------------------------------------------------------------------------
 
@@ -482,6 +592,9 @@ export default definePluginEntry({
             const character = characterForAccount(accountId);
             if (!character) return; // No active ST link for this account — don't intercept
 
+            // Track last message time for idle heartbeat detection (R10.7)
+            getOrCreateHeartbeatState(character).lastMessageAt = Date.now();
+
             const linkEntry: LinkEntry = readLinkState()[character] ?? { oc_agent_id: accountId, active: true, owner_user_ids: [] };
 
             if (!event.content) return;
@@ -579,6 +692,48 @@ export default definePluginEntry({
                 );
                 return await deliverFallback(err.message);
             }
+        });
+
+        // R10: heartbeat polling loop — every 60s, check each active character's schedule
+        heartbeatTimer = setInterval(async () => {
+            const state = readLinkState();
+            for (const [character, link] of Object.entries(state)) {
+                if (!link?.active || !link?.heartbeat?.enabled || !link.heartbeat.channel_id) continue;
+                if (runningHeartbeats.has(character)) continue;
+
+                const hb = link.heartbeat;
+                const intervalMs = hb.interval_ms ?? 7200000;
+                const idleMs = hb.idle_threshold_ms ?? 7200000;
+                const now = Date.now();
+                const s = getOrCreateHeartbeatState(character);
+
+                // Scheduled heartbeat (R10.1): fire when interval has elapsed
+                if (now - s.lastHeartbeatAt >= intervalMs) {
+                    s.lastHeartbeatAt = now;
+                    runHeartbeat(character, link, "scheduled", api).catch(err => {
+                        console.error(`[openclaw-bridge] Heartbeat error for ${character}: ${err.message}`);
+                    });
+                    continue;
+                }
+
+                // Idle detection (R10.7): fire once when channel has been quiet too long
+                if (idleMs > 0 && now - s.lastMessageAt >= idleMs && s.idleHeartbeatFiredAt < s.lastMessageAt) {
+                    s.idleHeartbeatFiredAt = now;
+                    s.lastHeartbeatAt = now;
+                    runHeartbeat(character, link, "idle", api).catch(err => {
+                        console.error(`[openclaw-bridge] Idle heartbeat error for ${character}: ${err.message}`);
+                    });
+                }
+            }
+        }, 60000);
+        // Unref so the timer doesn't prevent clean process exit
+        if ((heartbeatTimer as any).unref) (heartbeatTimer as any).unref();
+
+        // Cleanup on plugin deactivation
+        api.on("deactivate", () => {
+            if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+            heartbeatState.clear();
+            runningHeartbeats.clear();
         });
     },
 });
