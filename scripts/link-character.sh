@@ -2,13 +2,13 @@
 # link-character.sh — Register a SillyTavern character with an OC agent in the bridge plugin.
 #
 # Usage:
-#   ./scripts/link-character.sh --character "Gerard Fontaine" --agent gerard \
+#   ./scripts/link-character.sh --character "Frog" --agent frog \
 #     --owner "discord:123456789" [--owner "telegram:987654321"] \
 #     [--plugin-url http://localhost:8000] [--token YOUR_TOKEN]
 #
 # Options:
 #   --character              Exact ST character name (case-sensitive)
-#   --agent                  OC agent ID (e.g. "gerard")
+#   --agent                  OC agent ID (e.g. "frog")
 #   --owner                  Owner user ID in "platform:id" format; repeat for multiple owners
 #   --plugin-url             Base URL of the ST plugin (default: http://localhost:8000)
 #   --token                  Bridge auth token (default: read from data/openclaw-bridge/bridge-token.txt)

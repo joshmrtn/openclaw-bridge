@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 const AUTH_TOKEN = process.env.OPENCLAW_BRIDGE_AUTH_TOKEN || 'token';
-const CHARACTER_NAME = process.env.OPENCLAW_BRIDGE_CHARACTER || 'Gerard';
+const CHARACTER_NAME = process.env.OPENCLAW_BRIDGE_CHARACTER || 'Frog';
 const MESSAGE = process.env.OPENCLAW_BRIDGE_MESSAGE || 'Hello from Playwright E2E';
 const MOCK_RESPONSE = '[PLAYWRIGHT MOCK RESPONSE]';
 const EXTENSION_DIR = path.resolve('st-extension');

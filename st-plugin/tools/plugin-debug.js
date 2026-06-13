@@ -1,7 +1,7 @@
 // Dev/test helper to invoke the st-plugin generate handler with mocked modules
 const path = require('path');
 
-async function runMockGenerate({ character = 'Gerard', message = 'Fallback test' } = {}) {
+async function runMockGenerate({ character = 'Frog', message = 'Fallback test' } = {}) {
     const pluginPath = path.join(__dirname, '..');
 
     const mockSessionManager = { requestGenerate: async () => { throw new Error('no extension'); } };

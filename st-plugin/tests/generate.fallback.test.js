@@ -48,7 +48,7 @@ describe('plugin generate fallback behavior', () => {
 
         const appendSpy = jest.spyOn(chatHistory, 'appendExternalChatToHistory').mockResolvedValue();
 
-        const req = { get() { return 'Bearer token'; }, body: { character: 'Gerard', message: 'Fallback test' }, query: {} };
+        const req = { get() { return 'Bearer token'; }, body: { character: 'Frog', message: 'Fallback test' }, query: {} };
         const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
 
         await router.postHandler(req, res);
@@ -84,7 +84,7 @@ describe('plugin generate fallback behavior', () => {
 
         const appendSpy = jest.spyOn(chatHistory, 'appendExternalChatToHistory').mockResolvedValue();
 
-        const req = { get() { return 'Bearer token'; }, body: { character: 'Gerard', message: 'Timeout test' }, query: {} };
+        const req = { get() { return 'Bearer token'; }, body: { character: 'Frog', message: 'Timeout test' }, query: {} };
         const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
 
         await router.postHandler(req, res);
