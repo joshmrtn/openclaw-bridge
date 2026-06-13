@@ -8,7 +8,7 @@ openclaw-bridge connects [OpenClaw](https://openclaw.ai) and [SillyTavern](https
 
 ## Where to start
 
-- **New to openclaw-bridge?** Read [Architecture](architecture.md) to understand how the pieces fit together, then follow [Getting started](getting-started.md).
+- **New to openclaw-bridge?** Follow [Getting started](getting-started.md) — it walks through installation step by step. If you want to understand what each component is doing under the hood, [Architecture](architecture.md) is there when you're ready.
 - **Already set up?** Go to [Adding a character](adding-a-character.md) to link your first ST character to an OC agent.
-- **Something broken?** Check [Troubleshooting](troubleshooting.md).
 - **Running OC for the first time?** Read [Security](oc-security.md) before connecting any character agents.
+- **Something broken?** Check [Troubleshooting](troubleshooting.md).
