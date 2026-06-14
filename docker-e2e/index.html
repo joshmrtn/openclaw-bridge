@@ -1,0 +1,1016 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bridge OpenClaw and SillyTavern so AI companion characters maintain a single identity across all communication channels.">
+      
+      
+      
+        <link rel="canonical" href="https://joshmrtn.github.io/openclaw-bridge/docker-e2e/">
+      
+      
+        <link rel="prev" href="../development/">
+      
+      
+        <link rel="next" href="../troubleshooting/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Docker E2E testing - openclaw-bridge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#docker-e2e-testing" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="openclaw-bridge" class="md-header__button md-logo" aria-label="openclaw-bridge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            openclaw-bridge
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Docker E2E testing
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="red"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="red"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/joshmrtn/openclaw-bridge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    joshmrtn/openclaw-bridge
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="openclaw-bridge" class="md-nav__button md-logo" aria-label="openclaw-bridge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    openclaw-bridge
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/joshmrtn/openclaw-bridge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    joshmrtn/openclaw-bridge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding-a-character/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a character
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../oc-security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker E2E testing
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker E2E testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#fast-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fast tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full tier
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Full tier">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#building-the-oc-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building the OC image
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#oc-config-dockerfullopenclawopenclawjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OC config (docker/full/openclaw/openclaw.json)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#directory-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Directory structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-run-which-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to run which tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#fast-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fast tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full tier
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Full tier">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#building-the-oc-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building the OC image
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#oc-config-dockerfullopenclawopenclawjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OC config (docker/full/openclaw/openclaw.json)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#directory-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Directory structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-run-which-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to run which tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/joshmrtn/openclaw-bridge/edit/main/docs/docker-e2e.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="docker-e2e-testing">Docker E2E testing<a class="headerlink" href="#docker-e2e-testing" title="Permanent link">&para;</a></h1>
+<p>The Docker E2E suite proves the complete message path with only two things mocked: the LLM and the fake channel (a synthetic Discord stand-in). Everything else — OC gateway, character-bridge skill, ST plugin, headless Playwright, trust label enforcement, history writes — runs from real code inside Docker containers.</p>
+<p>There are two tiers depending on how much infrastructure you have available:</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Services</th>
+<th>Mock depth</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Fast</strong></td>
+<td>ST + fake-extension + fake-ollama</td>
+<td>LLM + extension echo</td>
+<td>CI, quick regression, no OC repo needed</td>
+</tr>
+<tr>
+<td><strong>Full</strong></td>
+<td>ST + OC gateway + qa-bus + mock-llm + fake-ollama</td>
+<td>LLM only</td>
+<td>Pre-release, OC integration changes, debugging the full path</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="fast-tier">Fast tier<a class="headerlink" href="#fast-tier" title="Permanent link">&para;</a></h2>
+<p>Tests ST, the plugin, and the headless WebSocket round-trip. The extension is replaced by <code>fake-extension.js</code> (an echo server), and <code>fake-ollama</code> returns a canned LLM response. No OC repo or OC binary required.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:fast
+</code></pre></div>
+<p>This command runs <code>docker compose</code> with <code>docker/docker-compose.yml</code>, waits for services to be healthy, then executes the Jest suite inside the <code>test-runner</code> container (19 tests).</p>
+<p><strong>Services:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Container</th>
+<th>Image</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sillytavern</code></td>
+<td>built from <code>docker/sillytavern/</code></td>
+<td>ST with plugin + headless service</td>
+</tr>
+<tr>
+<td><code>fake-extension</code></td>
+<td>built from <code>docker/fake-extension/</code></td>
+<td>WebSocket echo server</td>
+</tr>
+<tr>
+<td><code>fake-ollama</code></td>
+<td>built from <code>docker/fake-ollama/</code></td>
+<td>Returns fixed LLM text</td>
+</tr>
+<tr>
+<td><code>test-runner</code></td>
+<td>built from <code>docker/test-runner/</code></td>
+<td>Jest suite</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What it covers:</strong></p>
+<ul>
+<li>Plugin health and WS client registration</li>
+<li>Character linking via REST and via <code>link-character.sh</code> script</li>
+<li>Generate round-trip (response flows end-to-end through the fake extension)</li>
+<li>Trust label injection: <code>[OWNER]</code>, <code>[GUEST]</code>, escalation resistance</li>
+<li>Heartbeat path (R10): <code>is_heartbeat: true</code> adds <code>[HEARTBEAT]</code> prefix, no trust label</li>
+<li><code>write_memory</code> ST-side action (R11): lorebook entry created and readable via <code>/characters/:name/memory</code></li>
+<li>Character OC-side actions: <code>actions</code> array returned to caller (owner only; guests get empty array)</li>
+<li>Multi-character isolation: TestBot and Narrator generate independent responses</li>
+<li><code>setup.sh --st-path</code>: script exits 0, copies plugin files, generates a bridge token</li>
+</ul>
+<hr />
+<h2 id="full-tier">Full tier<a class="headerlink" href="#full-tier" title="Permanent link">&para;</a></h2>
+<p>Tests the entire message path: a synthetic inbound message enters via <code>qa-bus</code> (the fake channel), OC picks it up via <code>qa-channel</code>, invokes the <code>character-bridge</code> skill, which calls the ST plugin, which dispatches to headless Playwright, which calls <code>fake-ollama</code>, and the response travels back through OC to <code>qa-bus</code> where the test asserts on it.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># One-time: build the OC image (requires openclaw repo at ~/projects/openclaw)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>bash<span class="w"> </span>docker/full/build-oc.sh
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Run the full tier</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:full
+</code></pre></div>
+<p>This command runs <code>docker compose</code> with <code>docker/full/docker-compose.full.yml</code> (17 tests, all pass).</p>
+<p><strong>Services:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Container</th>
+<th>Image</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sillytavern-full</code></td>
+<td>built from <code>docker/full/sillytavern/</code></td>
+<td>ST with headless Playwright extension</td>
+</tr>
+<tr>
+<td><code>openclaw</code></td>
+<td><code>openclaw-bridge:oc-full</code> (pre-built)</td>
+<td>OC gateway + qa-channel + character-bridge skill</td>
+</tr>
+<tr>
+<td><code>qa-bus</code></td>
+<td>built from <code>docker/full/qa-bus/</code></td>
+<td>Fake channel (message bus)</td>
+</tr>
+<tr>
+<td><code>mock-llm</code></td>
+<td>built from <code>docker/full/mock-llm/</code></td>
+<td>OpenAI Responses API mock (always calls <code>generate_response</code>)</td>
+</tr>
+<tr>
+<td><code>fake-ollama</code></td>
+<td>shared with fast tier</td>
+<td>Returns fixed LLM text to ST</td>
+</tr>
+<tr>
+<td><code>full-test-runner</code></td>
+<td>built from <code>docker/full/test-runner/</code></td>
+<td>Jest suite</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What it covers (in addition to what the fast tier proves):</strong></p>
+<ul>
+<li>Full message path: <code>qa-bus → OC → character-bridge skill → ST plugin → headless Playwright → fake-ollama → qa-bus</code></li>
+<li>Trust label enforcement end-to-end with a real OC agent identity</li>
+<li>Multiple sequential messages handled without collision</li>
+<li>ST chat history written after generation</li>
+<li>Heartbeat fires from OC plugin: <code>is_heartbeat: true</code> request reaches ST, generates response, posts to qa-bus (R10)</li>
+<li>Lorebook memory write + read via <code>POST /characters/:name/memory</code> and <code>GET /characters/:name/memory</code> (R11 storage path)</li>
+<li><code>link-character.sh</code> round-trip: <code>--unlink</code> removes the character link, <code>link-character.sh</code> restores it</li>
+<li>Headless reconnect after ST restart (R8.4): <code>docker restart sillytavern-full</code>, wait for headless to come back, assert generation still works (240s timeout)</li>
+</ul>
+<p><strong>Real install simulation.</strong> The full tier is uniquely valuable because it replicates a real user install from scratch:</p>
+<ul>
+<li>The ST container starts with bare ST; <code>setup.sh</code> runs as an entrypoint and installs the plugin + extension before ST starts</li>
+<li>The OC container starts with bare OC; <code>openclaw plugins install /repo/oc-plugin</code> runs before the gateway starts</li>
+<li>Character links are created by a one-shot <code>link-setup</code> service that runs <code>link-character.sh</code> — no pre-seeded config</li>
+<li>If any of these steps is broken, the tests fail, answering definitively: "does a clean install work?"</li>
+</ul>
+<h3 id="building-the-oc-image">Building the OC image<a class="headerlink" href="#building-the-oc-image" title="Permanent link">&para;</a></h3>
+<p><code>build-oc.sh</code> builds two Docker images from the OC repo:</p>
+<ol>
+<li><code>openclaw-bridge:oc-qa</code> — OC with <code>qa-channel</code> compiled in</li>
+<li><code>openclaw-bridge:oc-full</code> — extends <code>oc-qa</code> with the <code>character-bridge</code> skill</li>
+</ol>
+<p>The build must include <code>qa-lab</code> alongside <code>qa-channel</code> in <code>OPENCLAW_EXTENSIONS</code>. This is non-obvious: OC's <code>copy-bundled-plugin-metadata.mjs</code> removes <code>dist/extensions/qa-channel/</code> unless <code>OPENCLAW_BUILD_PRIVATE_QA=1</code> is set, and the OC Dockerfile only sets that variable when <code>qa-lab</code> appears in the extensions list. Without it, <code>qa-channel</code> is silently absent and OC starts but ignores messages.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># What build-oc.sh does internally:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>docker<span class="w"> </span>build<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-t<span class="w"> </span>openclaw-bridge:oc-qa<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--build-arg<span class="w"> </span><span class="nv">OPENCLAW_EXTENSIONS</span><span class="o">=</span><span class="s2">&quot;qa-channel,qa-lab&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>-f<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OC_REPO</span><span class="si">}</span><span class="s2">/Dockerfile&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OC_REPO</span><span class="si">}</span><span class="s2">&quot;</span>
+</code></pre></div>
+<p>You only need to rebuild this image when the OC repo changes or when <code>skills/character-bridge/SKILL.md</code> changes.</p>
+<h3 id="oc-config-dockerfullopenclawopenclawjson">OC config (<code>docker/full/openclaw/openclaw.json</code>)<a class="headerlink" href="#oc-config-dockerfullopenclawopenclawjson" title="Permanent link">&para;</a></h3>
+<p>The <code>qa-channel</code> plugin schema is <code>additionalProperties: false</code> with no defined properties — it accepts only the fields listed below. Adding Discord-style fields like <code>dmPolicy</code>, <code>groupPolicy</code>, or <code>allowFrom</code> will crash OC on startup.</p>
+<p>Valid qa-channel config:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">&quot;qa-channel&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">&quot;enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">&quot;baseUrl&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://qa-bus:15000&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">&quot;botUserId&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openclaw&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">&quot;botDisplayName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OpenClaw Bridge&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span><span class="nt">&quot;pollTimeoutMs&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">250</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h2 id="directory-structure">Directory structure<a class="headerlink" href="#directory-structure" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker/
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>├── docker-compose.yml              Fast tier compose file
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>├── sillytavern/                    ST Dockerfile + config (fast)
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│   ├── Dockerfile
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│   └── config.yaml                 securityOverride: true required for Docker
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>├── fake-extension/                 WebSocket echo server
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>├── fake-ollama/                    Fixed-response Ollama mock
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>├── test-runner/                    Fast-tier Jest suite
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   └── e2e.test.js
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>└── full/
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    ├── docker-compose.full.yml     Full tier compose file
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    ├── build-oc.sh                 Builds openclaw-bridge:oc-qa and :oc-full
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    ├── sillytavern/                ST Dockerfile for full tier (Alpine + system Chromium)
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    │   ├── Dockerfile
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    │   └── config.yaml
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    ├── openclaw/                   OC image layer (adds character-bridge skill)
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>    │   ├── Dockerfile
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>    │   └── openclaw.json           OC runtime config
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>    ├── qa-bus/                     Fake channel message bus
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>    ├── mock-llm/                   OpenAI Responses API mock (instructs OC to call generate_response)
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>    └── test-runner/                Full-tier Jest suite
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>        └── full-e2e.test.js
+</code></pre></div>
+<hr />
+<h2 id="implementation-notes">Implementation notes<a class="headerlink" href="#implementation-notes" title="Permanent link">&para;</a></h2>
+<p><strong>Alpine base image.</strong> Both ST Dockerfiles use Alpine Linux. Use <code>apk add chromium</code> (not <code>apt-get</code>) and set <code>CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser</code>. The headless service in <code>st-plugin/headless-service.js</code> reads this env var to pass <code>executablePath</code> to Playwright.</p>
+<p><strong><code>securityOverride: true</code>.</strong> Required in ST's <code>config.yaml</code> when running in Docker. Newer ST versions refuse to start if they detect they're not on localhost and this flag is absent.</p>
+<p><strong>Test-runner image caching.</strong> Docker caches the test-runner image layer. After editing a test file, explicitly rebuild before running:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker/full/docker-compose.full.yml<span class="w"> </span>build<span class="w"> </span>full-test-runner
+</code></pre></div>
+<p><strong><code>qa-bus</code> as the fake channel.</strong> The qa-bus exposes <code>/v1/inbound/message</code> (inject a message), <code>/v1/state</code> (read all events including outbound), and <code>/v1/reset</code> (clear between tests). Tests poll <code>/v1/state</code> waiting for <code>outbound-message</code> events to appear — that's how they verify OC sent a response.</p>
+<p><strong><code>mock-llm</code> role.</strong> The mock-llm intercepts OC's LLM calls and always returns a tool call instructing OC to invoke <code>generate_response</code> (the character-bridge skill's main tool). This forces OC through the full skill execution path without requiring a real LLM or OpenClaw subscription.</p>
+<p><strong>Headless client wait.</strong> <code>beforeAll</code> in <code>full-e2e.test.js</code> polls <code>/health</code> until <code>headless.isRunning === true</code> before running any tests. ST's headless Playwright service takes 15–30 seconds to launch Chromium inside the container and connect via WebSocket. The setup timeout is 5 minutes.</p>
+<hr />
+<h2 id="when-to-run-which-tier">When to run which tier<a class="headerlink" href="#when-to-run-which-tier" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Every PR</strong> — run the fast tier (<code>npm run test:e2e:fast</code>). It's quick (~30s) and requires no external repos.</li>
+<li><strong>Before release</strong> — run the full tier. It validates OC's skill dispatch, trust label injection, and the complete inbound→outbound message path.</li>
+<li><strong>Debugging a generation issue</strong> — the full tier is a clean isolated environment to bisect: if it passes here but fails in production, the bug is in configuration or environment, not in code.</li>
+<li><strong>Adding a new character action tool</strong> — add a test to <code>full-e2e.test.js</code> that sends a message triggering that tool and asserts on the qa-bus outbound event or ST state.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "search.suggest", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
