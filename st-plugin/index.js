@@ -270,6 +270,39 @@ async function init(router) {
         }
     });
 
+    router.get('/characters/:name/memory', (request, response) => {
+        const characterName = normalizeCharacterName(request?.params?.name);
+        if (!characterName) {
+            response.status(400).json({ error: 'Character name is required' });
+            return;
+        }
+        const book = lorebook.readLorebook(characterName);
+        if (!book) return response.json({ entries: [] });
+        const entries = Object.values(book.entries)
+            .filter(e => e?.extensions?.['openclaw-bridge'])
+            .map(e => ({
+                entry_key: e.extensions['openclaw-bridge'].entry_key,
+                content: e.content,
+                tier: e.constant ? 1 : 2,
+            }));
+        response.json({ entries });
+    });
+
+    router.post('/characters/:name/memory', (request, response) => {
+        const characterName = normalizeCharacterName(request?.params?.name);
+        if (!characterName) {
+            response.status(400).json({ error: 'Character name is required' });
+            return;
+        }
+        const { entry_key, content, tier = 1, keywords = '' } = request.body || {};
+        try {
+            const result = lorebook.upsertMemoryEntry(characterName, { entry_key, content, tier, keywords });
+            response.json({ success: true, ...result });
+        } catch (err) {
+            response.status(400).json({ error: err.message });
+        }
+    });
+
     router.post('/test-notify', (request, response) => {
         const { character, text } = request.body || {};
 

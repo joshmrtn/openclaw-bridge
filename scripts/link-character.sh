@@ -78,6 +78,33 @@ if [[ -z "${CHARACTER}" ]]; then
     exit 1
 fi
 
+# ─── CSRF state ────────────────────────────────────────────────────────────────
+# ST has CSRF protection enabled by default. Fetch the token once via the
+# CSRF-exempt GET endpoint and pass it + the session cookie on every POST/DELETE.
+# When CSRF is disabled, ST returns {"token":"disabled"} and no cookie; the
+# header is still included but ignored by the server.
+
+_csrf_cookie_jar="$(mktemp)"
+trap 'rm -f "${_csrf_cookie_jar}"' EXIT
+
+_csrf_token=""
+_csrf_resp=$(curl -sS -c "${_csrf_cookie_jar}" -w "\n%{http_code}" \
+    "${PLUGIN_URL}/csrf-token" 2>/dev/null) || true
+_csrf_http="${_csrf_resp##*$'\n'}"
+_csrf_body="${_csrf_resp%$'\n'*}"
+if [[ "${_csrf_http}" -ge 200 && "${_csrf_http}" -lt 300 ]]; then
+    _csrf_token=$(python3 -c \
+        "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('token',''))" \
+        <<< "${_csrf_body}" 2>/dev/null) || true
+fi
+
+# Wrapper: curl with CSRF session cookie + token header.
+_st_curl() {
+    curl -sS -b "${_csrf_cookie_jar}" -H "x-csrf-token: ${_csrf_token}" "$@"
+}
+
+# ─── URL-encode character name ────────────────────────────────────────────────
+
 # URL-encode the character name (spaces → %20, etc.)
 encoded_name="$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "${CHARACTER}" 2>/dev/null \
     || printf '%s' "${CHARACTER}" | sed 's/ /%20/g; s/&/%26/g; s/?/%3F/g')"
@@ -86,7 +113,7 @@ endpoint="${PLUGIN_URL}/api/plugins/openclaw-bridge/characters/${encoded_name}/l
 
 if [[ "${UNLINK}" == true ]]; then
     echo "Removing link for '${CHARACTER}'..."
-    curl -sS -X DELETE "${endpoint}" \
+    _st_curl -X DELETE "${endpoint}" \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" | python3 -m json.tool 2>/dev/null || true
     echo
@@ -182,7 +209,7 @@ elif [[ -n "${HEARTBEAT_CHANNEL}" ]]; then
 fi
 echo
 
-response=$(curl -sS -w "\n%{http_code}" -X POST "${endpoint}" \
+response=$(_st_curl -w "\n%{http_code}" -X POST "${endpoint}" \
     -H "Authorization: Bearer ${TOKEN}" \
     -H "Content-Type: application/json" \
     -d "${body}")

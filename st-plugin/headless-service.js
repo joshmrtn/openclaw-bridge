@@ -107,6 +107,7 @@ async function start(options = {}) {
 
             STATE.browser = await playwright.chromium.launch({
                 headless: true,
+                ...(process.env.CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.CHROMIUM_EXECUTABLE_PATH } : {}),
                 args: [
                     '--disable-blink-features=AutomationControlled',
                     '--no-sandbox',
@@ -180,6 +181,31 @@ async function start(options = {}) {
             );
 
             if (extensionConnected) {
+                // Trigger the backend connection check.
+                // ST's online_status starts as 'no_connection' and Generate() returns undefined
+                // until getStatusTextgen() runs successfully. In interactive use the user clicks
+                // the Connect button; headless mode never shows the UI so we click it here.
+                console.info('[openclaw-bridge-headless] Triggering backend connection check...');
+                try {
+                    await STATE.page.evaluate(() => {
+                        document.querySelector('#api_button_textgenerationwebui')?.click();
+                    });
+                    await STATE.page.waitForFunction(
+                        () => {
+                            const text = document.querySelector('.online_status_text')?.textContent?.trim();
+                            return text && text !== '' && text !== 'no_connection';
+                        },
+                        { timeout: 10000 },
+                    );
+                    const status = await STATE.page.evaluate(
+                        () => document.querySelector('.online_status_text')?.textContent?.trim(),
+                    );
+                    console.info('[openclaw-bridge-headless] Backend connected, online_status:', status);
+                } catch (err) {
+                    console.warn('[openclaw-bridge-headless] Backend connection check failed:', err.message,
+                        '— generation will fail until backend is reachable');
+                }
+
                 STATE.isRunning = true;
                 STATE.lastError = null;
                 console.info('[openclaw-bridge-headless] ✅ Headless service started successfully');

@@ -403,7 +403,7 @@ async function runHeartbeat(
         );
 
         if (result.status !== 200) {
-            console.warn(`[openclaw-bridge] Heartbeat ST returned ${result.status} for ${character}`);
+            console.warn(`[openclaw-bridge] Heartbeat ST returned ${result.status} for ${character}: ${JSON.stringify(result.body)}`);
             return;
         }
 
@@ -597,10 +597,11 @@ export default definePluginEntry({
 
             const linkEntry: LinkEntry = readLinkState()[character] ?? { oc_agent_id: accountId, active: true, owner_user_ids: [] };
 
-            if (!event.content) return;
+            const messageText = (event.content ?? (event as any).text ?? '').trim();
+            if (!messageText) return;
 
             // Let OC handle its own slash commands (/new, /reset, etc.)
-            if (event.content.trim().startsWith("/")) return;
+            if (messageText.startsWith("/")) return;
 
             // Build platform-prefixed user ID for trust label injection,
             // e.g. "discord:123456789"
@@ -650,7 +651,7 @@ export default definePluginEntry({
                     token,
                     {
                         character,
-                        message: event.content,
+                        message: messageText,
                         user_id: userId,
                         ...(resolvedUserName ? { user_name: resolvedUserName } : {}),
                         ...(resolvedUserAvatar ? { user_avatar: resolvedUserAvatar } : {}),
@@ -694,7 +695,8 @@ export default definePluginEntry({
             }
         });
 
-        // R10: heartbeat polling loop — every 60s, check each active character's schedule
+        // R10: heartbeat polling loop (interval configurable via OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS)
+        const heartbeatLoopMs = parseInt(process.env.OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS || "60000", 10);
         heartbeatTimer = setInterval(async () => {
             const state = readLinkState();
             for (const [character, link] of Object.entries(state)) {
@@ -725,7 +727,7 @@ export default definePluginEntry({
                     });
                 }
             }
-        }, 60000);
+        }, heartbeatLoopMs);
         // Unref so the timer doesn't prevent clean process exit
         if ((heartbeatTimer as any).unref) (heartbeatTimer as any).unref();
 

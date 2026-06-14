@@ -1,0 +1,8 @@
+disableCsrfProtection: false
+whitelistMode: false
+securityOverride: true
+enableServerPlugins: true
+enableServerPluginsAutoUpdate: false
+browserLaunch:
+  enabled: false
+heartbeatInterval: 0

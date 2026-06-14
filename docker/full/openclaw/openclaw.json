@@ -1,0 +1,97 @@
+{
+  "plugins": {
+    "allow": ["qa-channel", "memory-core", "openclaw-bridge"],
+    "entries": {
+      "qa-channel": { "enabled": true },
+      "memory-core": { "enabled": true },
+      "openclaw-bridge": { "enabled": true }
+    }
+  },
+  "channels": {
+    "qa-channel": {
+      "enabled": true,
+      "baseUrl": "http://qa-bus:15000",
+      "botUserId": "openclaw",
+      "botDisplayName": "OpenClaw Bridge",
+      "pollTimeoutMs": 250
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/tmp/openclaw/workspace",
+      "model": {
+        "primary": "mock-openai/gpt-5.5"
+      },
+      "models": {
+        "mock-openai/gpt-5.5": {
+          "params": {
+            "transport": "sse",
+            "openaiWsWarmup": false
+          }
+        }
+      }
+    },
+    "list": [
+      {
+        "id": "bridge",
+        "default": true,
+        "identity": {
+          "name": "BridgeBot",
+          "theme": "SillyTavern Character Bridge Agent",
+          "emoji": "🌉"
+        }
+      }
+    ]
+  },
+  "memory": {
+    "backend": "builtin"
+  },
+  "models": {
+    "mode": "replace",
+    "providers": {
+      "mock-openai": {
+        "baseUrl": "http://mock-llm:11435/v1",
+        "apiKey": "test",
+        "api": "openai-responses",
+        "request": {
+          "allowPrivateNetwork": true
+        },
+        "models": [
+          {
+            "id": "gpt-5.5",
+            "name": "gpt-5.5",
+            "api": "openai-responses",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 4096
+          }
+        ]
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "port": 18789,
+    "auth": {
+      "mode": "token",
+      "token": "e2e-full-oc-token"
+    },
+    "controlUi": {
+      "enabled": false
+    },
+    "reload": {
+      "deferralTimeoutMs": 1000
+    }
+  },
+  "discovery": {
+    "mdns": { "mode": "off" }
+  }
+}

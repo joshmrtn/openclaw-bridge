@@ -6,7 +6,15 @@
     "scripts": {
         "test": "jest --runInBand --colors",
         "test:js": "jest --runInBand --colors",
-        "test:e2e": "playwright test -c st-plugin/tests/e2e/playwright.config.js"
+        "test:e2e": "playwright test -c st-plugin/tests/e2e/playwright.config.js",
+        "test:e2e:fast": "docker compose -f docker/docker-compose.yml --profile test run --rm test-runner",
+        "docker:up": "docker compose -f docker/docker-compose.yml up --wait sillytavern fake-extension fake-ollama",
+        "docker:down": "docker compose -f docker/docker-compose.yml down",
+        "test:e2e:full": "docker compose -f docker/full/docker-compose.full.yml --profile full-test run --rm full-test-runner",
+        "docker:full:up": "docker compose -f docker/full/docker-compose.full.yml up --wait sillytavern-full openclaw qa-bus mock-llm fake-ollama",
+        "docker:full:down": "docker compose -f docker/full/docker-compose.full.yml down",
+        "docker:full:build-oc": "bash docker/full/build-oc.sh",
+        "docker:full:build-bridge": "docker build -t openclaw-bridge:oc-full -f docker/full/openclaw/Dockerfile ."
     },
     "devDependencies": {
         "@playwright/test": "^1.56.1",

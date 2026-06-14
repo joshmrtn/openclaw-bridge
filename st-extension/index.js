@@ -716,7 +716,6 @@ function registerBridgeTools() {
 async function generateForCharacter(characterName, message) {
     const context = getStContext();
     let { generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = context;
-    const chid = findCharacterIndex(characterName);
 
     console.info('[openclaw-bridge] generateForCharacter called with:', { characterName, messageLength: message?.length });
     console.info('[openclaw-bridge] Context functions available:', {
@@ -728,8 +727,31 @@ async function generateForCharacter(characterName, message) {
         contextKeys: context ? Object.keys(context).slice(0, 20) : 'NO CONTEXT'
     });
 
+    // ST loads characters asynchronously after page render. Poll until the list
+    // is non-empty before searching, so the first request after headless startup
+    // doesn't fail with "Character not found" due to a timing race.
+    const chid = await (async () => {
+        const deadline = Date.now() + 30000;
+        let firstSeen = false;
+        while (Date.now() < deadline) {
+            const chars = getCharacters();
+            if (chars.length > 0) {
+                if (!firstSeen) {
+                    firstSeen = true;
+                    console.info('[openclaw-bridge] character list loaded, count:', chars.length,
+                        'first:', JSON.stringify({ name: chars[0]?.name, avatar: chars[0]?.avatar }));
+                }
+                const idx = chars.findIndex(c => c?.name === characterName);
+                if (idx !== -1) return idx;
+            }
+            await new Promise(r => setTimeout(r, 500));
+        }
+        return -1;
+    })();
+
     if (chid === -1) {
-        throw new Error(`Character not found: ${characterName}`);
+        const available = getCharacters().map(c => c?.name).filter(Boolean);
+        throw new Error(`Character not found: ${characterName}. Available: ${JSON.stringify(available)}`);
     }
 
     const previousChid = getCurrentCharacterIndex(context);

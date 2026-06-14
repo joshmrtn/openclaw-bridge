@@ -1,0 +1,7 @@
+{
+    "name": "TestBot",
+    "description": "A test character used for Docker E2E tests. Responds helpfully.",
+    "personality": "friendly, concise",
+    "scenario": "",
+    "first_mes": "Hello! I am TestBot, ready for testing."
+}

@@ -309,7 +309,7 @@ async function runHeartbeat(character, link, trigger, api) {
             channel: channelId || null,
         });
         if (result.status !== 200) {
-            console.warn(`[openclaw-bridge] Heartbeat ST returned ${result.status} for ${character}`);
+            console.warn(`[openclaw-bridge] Heartbeat ST returned ${result.status} for ${character}: ${JSON.stringify(result.body)}`);
             return;
         }
         const responseText = result.body?.response ?? "";
@@ -488,10 +488,11 @@ export default definePluginEntry({
             // Track last message time for idle heartbeat detection (R10.7)
             getOrCreateHeartbeatState(character).lastMessageAt = Date.now();
             const linkEntry = readLinkState()[character] ?? { oc_agent_id: accountId, active: true, owner_user_ids: [] };
-            if (!event.content)
+            const messageText = (event.content ?? event.text ?? '').trim();
+            if (!messageText)
                 return;
             // Let OC handle its own slash commands (/new, /reset, etc.)
-            if (event.content.trim().startsWith("/"))
+            if (messageText.startsWith("/"))
                 return;
             // Build platform-prefixed user ID for trust label injection,
             // e.g. "discord:123456789"
@@ -532,7 +533,7 @@ export default definePluginEntry({
             try {
                 const result = await postJson(`${ST_BASE}/api/plugins/openclaw-bridge/generate`, token, {
                     character,
-                    message: event.content,
+                    message: messageText,
                     user_id: userId,
                     ...(resolvedUserName ? { user_name: resolvedUserName } : {}),
                     ...(resolvedUserAvatar ? { user_avatar: resolvedUserAvatar } : {}),
@@ -564,7 +565,8 @@ export default definePluginEntry({
                 return await deliverFallback(err.message);
             }
         });
-        // R10: heartbeat polling loop — every 60s, check each active character's schedule
+        // R10: heartbeat polling loop (interval configurable via OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS)
+        const heartbeatLoopMs = parseInt(process.env.OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS || "60000", 10);
         heartbeatTimer = setInterval(async () => {
             const state = readLinkState();
             for (const [character, link] of Object.entries(state)) {
@@ -594,7 +596,7 @@ export default definePluginEntry({
                     });
                 }
             }
-        }, 60000);
+        }, heartbeatLoopMs);
         // Unref so the timer doesn't prevent clean process exit
         if (heartbeatTimer.unref)
             heartbeatTimer.unref();

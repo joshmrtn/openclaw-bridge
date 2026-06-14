@@ -1,0 +1,10 @@
+# SillyTavern config for openclaw-bridge E2E testing.
+# The ST init script fills in any missing keys from defaults.
+disableCsrfProtection: true
+whitelistMode: false
+securityOverride: true
+enableServerPlugins: true
+enableServerPluginsAutoUpdate: false
+browserLaunch:
+  enabled: false
+heartbeatInterval: 0

@@ -53,4 +53,5 @@ nav:
   - Adding a character: adding-a-character.md
   - Security: oc-security.md
   - Development: development.md
+  - Docker E2E testing: docker-e2e.md
   - Troubleshooting: troubleshooting.md

@@ -1,0 +1,96 @@
+name: openclaw-bridge-e2e
+
+# ── Always-on services ─────────────────────────────────────────────────────────
+#
+# docker compose up                         — start ST + fake services
+# docker compose --profile test run --rm test-runner  — run the E2E suite
+#
+# Local dev (tests run from host):
+#   docker compose up -d
+#   ST_URL=http://localhost:18000 \
+#   FAKE_EXT_URL=http://localhost:14000 \
+#   BRIDGE_TOKEN=e2e-test-token \
+#   npx jest docker/test-runner/e2e.test.js
+
+services:
+
+  # ── SillyTavern ─────────────────────────────────────────────────────────────
+  # Custom image: official ST + openclaw-bridge plugin/extension + test characters.
+  sillytavern:
+    build:
+      context: ..
+      dockerfile: docker/sillytavern/Dockerfile
+    environment:
+      - NODE_ENV=production
+      # Bridge auth token — must match BRIDGE_TOKEN used by test-runner and fake-oc.
+      - OPENCLAW_BRIDGE_AUTH_TOKEN=e2e-test-token
+      # Disable headless Playwright; fake-extension handles generation via WS.
+      - OPENCLAW_BRIDGE_ENABLE_HEADLESS=false
+      - OPENCLAW_BRIDGE_WS_PORT=8765
+      # Store character-links.json in ST's data dir (not inside plugins/).
+      - OPENCLAW_BRIDGE_LINKS_PATH=/home/node/app/data/openclaw-bridge/character-links.json
+    ports:
+      - "18000:8000"   # ST HTTP (plugin REST API)
+      - "18765:8765"   # ST WebSocket (for direct WS debugging from host)
+    healthcheck:
+      test: ["CMD", "node", "src/healthcheck.js"]
+      interval: 5s
+      timeout: 5s
+      start_period: 45s
+      retries: 18
+
+  # ── fake-extension ───────────────────────────────────────────────────────────
+  # Connects to ST's WS server as a headless client, echoes scripted responses.
+  # Exposes an HTTP control API so tests can set responses and inspect requests.
+  fake-extension:
+    build:
+      context: fake-extension
+    environment:
+      - WS_URL=ws://sillytavern:8765
+      - HTTP_PORT=4000
+    ports:
+      - "14000:4000"   # HTTP control API
+    depends_on:
+      sillytavern:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # ── fake-ollama ───────────────────────────────────────────────────────────────
+  # Implements the Ollama API with scripted responses.
+  # Used when running ST with the headless Playwright service (ENABLE_HEADLESS=true).
+  # Idle in this default compose but available for headless E2E development.
+  fake-ollama:
+    build:
+      context: fake-ollama
+    ports:
+      - "21434:11434"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:11434/api/tags"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  # ── test-runner ───────────────────────────────────────────────────────────────
+  # Runs the Jest E2E suite against the services above.
+  # Only started when --profile test is passed:
+  #   docker compose --profile test run --rm test-runner
+  test-runner:
+    build:
+      context: ..
+      dockerfile: docker/test-runner/Dockerfile
+    environment:
+      - ST_URL=http://sillytavern:8000
+      - FAKE_EXT_URL=http://fake-extension:4000
+      - BRIDGE_TOKEN=e2e-test-token
+      - REPO_PATH=/repo
+    depends_on:
+      sillytavern:
+        condition: service_healthy
+      fake-extension:
+        condition: service_healthy
+    profiles:
+      - test

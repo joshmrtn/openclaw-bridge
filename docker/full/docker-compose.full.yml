@@ -1,0 +1,243 @@
+name: openclaw-bridge-e2e-full
+
+# ── Full E2E tier ─────────────────────────────────────────────────────────────
+#
+# Tests the complete message path with real OC and headless Playwright:
+#   qa-bus → OC (qa-channel) → character-bridge skill → ST plugin
+#   → headless Playwright extension → fake-ollama → response → qa-bus
+#
+# Prerequisites (one-time setup):
+#   1. Build OC image with qa-channel extension:
+#      npm run docker:full:build-oc
+#
+#   2. Build the bridge OC layer:
+#      npm run docker:full:build-bridge
+#
+# Running the full E2E suite:
+#   npm run test:e2e:full
+#
+# Starting supporting services without tests:
+#   npm run docker:full:up
+#
+# Shutting down:
+#   npm run docker:full:down
+
+services:
+
+  # ── Shared-volume permission init ─────────────────────────────────────────
+  # Named volumes are created root-owned. ST runs as uid 1000 (node user) and
+  # needs write access to /shared for character-links.json. This one-shot
+  # container runs first (as root) and opens the directory permissions.
+  character-links-init:
+    image: alpine
+    command: sh -c "chmod 777 /shared"
+    volumes:
+      - character-links:/shared
+    restart: "no"
+
+  # ── SillyTavern with headless Playwright ───────────────────────────────────
+  sillytavern-full:
+    container_name: sillytavern-full
+    build:
+      context: ../..
+      dockerfile: docker/full/sillytavern/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - OPENCLAW_BRIDGE_AUTH_TOKEN=e2e-test-token
+      # Enable headless Playwright — this is the difference from the fast tier.
+      - OPENCLAW_BRIDGE_ENABLE_HEADLESS=true
+      - OPENCLAW_BRIDGE_WS_PORT=8765
+      # Shared volume so OC's heartbeat loop reads the same link state as ST.
+      - OPENCLAW_BRIDGE_LINKS_PATH=/shared/character-links.json
+      # Give the headless browser time to start (Playwright launch is slow in Docker).
+      - OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS=60000
+      - OPENCLAW_BRIDGE_ST_URL=http://localhost:8000
+      # Point headless-service.js at the Alpine system Chromium (see Dockerfile).
+      - CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    volumes:
+      - character-links:/shared
+    ports:
+      - "18100:8000"    # ST HTTP
+      - "18865:8765"    # ST WebSocket (for debugging)
+    depends_on:
+      character-links-init:
+        condition: service_completed_successfully
+      fake-ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "src/healthcheck.js"]
+      interval: 5s
+      timeout: 5s
+      start_period: 90s
+      retries: 30
+
+  # ── qa-bus ─────────────────────────────────────────────────────────────────
+  # Implements the OC qa-bus protocol. OC's qa-channel polls this for
+  # inbound messages. Tests inject messages here and read responses here.
+  qa-bus:
+    build:
+      context: qa-bus
+    ports:
+      - "15000:15000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:15000/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # ── mock-llm ───────────────────────────────────────────────────────────────
+  # OpenAI Responses API mock. OC's agent uses this for its LLM calls.
+  # It deterministically calls generate_response for any user message so that
+  # OC always invokes the character-bridge skill.
+  mock-llm:
+    build:
+      context: mock-llm
+    environment:
+      - PORT=11435
+      - CHARACTER_NAME=TestBot
+      - CHANNEL=qa-channel
+    ports:
+      - "11435:11435"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:11435/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # ── fake-ollama ────────────────────────────────────────────────────────────
+  # Ollama API mock for ST's LLM calls (headless extension → Generate() → Ollama).
+  fake-ollama:
+    build:
+      context: ../fake-ollama
+    environment:
+      - PORT=11434
+      - DEFAULT_RESPONSE=This is a fake LLM response from TestBot for E2E testing.
+    ports:
+      - "11437:11434"    # Different host port to avoid conflict with fast-tier
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:11434/api/tags"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  # ── OpenClaw gateway ───────────────────────────────────────────────────────
+  # Real OC with qa-channel extension + character-bridge skill.
+  # Requires pre-built openclaw-bridge:oc-full image (see Prerequisites above).
+  openclaw:
+    image: openclaw-bridge:oc-full
+    environment:
+      - OPENCLAW_CONFIG_PATH=/tmp/openclaw/openclaw.json
+      - OPENCLAW_STATE_DIR=/tmp/openclaw/state
+      - OPENCLAW_NO_RESPAWN=1
+      - OPENCLAW_SKIP_GMAIL_WATCHER=1
+      - OPENCLAW_SKIP_BROWSER_CONTROL_SERVER=1
+      - OPENCLAW_SKIP_CANVAS_HOST=1
+      - OPENCLAW_PROFILE=
+      # Bridge env vars substituted into the character-bridge SKILL.md endpoint URLs
+      - OPENCLAW_BRIDGE_URL=http://sillytavern-full:8000
+      - OPENCLAW_BRIDGE_TOKEN=e2e-test-token
+      # OC's heartbeat loop calls ST directly — must point at the ST container.
+      - OPENCLAW_BRIDGE_ST_URL=http://sillytavern-full:8000
+      # Shared volume so OC reads the same character-links.json that ST writes.
+      - OPENCLAW_BRIDGE_LINKS_PATH=/shared/character-links.json
+      # Speed up heartbeat loop for E2E (production default is 60000ms).
+      - OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS=5000
+    volumes:
+      - type: bind
+        source: ./openclaw
+        target: /opt/openclaw-config
+        read_only: true
+      - character-links:/shared
+    command:
+      - sh
+      - -lc
+      - |
+        set -e
+        mkdir -p /tmp/openclaw/workspace/skills/character-bridge /tmp/openclaw/state
+        cp /opt/openclaw-config/openclaw.json /tmp/openclaw/openclaw.json
+        cp /app/skills/character-bridge/SKILL.md /tmp/openclaw/workspace/skills/character-bridge/SKILL.md
+        openclaw plugins install /repo/oc-plugin
+        exec node openclaw.mjs gateway run --port 18789 --bind lan --allow-unconfigured
+    ports:
+      - "28789:18789"   # 18789 may be used by local OC dev instance
+    depends_on:
+      qa-bus:
+        condition: service_healthy
+      mock-llm:
+        condition: service_healthy
+      sillytavern-full:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:18789/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+
+  # ── Character link setup ───────────────────────────────────────────────────────
+  # Runs link-character.sh for each test character after ST is healthy.
+  # This is the only thing allowed to create character links — proving that
+  # link-character.sh works correctly as part of the real installation path.
+  link-setup:
+    image: alpine
+    profiles:
+      - full-test
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache bash curl python3 >/dev/null 2>&1
+        bash /repo/scripts/link-character.sh \
+          --plugin-url http://sillytavern-full:8000 \
+          --token e2e-test-token \
+          --character TestBot --agent default
+        bash /repo/scripts/link-character.sh \
+          --plugin-url http://sillytavern-full:8000 \
+          --token e2e-test-token \
+          --character Narrator --agent default
+    volumes:
+      - type: bind
+        source: ../..
+        target: /repo
+        read_only: true
+    depends_on:
+      sillytavern-full:
+        condition: service_healthy
+    restart: "no"
+
+  # ── Full E2E test runner ────────────────────────────────────────────────────
+  # Only started when --profile full-test is passed.
+  full-test-runner:
+    build:
+      context: ../..
+      dockerfile: docker/full/test-runner/Dockerfile
+    environment:
+      - ST_URL=http://sillytavern-full:8000
+      - QA_BUS_URL=http://qa-bus:15000
+      - OC_URL=http://openclaw:18789
+      - OC_TOKEN=e2e-full-oc-token
+      - BRIDGE_TOKEN=e2e-test-token
+      - SILLYTAVERN_CONTAINER=sillytavern-full
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      sillytavern-full:
+        condition: service_healthy
+      openclaw:
+        condition: service_healthy
+      qa-bus:
+        condition: service_healthy
+      link-setup:
+        condition: service_completed_successfully
+    profiles:
+      - full-test
+
+# Shared named volume so ST (link-state.js) and OC (oc-plugin heartbeat loop)
+# read/write the same character-links.json — mirrors the symlink that setup.sh
+# creates on single-machine installs.
+volumes:
+  character-links:

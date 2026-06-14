@@ -1,0 +1,7 @@
+{
+    "name": "Narrator",
+    "description": "A second test character for multi-character isolation tests.",
+    "personality": "dramatic, eloquent",
+    "scenario": "",
+    "first_mes": "The story begins..."
+}

@@ -16,7 +16,9 @@ console.log('[fake-extension] connecting to', url);
 const ws = new WebSocket(url);
 
 ws.on('open', () => {
-    console.log('[fake-extension] connected');
+    // Must register so session-manager adds this socket to its client map.
+    ws.send(JSON.stringify({ type: 'register', clientType: 'headless' }));
+    console.log('[fake-extension] connected and registered');
 });
 
 ws.on('message', (data) => {

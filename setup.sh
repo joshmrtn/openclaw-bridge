@@ -122,12 +122,6 @@ echo
 if [[ "${ARG_SKIP_ST}" == true ]]; then
     echo "Skipping ST installation (--skip-st)."
 
-elif [[ -d "${script_dir}/sillytavern" ]]; then
-    # Developer checkout: ST is a submodule in the repo — use symlinks so edits
-    # to the source are reflected immediately without re-running setup.
-    echo "Developer mode: SillyTavern submodule detected — installing as symlinks."
-    bash "${script_dir}/dev-setup.sh"
-
 elif [[ -n "${ARG_ST_PATH}" ]]; then
     # Non-interactive: path supplied via --st-path; install directly.
     echo "Using provided path: ${ARG_ST_PATH}"
@@ -138,6 +132,12 @@ elif [[ -n "${ARG_ST_PATH}" ]]; then
         mkdir -p "${ARG_ST_PATH}/plugins" "${ARG_ST_PATH}/public/scripts/extensions"
     fi
     install_into_st "${ARG_ST_PATH}"
+
+elif [[ -d "${script_dir}/sillytavern" ]]; then
+    # Developer checkout: ST is a submodule in the repo — use symlinks so edits
+    # to the source are reflected immediately without re-running setup.
+    echo "Developer mode: SillyTavern submodule detected — installing as symlinks."
+    bash "${script_dir}/dev-setup.sh"
 
 else
     # Interactive mode: auto-discover, then confirm or prompt.

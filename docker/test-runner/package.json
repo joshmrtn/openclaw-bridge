@@ -1,0 +1,12 @@
+{
+    "name": "openclaw-bridge-e2e-runner",
+    "version": "1.0.0",
+    "private": true,
+    "type": "commonjs",
+    "scripts": {
+        "test": "jest --runInBand --colors --forceExit"
+    },
+    "dependencies": {
+        "jest": "^29.7.0"
+    }
+}

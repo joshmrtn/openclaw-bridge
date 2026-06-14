@@ -45,11 +45,16 @@ npm test -- --testPathPattern=session-manager
 # Plugin tests only
 npm test -- st-plugin
 
-# E2E (requires ST running)
-npm run test:e2e
+# Docker E2E — fast tier (ST + fake-extension + fake-ollama, no OC repo needed)
+npm run test:e2e:fast
+
+# Docker E2E — full tier (real OC gateway + qa-bus + headless Playwright)
+npm run test:e2e:full
 ```
 
 Unit tests mock the WebSocket, session manager, and filesystem — no ST process required. Jest auto-discovers `*.test.js` files under `st-plugin/tests/`. Files under `st-plugin/tools/` are manual helpers and not picked up by Jest.
+
+The Docker E2E tiers run the full message path in isolated containers — the only mocks are the LLM and the fake channel. See **[Docker E2E testing](docker-e2e.md)** for setup, architecture, and when to run each tier.
 
 ---
 
