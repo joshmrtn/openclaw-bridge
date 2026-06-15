@@ -360,6 +360,7 @@ function getClientStatus() {
 module.exports = {
     registerClient,
     unregisterClient,
+    getClient,
     getConnectedClientCount,
     getHeadlessClientCount,
     getUiClientCount,

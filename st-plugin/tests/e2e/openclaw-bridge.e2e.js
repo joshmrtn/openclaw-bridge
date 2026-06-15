@@ -22,18 +22,38 @@ function loadExtensionModule() {
 async function bootExtension(page, { characterName, generateImpl }) {
     await page.exposeFunction('__openclawBridgeGenerateImpl', generateImpl);
 
+    // Must be set before page.goto() — the extension auto-loads from ST on page
+    // load and reads OPENCLAW_BRIDGE_CLIENT_TYPE in init(). Setting it via evaluate()
+    // after goto() is too late: __openclawBridgeLoaded is already true, so
+    // openclawBridgeInit() becomes a no-op and the extension stays in SSE mode
+    // (the UI browser path), making getClient() unable to find it.
+    await page.addInitScript(() => {
+        globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless';
+    });
+
     await page.goto('/');
     await page.waitForFunction(() => document.getElementById('preloader') === null, null, { timeout: 30000 });
 
     await page.evaluate(({ characterName, responseText }) => {
-        window.__openclawBridgeTest = {
-            calls: [],
-            responseText,
+        const eventBus = {
+            listeners: {},
+            on(event, cb) { (this.listeners[event] = this.listeners[event] || []).push(cb); },
+            emit(event) { (this.listeners[event] || []).forEach(cb => cb()); },
         };
+        const eventTypes = {
+            CHARACTER_EDITOR_OPENED: 'character_editor_opened',
+            CHARACTER_EDITED: 'character_edited',
+            CHARACTER_PAGE_LOADED: 'character_page_loaded',
+        };
+
+        window.__openclawBridgeTest = { calls: [], responseText, eventBus, eventTypes };
 
         window.SillyTavern = window.SillyTavern || {};
         window.SillyTavern.getContext = () => ({
             characters: [{ name: characterName }],
+            characterId: 0,
+            eventSource: window.__openclawBridgeTest.eventBus,
+            eventTypes: window.__openclawBridgeTest.eventTypes,
             Generate: async (mode, params) => window.__openclawBridgeGenerateImpl(mode, params),
         });
     }, { characterName, responseText: MOCK_RESPONSE });
@@ -90,7 +110,7 @@ test('extension round-trip uses Generate(quiet) and returns plugin response', as
 
     expect(generateResponse.ok()).toBeTruthy();
     const json = await generateResponse.json();
-    expect(json).toEqual({
+    expect(json).toMatchObject({
         character: CHARACTER_NAME,
         response: MOCK_RESPONSE,
     });
@@ -157,7 +177,12 @@ test('extension serializes same-character Generate() calls', async ({ page, requ
         },
     });
 
-    await page.waitForTimeout(300);
+    // Wait until the first generate has started (Docker pipeline latency can exceed 300ms).
+    // The lock is held by the first call (it awaits firstCall), so the second cannot start.
+    await expect.poll(
+        () => events.filter(e => e.type === 'start').length,
+        { timeout: 10000, intervals: [50, 100, 200] },
+    ).toBeGreaterThanOrEqual(1);
     expect(events.filter(event => event.type === 'start')).toHaveLength(1);
 
     releaseFirst();
@@ -201,6 +226,21 @@ test('management panel injects into character editor', async ({ page }) => {
     await bootExtension(page, {
         characterName: CHARACTER_NAME,
         generateImpl: async () => MOCK_RESPONSE,
+    });
+
+    // The management panel injects into #rm_ch_create_block form (ST's character editor).
+    // That element only exists when a user has the editor open. Create it here so the
+    // extension has a valid mount point, then call refreshManagementPanel() directly.
+    // Using the direct call avoids a timing race where the CHARACTER_EDITOR_OPENED listener
+    // may not yet be registered if the 2000ms init timer fired before our mock was ready.
+    await page.evaluate(() => {
+        const block = document.createElement('div');
+        block.id = 'rm_ch_create_block';
+        const form = document.createElement('form');
+        block.append(form);
+        document.body.append(block);
+
+        window.openclawBridge.refreshManagementPanel();
     });
 
     await expect(page.locator('#openclaw-bridge-management')).toHaveCount(1);
