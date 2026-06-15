@@ -1,5 +1,6 @@
 # openclaw-bridge
 
+[![CI](https://github.com/joshmrtn/openclaw-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/joshmrtn/openclaw-bridge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Bridges SillyTavern characters to OpenClaw so your AI companions maintain a

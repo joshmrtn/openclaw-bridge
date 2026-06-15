@@ -49,6 +49,7 @@ npm test -- st-plugin
 npm run test:e2e:fast
 
 # Docker E2E — full tier (real OC gateway + qa-bus + headless Playwright)
+# Requires openclaw repo at ~/projects/openclaw. Cannot run in CI.
 npm run test:e2e:full
 ```
 

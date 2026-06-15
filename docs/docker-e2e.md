@@ -175,7 +175,8 @@ docker compose -f docker/full/docker-compose.full.yml build full-test-runner
 
 ## When to run which tier
 
-- **Every PR** — run the fast tier (`npm run test:e2e:fast`). It's quick (~30s) and requires no external repos.
-- **Before release** — run the full tier. It validates OC's skill dispatch, trust label injection, and the complete inbound→outbound message path.
+- **Every PR (automatic)** — GitHub Actions runs the fast tier on every push and pull request. The CI workflow (`ci.yml`) also runs unit tests first; the fast tier only starts if they pass. No action required from you.
+- **Local fast-tier run** — `npm run test:e2e:fast`. Useful when you want a quick regression check before pushing, or to debug a failing CI run locally.
+- **Before release (manual)** — run the full tier locally. It validates OC's skill dispatch, trust label injection, and the complete inbound→outbound message path. Cannot run in CI: the full tier requires the private OC repo to build `openclaw-bridge:oc-full`, which is not available on GitHub-hosted runners.
 - **Debugging a generation issue** — the full tier is a clean isolated environment to bisect: if it passes here but fails in production, the bug is in configuration or environment, not in code.
 - **Adding a new character action tool** — add a test to `full-e2e.test.js` that sends a message triggering that tool and asserts on the qa-bus outbound event or ST state.

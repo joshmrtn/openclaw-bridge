@@ -20,6 +20,10 @@ services:
     build:
       context: ..
       dockerfile: docker/sillytavern/Dockerfile
+      cache_from:
+        - type=gha,scope=sillytavern
+      cache_to:
+        - type=gha,scope=sillytavern,mode=max
     environment:
       - NODE_ENV=production
       # Bridge auth token — must match BRIDGE_TOKEN used by test-runner and fake-oc.
@@ -45,6 +49,10 @@ services:
   fake-extension:
     build:
       context: fake-extension
+      cache_from:
+        - type=gha,scope=fake-extension
+      cache_to:
+        - type=gha,scope=fake-extension,mode=max
     environment:
       - WS_URL=ws://sillytavern:8765
       - HTTP_PORT=4000
@@ -66,6 +74,10 @@ services:
   fake-ollama:
     build:
       context: fake-ollama
+      cache_from:
+        - type=gha,scope=fake-ollama
+      cache_to:
+        - type=gha,scope=fake-ollama,mode=max
     ports:
       - "21434:11434"
     healthcheck:
@@ -82,6 +94,10 @@ services:
     build:
       context: ..
       dockerfile: docker/test-runner/Dockerfile
+      cache_from:
+        - type=gha,scope=test-runner
+      cache_to:
+        - type=gha,scope=test-runner,mode=max
     environment:
       - ST_URL=http://sillytavern:8000
       - FAKE_EXT_URL=http://fake-extension:4000
