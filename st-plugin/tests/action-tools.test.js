@@ -31,6 +31,16 @@ describe('ACTION_TOOLS registry', () => {
         expect(types).toContain('telegram_post');
         expect(types).toContain('file_write');
     });
+
+    test('telegram_post extension tool uses channel_id not chat_id', () => {
+        const fs = require('fs');
+        const path = require('path');
+        const src = fs.readFileSync(path.resolve(__dirname, '../../st-extension/index.js'), 'utf8');
+        const block = src.match(/name:\s*'openclaw_telegram_post'[\s\S]*?actionType:\s*'telegram_post'/)?.[0];
+        expect(block).toBeDefined();
+        expect(block).toContain('channel_id');
+        expect(block).not.toContain('chat_id');
+    });
 });
 
 describe('ST_SIDE_TOOLS registry', () => {

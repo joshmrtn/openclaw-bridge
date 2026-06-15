@@ -655,7 +655,7 @@ function registerBridgeTools() {
                 type: 'object',
                 properties: {
                     content: { type: 'string', description: 'Message content to post.' },
-                    chat_id: { type: 'string', description: 'Telegram chat ID. Defaults to the conversation chat if omitted.' },
+                    channel_id: { type: 'string', description: 'Telegram chat ID. Defaults to the conversation chat if omitted.' },
                 },
                 required: ['content'],
             },
