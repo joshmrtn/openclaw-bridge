@@ -787,6 +787,29 @@ describe('D6: setup.sh → uninstall.sh lifecycle', () => {
       )
     ).toThrow();
 
+    // Assert things uninstall.sh must NOT touch are still intact.
+    // Character cards (the .png and .json files placed by the user, not by setup.sh).
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f` +
+      ` /home/node/app/data/default-user/characters/TestBot.png`,
+      { timeout: 5000 },
+    );
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f` +
+      ` /home/node/app/data/default-user/characters/Narrator.png`,
+      { timeout: 5000 },
+    );
+    // ST config.yaml and settings.json (owned by the user, never written by setup.sh).
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f /home/node/app/config/config.yaml`,
+      { timeout: 5000 },
+    );
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f` +
+      ` /home/node/app/data/default-user/settings.json`,
+      { timeout: 5000 },
+    );
+
     // 3. Reinstall inside the ST container.
     execSync(
       `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/setup.sh` +
