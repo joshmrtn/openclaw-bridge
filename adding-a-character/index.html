@@ -469,6 +469,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#outbound-messaging-send_message" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outbound messaging (send_message)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Outbound messaging (send_message)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configure-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configure channels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-the-character-uses-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the character uses it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#heartbeat-autonomous-presence" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -777,6 +816,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#outbound-messaging-send_message" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outbound messaging (send_message)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Outbound messaging (send_message)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configure-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configure channels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-the-character-uses-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the character uses it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#heartbeat-autonomous-presence" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -972,6 +1050,61 @@
 <a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>./scripts/verify.sh<span class="w"> </span>--character<span class="w"> </span><span class="s2">&quot;{STCharacterName}&quot;</span>
 </code></pre></div>
 <hr />
+<h2 id="outbound-messaging-send_message">Outbound messaging (send_message)<a class="headerlink" href="#outbound-messaging-send_message" title="Permanent link">&para;</a></h2>
+<p>A character can send messages to a channel mid-generation using the <code>send_message</code> action — for example, posting an announcement, sending a DM to a user, or reacting to something autonomously during a heartbeat.</p>
+<p><code>send_message</code> routes by a logical channel name (e.g. <code>"discord"</code>) that you configure in <code>character-links.json</code>. The bridge looks up the matching entry, validates it, and pre-resolves the OC adapter details before the action reaches OC.</p>
+<h3 id="configure-channels">Configure channels<a class="headerlink" href="#configure-channels" title="Permanent link">&para;</a></h3>
+<p>Edit <code>data/openclaw-bridge/character-links.json</code> and add a <code>channels</code> array to the character entry:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">&quot;Frog&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">&quot;oc_agent_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;frog&quot;</span><span class="p">,</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">&quot;active&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="nt">&quot;owner_user_ids&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;discord:YOUR_USER_ID&quot;</span><span class="p">],</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">    </span><span class="nt">&quot;channels&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">      </span><span class="p">{</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;discord&quot;</span><span class="p">,</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">        </span><span class="nt">&quot;channel_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;discord-mybotname&quot;</span><span class="p">,</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">        </span><span class="nt">&quot;target&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;YOUR_DISCORD_CHANNEL_ID&quot;</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">    </span><span class="p">]</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="p">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>Logical label the character uses in the <code>channel</code> parameter (e.g. <code>"discord"</code>, <code>"telegram"</code>)</td>
+</tr>
+<tr>
+<td><code>channel_id</code></td>
+<td>OC channel account ID — the same value used for <code>--heartbeat-channel</code> (e.g. <code>"discord-mybotname"</code>)</td>
+</tr>
+<tr>
+<td><code>target</code></td>
+<td>Platform-specific default destination: Discord channel ID, Telegram chat ID, etc.</td>
+</tr>
+</tbody>
+</table>
+<p>A character can have multiple entries for different platforms. Add one entry per channel you want the character to be able to post to.</p>
+<h3 id="how-the-character-uses-it">How the character uses it<a class="headerlink" href="#how-the-character-uses-it" title="Permanent link">&para;</a></h3>
+<p>The LLM can output a <code>send_message</code> action block in its response:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>&lt;action&gt;{&quot;type&quot;:&quot;send_message&quot;,&quot;channel&quot;:&quot;discord&quot;,&quot;content&quot;:&quot;Hello from Frog!&quot;}&lt;/action&gt;
+</code></pre></div>
+<p>To send a direct message instead, include <code>recipient</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>&lt;action&gt;{&quot;type&quot;:&quot;send_message&quot;,&quot;channel&quot;:&quot;discord&quot;,&quot;recipient&quot;:&quot;USER_ID&quot;,&quot;content&quot;:&quot;Just for you.&quot;}&lt;/action&gt;
+</code></pre></div>
+<p>If the character specifies a channel name that isn't in the <code>channels</code> list, the action is dropped and an error appears in ST chat history explaining which channels are configured.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>link-character.sh</code> does not yet support configuring <code>channels</code> via flags — this is tracked in a separate issue. For now, edit <code>character-links.json</code> directly.</p>
+</blockquote>
+<hr />
 <h2 id="heartbeat-autonomous-presence">Heartbeat / Autonomous presence<a class="headerlink" href="#heartbeat-autonomous-presence" title="Permanent link">&para;</a></h2>
 <p>A character can post on a schedule or when a conversation goes quiet, without waiting for a user to send a message. Two triggers are available:</p>
 <ul>
@@ -980,14 +1113,14 @@
 </ul>
 <p>Both triggers run inside the OC plugin's 60-second polling loop.</p>
 <h3 id="enable-heartbeat">Enable heartbeat<a class="headerlink" href="#enable-heartbeat" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--owner<span class="w"> </span><span class="s2">&quot;discord:YOUR_USER_ID&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>--heartbeat-channel<span class="w"> </span><span class="s2">&quot;discord-mybotname&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>--heartbeat-interval-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span>--heartbeat-idle-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">  </span>--heartbeat-prompt<span class="w"> </span><span class="s2">&quot;You have been quiet for a while. Reflect on what you know and share something meaningful.&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span>--owner<span class="w"> </span><span class="s2">&quot;discord:YOUR_USER_ID&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span>--heartbeat-channel<span class="w"> </span><span class="s2">&quot;discord-mybotname&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span>--heartbeat-interval-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">  </span>--heartbeat-idle-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">  </span>--heartbeat-prompt<span class="w"> </span><span class="s2">&quot;You have been quiet for a while. Reflect on what you know and share something meaningful.&quot;</span>
 </code></pre></div>
 <p><code>--heartbeat-channel</code> is required when enabling heartbeat. It must be the OC channel account ID (e.g. <code>discord-mybotname</code>) — the same value shown in <code>openclaw.json</code> under <code>channels</code>.</p>
 <table>
@@ -1047,7 +1180,7 @@
 <hr />
 <h2 id="character-memory">Character memory<a class="headerlink" href="#character-memory" title="Permanent link">&para;</a></h2>
 <p>During generation, a character can call the <code>openclaw_write_memory</code> tool to persist a fact to a dedicated per-character lorebook. The file is created automatically on the first memory write:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>data/default-user/worlds/{character}-auto-memory.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>data/default-user/worlds/{character}-auto-memory.json
 </code></pre></div>
 <h3 id="one-time-setup-link-the-lorebook-in-st">One-time setup: link the lorebook in ST<a class="headerlink" href="#one-time-setup-link-the-lorebook-in-st" title="Permanent link">&para;</a></h3>
 <p>For lorebook entries to be injected into future generations, SillyTavern must know about the file:</p>
@@ -1085,21 +1218,21 @@
 <hr />
 <h2 id="after-changing-st-model-or-api-settings">After changing ST model or API settings<a class="headerlink" href="#after-changing-st-model-or-api-settings" title="Permanent link">&para;</a></h2>
 <p>The headless browser caches its session at startup. If you change the LLM, API endpoint, or character settings in the ST UI, trigger a headless reload:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nv">TOKEN</span><span class="o">=</span><span class="k">$(</span>cat<span class="w"> </span>data/openclaw-bridge/bridge-token.txt<span class="k">)</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/plugins/openclaw-bridge/reload-headless<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="si">${</span><span class="nv">TOKEN</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Expected: {&quot;reloaded&quot;:true}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nv">TOKEN</span><span class="o">=</span><span class="k">$(</span>cat<span class="w"> </span>data/openclaw-bridge/bridge-token.txt<span class="k">)</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/plugins/openclaw-bridge/reload-headless<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="si">${</span><span class="nv">TOKEN</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># Expected: {&quot;reloaded&quot;:true}</span>
 </code></pre></div>
 <hr />
 <h2 id="removing-a-character">Removing a character<a class="headerlink" href="#removing-a-character" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Unlink from ST plugin</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nv">TOKEN</span><span class="o">=</span><span class="k">$(</span>cat<span class="w"> </span>data/openclaw-bridge/bridge-token.txt<span class="k">)</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>curl<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span>http://localhost:8000/api/plugins/openclaw-bridge/characters/<span class="o">{</span>STCharacterName<span class="o">}</span>/link<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="si">${</span><span class="nv">TOKEN</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="c1"># Remove OC agent</span>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>openclaw<span class="w"> </span>agents<span class="w"> </span>remove<span class="w"> </span><span class="o">{</span>agentname<span class="o">}</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>rm<span class="w"> </span>-rf<span class="w"> </span>~/.openclaw/workspace-<span class="o">{</span>agentname<span class="o">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Unlink from ST plugin</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nv">TOKEN</span><span class="o">=</span><span class="k">$(</span>cat<span class="w"> </span>data/openclaw-bridge/bridge-token.txt<span class="k">)</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>curl<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span>http://localhost:8000/api/plugins/openclaw-bridge/characters/<span class="o">{</span>STCharacterName<span class="o">}</span>/link<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="si">${</span><span class="nv">TOKEN</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="c1"># Remove OC agent</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>openclaw<span class="w"> </span>agents<span class="w"> </span>remove<span class="w"> </span><span class="o">{</span>agentname<span class="o">}</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>rm<span class="w"> </span>-rf<span class="w"> </span>~/.openclaw/workspace-<span class="o">{</span>agentname<span class="o">}</span>
 </code></pre></div>
 
 

@@ -967,7 +967,7 @@ flowchart TD
 <h2 id="trust-labels">Trust labels<a class="headerlink" href="#trust-labels" title="Permanent link">&para;</a></h2>
 <p>Every message arrives with a <code>user_id</code> in <code>platform:id</code> format (e.g. <code>discord:123456789</code>). Before generation, the ST plugin checks <code>character-links.json</code> to see if that user ID is in the character's <code>owner_user_ids</code> list:</p>
 <ul>
-<li><strong><code>[OWNER]</code></strong> — the message sender is a configured owner. The generated response may include outbound actions (e.g. <code>discord_post</code>, <code>openclaw_write_memory</code>).</li>
+<li><strong><code>[OWNER]</code></strong> — the message sender is a configured owner. The generated response may include outbound actions (e.g. <code>send_message</code>, <code>openclaw_write_memory</code>).</li>
 <li><strong><code>[GUEST]</code></strong> — everyone else. Actions are stripped from the response before it is returned to OC.</li>
 </ul>
 <p>The label is injected by code before generation and cannot be influenced by message content.</p>
