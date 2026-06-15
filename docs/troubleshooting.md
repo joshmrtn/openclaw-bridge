@@ -1,5 +1,13 @@
 # Troubleshooting
 
+Start with the health check — it diagnoses the most common issues automatically:
+
+```bash
+./scripts/verify.sh
+```
+
+Find the section below that matches what it reports.
+
 ---
 
 ## Plugin didn't load / status endpoint returns 404
@@ -25,6 +33,26 @@ The bridge token in your request does not match what the plugin expects.
 ```bash
 openssl rand -hex 32 > data/openclaw-bridge/bridge-token.txt
 # then update OPENCLAW_BRIDGE_TOKEN in openclaw.json for each agent and restart OC
+```
+
+---
+
+## Manually checking plugin and headless status
+
+If `verify.sh` is unavailable or you want to inspect the raw responses:
+
+```bash
+# Plugin status (is it loaded and reachable?)
+curl http://localhost:8000/api/plugins/openclaw-bridge/status \
+  -H "Authorization: Bearer $(cat data/openclaw-bridge/bridge-token.txt)"
+# Expected: {"status":"ok","plugin":"openclaw-bridge","version":"...","connected_ws_clients":1,"connected_sse_clients":0}
+# connected_ws_clients: 1 means the headless browser is connected (correct)
+# connected_sse_clients: 1+ means your browser tab is connected
+
+# Headless browser and client detail
+curl http://localhost:8000/api/plugins/openclaw-bridge/health \
+  -H "Authorization: Bearer $(cat data/openclaw-bridge/bridge-token.txt)"
+# Look for "isConnected": true in the headless block — takes 15–30s after ST starts
 ```
 
 ---
