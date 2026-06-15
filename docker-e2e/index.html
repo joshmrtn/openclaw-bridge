@@ -495,6 +495,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#browser-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Browser tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#full-tier" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -639,6 +650,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#browser-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Browser tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#full-tier" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -737,11 +759,13 @@
 
 <h1 id="docker-e2e-testing">Docker E2E testing<a class="headerlink" href="#docker-e2e-testing" title="Permanent link">&para;</a></h1>
 <p>The Docker E2E suite proves the complete message path with only two things mocked: the LLM and the fake channel (a synthetic Discord stand-in). Everything else — OC gateway, character-bridge skill, ST plugin, headless Playwright, trust label enforcement, history writes — runs from real code inside Docker containers.</p>
-<p>There are two tiers depending on how much infrastructure you have available:</p>
+<p>There are three Docker tiers depending on how much infrastructure you have available:</p>
 <table>
 <thead>
 <tr>
 <th>Tier</th>
+<th>Command</th>
+<th>CI</th>
 <th>Services</th>
 <th>Mock depth</th>
 <th>When to use</th>
@@ -750,15 +774,27 @@
 <tbody>
 <tr>
 <td><strong>Fast</strong></td>
+<td><code>npm run test:e2e:fast</code></td>
+<td>✅</td>
 <td>ST + fake-extension + fake-ollama</td>
 <td>LLM + extension echo</td>
-<td>CI, quick regression, no OC repo needed</td>
+<td>Every PR; quick regression; no OC repo needed</td>
+</tr>
+<tr>
+<td><strong>Browser</strong></td>
+<td><code>npm run test:e2e:browser</code></td>
+<td>✅</td>
+<td>ST + fake-extension + Chromium</td>
+<td>LLM</td>
+<td>Every PR; validates real browser extension code</td>
 </tr>
 <tr>
 <td><strong>Full</strong></td>
+<td><code>npm run test:e2e:full</code></td>
+<td>❌ local only</td>
 <td>ST + OC gateway + qa-bus + mock-llm + fake-ollama</td>
 <td>LLM only</td>
-<td>Pre-release, OC integration changes, debugging the full path</td>
+<td>Pre-release; OC integration changes; requires <code>~/projects/openclaw</code></td>
 </tr>
 </tbody>
 </table>
@@ -767,7 +803,7 @@
 <p>Tests ST, the plugin, and the headless WebSocket round-trip. The extension is replaced by <code>fake-extension.js</code> (an echo server), and <code>fake-ollama</code> returns a canned LLM response. No OC repo or OC binary required.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:fast
 </code></pre></div>
-<p>This command runs <code>docker compose</code> with <code>docker/docker-compose.yml</code>, waits for services to be healthy, then executes the Jest suite inside the <code>test-runner</code> container (19 tests).</p>
+<p>This command runs <code>docker compose</code> with <code>docker/docker-compose.yml</code>, waits for services to be healthy, then executes the Jest suite inside the <code>test-runner</code> container (22 tests).</p>
 <p><strong>Services:</strong></p>
 <table>
 <thead>
@@ -813,13 +849,56 @@
 <li><code>setup.sh --st-path</code>: script exits 0, copies plugin files, generates a bridge token</li>
 </ul>
 <hr />
+<h2 id="browser-tier">Browser tier<a class="headerlink" href="#browser-tier" title="Permanent link">&para;</a></h2>
+<p>Tests the real <code>st-extension</code> code — the only tier that loads the actual extension JavaScript in a Chromium browser and validates the full WebSocket round-trip. The fast tier uses <code>fake-extension</code> (an echo server) which bypasses the extension entirely; the browser tier catches bugs that only surface when the real extension code runs.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:browser
+</code></pre></div>
+<p><strong>Services:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Container</th>
+<th>Image</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sillytavern</code></td>
+<td>shared with fast tier</td>
+<td>ST with plugin (headless Playwright service disabled)</td>
+</tr>
+<tr>
+<td><code>fake-extension</code></td>
+<td>shared with fast tier</td>
+<td>WebSocket echo server (provides a WS client so non-browser tests in the stack still work)</td>
+</tr>
+<tr>
+<td><code>browser-test-runner</code></td>
+<td>built from <code>docker/browser-test-runner/</code></td>
+<td>Playwright + Chromium; loads and exercises <code>st-extension/index.js</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What it covers:</strong></p>
+<ul>
+<li>Extension WS registration and connection handshake</li>
+<li><code>Generate('quiet', { force_chid })</code> called with correct parameters</li>
+<li>Same-character generate requests are serialized (no concurrent generation for one character)</li>
+<li>Trust label (<code>[OWNER]</code>/<code>[GUEST]</code>) present in the prompt passed to <code>Generate()</code></li>
+<li>Notification panel renders in the ST UI on <code>POST /test-notify</code></li>
+<li>Management panel injects into the ST character editor</li>
+</ul>
+<p><strong>Why the browser registers as headless:</strong></p>
+<p>Playwright drives Chromium non-interactively, making it functionally a headless client. The <code>bootExtension</code> helper sets <code>globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless'</code> before loading the extension so <code>session-manager.getClient()</code> picks it up (it only selects headless clients, never the user's interactive browser — this is by design to prevent UI hijacking).</p>
+<hr />
 <h2 id="full-tier">Full tier<a class="headerlink" href="#full-tier" title="Permanent link">&para;</a></h2>
 <p>Tests the entire message path: a synthetic inbound message enters via <code>qa-bus</code> (the fake channel), OC picks it up via <code>qa-channel</code>, invokes the <code>character-bridge</code> skill, which calls the ST plugin, which dispatches to headless Playwright, which calls <code>fake-ollama</code>, and the response travels back through OC to <code>qa-bus</code> where the test asserts on it.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># One-time: build the OC image (requires openclaw repo at ~/projects/openclaw)</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>bash<span class="w"> </span>docker/full/build-oc.sh
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Run the full tier</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:full
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># One-time: build the OC image (requires openclaw repo at ~/projects/openclaw)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>bash<span class="w"> </span>docker/full/build-oc.sh
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Run the full tier</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:full
 </code></pre></div>
 <p>This command runs <code>docker compose</code> with <code>docker/full/docker-compose.full.yml</code> (17 tests, all pass).</p>
 <p><strong>Services:</strong></p>
@@ -889,56 +968,58 @@
 <li><code>openclaw-bridge:oc-full</code> — extends <code>oc-qa</code> with the <code>character-bridge</code> skill</li>
 </ol>
 <p>The build must include <code>qa-lab</code> alongside <code>qa-channel</code> in <code>OPENCLAW_EXTENSIONS</code>. This is non-obvious: OC's <code>copy-bundled-plugin-metadata.mjs</code> removes <code>dist/extensions/qa-channel/</code> unless <code>OPENCLAW_BUILD_PRIVATE_QA=1</code> is set, and the OC Dockerfile only sets that variable when <code>qa-lab</code> appears in the extensions list. Without it, <code>qa-channel</code> is silently absent and OC starts but ignores messages.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># What build-oc.sh does internally:</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>docker<span class="w"> </span>build<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-t<span class="w"> </span>openclaw-bridge:oc-qa<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--build-arg<span class="w"> </span><span class="nv">OPENCLAW_EXTENSIONS</span><span class="o">=</span><span class="s2">&quot;qa-channel,qa-lab&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>-f<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OC_REPO</span><span class="si">}</span><span class="s2">/Dockerfile&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OC_REPO</span><span class="si">}</span><span class="s2">&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># What build-oc.sh does internally:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>docker<span class="w"> </span>build<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-t<span class="w"> </span>openclaw-bridge:oc-qa<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--build-arg<span class="w"> </span><span class="nv">OPENCLAW_EXTENSIONS</span><span class="o">=</span><span class="s2">&quot;qa-channel,qa-lab&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>-f<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OC_REPO</span><span class="si">}</span><span class="s2">/Dockerfile&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">OC_REPO</span><span class="si">}</span><span class="s2">&quot;</span>
 </code></pre></div>
 <p>You only need to rebuild this image when the OC repo changes or when <code>skills/character-bridge/SKILL.md</code> changes.</p>
 <h3 id="oc-config-dockerfullopenclawopenclawjson">OC config (<code>docker/full/openclaw/openclaw.json</code>)<a class="headerlink" href="#oc-config-dockerfullopenclawopenclawjson" title="Permanent link">&para;</a></h3>
 <p>The <code>qa-channel</code> plugin schema is <code>additionalProperties: false</code> with no defined properties — it accepts only the fields listed below. Adding Discord-style fields like <code>dmPolicy</code>, <code>groupPolicy</code>, or <code>allowFrom</code> will crash OC on startup.</p>
 <p>Valid qa-channel config:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">&quot;qa-channel&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">&quot;enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">&quot;baseUrl&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://qa-bus:15000&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">&quot;botUserId&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openclaw&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">&quot;botDisplayName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OpenClaw Bridge&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span><span class="nt">&quot;pollTimeoutMs&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">250</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">&quot;qa-channel&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">&quot;enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">&quot;baseUrl&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://qa-bus:15000&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">&quot;botUserId&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openclaw&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">&quot;botDisplayName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OpenClaw Bridge&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">&quot;pollTimeoutMs&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">250</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">}</span>
 </code></pre></div></p>
 <hr />
 <h2 id="directory-structure">Directory structure<a class="headerlink" href="#directory-structure" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker/
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>├── docker-compose.yml              Fast tier compose file
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>├── sillytavern/                    ST Dockerfile + config (fast)
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│   ├── Dockerfile
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│   └── config.yaml                 securityOverride: true required for Docker
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>├── fake-extension/                 WebSocket echo server
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>├── fake-ollama/                    Fixed-response Ollama mock
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>├── test-runner/                    Fast-tier Jest suite
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   └── e2e.test.js
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>└── full/
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    ├── docker-compose.full.yml     Full tier compose file
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    ├── build-oc.sh                 Builds openclaw-bridge:oc-qa and :oc-full
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    ├── sillytavern/                ST Dockerfile for full tier (Alpine + system Chromium)
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    │   ├── Dockerfile
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    │   └── config.yaml
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    ├── openclaw/                   OC image layer (adds character-bridge skill)
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>    │   ├── Dockerfile
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>    │   └── openclaw.json           OC runtime config
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>    ├── qa-bus/                     Fake channel message bus
-<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>    ├── mock-llm/                   OpenAI Responses API mock (instructs OC to call generate_response)
-<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>    └── test-runner/                Full-tier Jest suite
-<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>        └── full-e2e.test.js
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker/
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>├── docker-compose.yml              Fast + browser tier compose file
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>├── sillytavern/                    ST Dockerfile + config (fast + browser)
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>│   ├── Dockerfile
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>│   └── config.yaml                 securityOverride: true required for Docker
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>├── fake-extension/                 WebSocket echo server (fast + browser)
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>├── fake-ollama/                    Fixed-response Ollama mock
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>├── test-runner/                    Fast-tier Jest suite
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>│   └── e2e.test.js
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>├── browser-test-runner/            Browser-tier Playwright runner
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>│   └── Dockerfile                  node:22 + playwright install chromium --with-deps
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>└── full/
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    ├── docker-compose.full.yml     Full tier compose file
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    ├── build-oc.sh                 Builds openclaw-bridge:oc-qa and :oc-full
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    ├── sillytavern/                ST Dockerfile for full tier (Alpine + system Chromium)
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    │   ├── Dockerfile
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>    │   └── config.yaml
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>    ├── openclaw/                   OC image layer (adds character-bridge skill)
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>    │   ├── Dockerfile
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>    │   └── openclaw.json           OC runtime config
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>    ├── qa-bus/                     Fake channel message bus
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    ├── mock-llm/                   OpenAI Responses API mock (instructs OC to call generate_response)
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>    └── test-runner/                Full-tier Jest suite
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>        └── full-e2e.test.js
 </code></pre></div>
 <hr />
 <h2 id="implementation-notes">Implementation notes<a class="headerlink" href="#implementation-notes" title="Permanent link">&para;</a></h2>
 <p><strong>Alpine base image.</strong> Both ST Dockerfiles use Alpine Linux. Use <code>apk add chromium</code> (not <code>apt-get</code>) and set <code>CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser</code>. The headless service in <code>st-plugin/headless-service.js</code> reads this env var to pass <code>executablePath</code> to Playwright.</p>
 <p><strong><code>securityOverride: true</code>.</strong> Required in ST's <code>config.yaml</code> when running in Docker. Newer ST versions refuse to start if they detect they're not on localhost and this flag is absent.</p>
 <p><strong>Test-runner image caching.</strong> Docker caches the test-runner image layer. After editing a test file, explicitly rebuild before running:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker/full/docker-compose.full.yml<span class="w"> </span>build<span class="w"> </span>full-test-runner
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker/full/docker-compose.full.yml<span class="w"> </span>build<span class="w"> </span>full-test-runner
 </code></pre></div>
 <p><strong><code>qa-bus</code> as the fake channel.</strong> The qa-bus exposes <code>/v1/inbound/message</code> (inject a message), <code>/v1/state</code> (read all events including outbound), and <code>/v1/reset</code> (clear between tests). Tests poll <code>/v1/state</code> waiting for <code>outbound-message</code> events to appear — that's how they verify OC sent a response.</p>
 <p><strong><code>mock-llm</code> role.</strong> The mock-llm intercepts OC's LLM calls and always returns a tool call instructing OC to invoke <code>generate_response</code> (the character-bridge skill's main tool). This forces OC through the full skill execution path without requiring a real LLM or OpenClaw subscription.</p>
@@ -946,11 +1027,12 @@
 <hr />
 <h2 id="when-to-run-which-tier">When to run which tier<a class="headerlink" href="#when-to-run-which-tier" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Every PR (automatic)</strong> — GitHub Actions runs the fast tier on every push and pull request. The CI workflow (<code>ci.yml</code>) also runs unit tests first; the fast tier only starts if they pass. No action required from you.</li>
-<li><strong>Local fast-tier run</strong> — <code>npm run test:e2e:fast</code>. Useful when you want a quick regression check before pushing, or to debug a failing CI run locally.</li>
+<li><strong>Every PR (automatic)</strong> — GitHub Actions runs unit tests, the fast tier, and the browser tier on every push and pull request. All three must pass before a PR can be merged. No action required from you.</li>
+<li><strong>Local fast or browser run</strong> — <code>npm run test:e2e:fast</code> / <code>npm run test:e2e:browser</code>. Useful when you want to reproduce a CI failure locally or do a quick regression check before pushing.</li>
 <li><strong>Before release (manual)</strong> — run the full tier locally. It validates OC's skill dispatch, trust label injection, and the complete inbound→outbound message path. Cannot run in CI: the full tier requires the private OC repo to build <code>openclaw-bridge:oc-full</code>, which is not available on GitHub-hosted runners.</li>
 <li><strong>Debugging a generation issue</strong> — the full tier is a clean isolated environment to bisect: if it passes here but fails in production, the bug is in configuration or environment, not in code.</li>
 <li><strong>Adding a new character action tool</strong> — add a test to <code>full-e2e.test.js</code> that sends a message triggering that tool and asserts on the qa-bus outbound event or ST state.</li>
+<li><strong>Adding a browser extension feature</strong> — add a test to <code>st-plugin/tests/e2e/openclaw-bridge.e2e.js</code> (browser tier); use the <code>bootExtension</code> helper to load the extension in Chromium and interact via <code>page</code> and <code>request</code>.</li>
 </ul>
 
 

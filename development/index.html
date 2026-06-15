@@ -487,6 +487,45 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tier-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier overview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-tests-locally" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running tests locally
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-new-tests-go" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where new tests go
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -830,6 +869,45 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tier-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier overview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-tests-locally" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running tests locally
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-new-tests-go" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where new tests go
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1100,7 +1178,46 @@
 </code></pre></div>
 <hr />
 <h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># All unit tests</span>
+<h3 id="tier-overview">Tier overview<a class="headerlink" href="#tier-overview" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Command</th>
+<th>CI</th>
+<th>What it tests</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Unit</strong></td>
+<td><code>npm test</code></td>
+<td>✅ automatic</td>
+<td>Jest — plugin logic, session manager, trust labels, link state, chat history</td>
+</tr>
+<tr>
+<td><strong>Docker fast</strong></td>
+<td><code>npm run test:e2e:fast</code></td>
+<td>✅ automatic</td>
+<td>Full HTTP + WS round-trip via fake-extension; no browser, no OC repo needed</td>
+</tr>
+<tr>
+<td><strong>Docker browser</strong></td>
+<td><code>npm run test:e2e:browser</code></td>
+<td>✅ automatic</td>
+<td>Real <code>st-extension</code> code loaded in Chromium — the only tier that exercises the actual browser extension</td>
+</tr>
+<tr>
+<td><strong>Full</strong></td>
+<td><code>npm run test:e2e:full</code></td>
+<td>❌ local only</td>
+<td>Real OC gateway end-to-end; requires <code>~/projects/openclaw</code> — too large for CI</td>
+</tr>
+</tbody>
+</table>
+<p>All three automatic tiers run on every push and pull request. A PR cannot be merged unless all three are green.</p>
+<h3 id="running-tests-locally">Running tests locally<a class="headerlink" href="#running-tests-locally" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Unit tests (no ST required)</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>npm<span class="w"> </span><span class="nb">test</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Faster: suppress Playwright startup noise</span>
@@ -1112,15 +1229,24 @@
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># Plugin tests only</span>
 <a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>npm<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--<span class="w"> </span>st-plugin
 <a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="c1"># Docker E2E — fast tier (ST + fake-extension + fake-ollama, no OC repo needed)</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="c1"># Docker E2E — fast tier</span>
 <a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:fast
 <a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="c1"># Docker E2E — full tier (real OC gateway + qa-bus + headless Playwright)</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="c1"># Requires openclaw repo at ~/projects/openclaw. Cannot run in CI.</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:full
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="c1"># Docker E2E — browser tier (real extension in Chromium)</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:browser
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="c1"># Docker E2E — full tier (requires openclaw repo at ~/projects/openclaw)</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:full
 </code></pre></div>
 <p>Unit tests mock the WebSocket, session manager, and filesystem — no ST process required. Jest auto-discovers <code>*.test.js</code> files under <code>st-plugin/tests/</code>. Files under <code>st-plugin/tools/</code> are manual helpers and not picked up by Jest.</p>
-<p>The Docker E2E tiers run the full message path in isolated containers — the only mocks are the LLM and the fake channel. See <strong><a href="../docker-e2e/">Docker E2E testing</a></strong> for setup, architecture, and when to run each tier.</p>
+<p>The Docker E2E tiers run the full message path in isolated containers. See <strong><a href="../docker-e2e/">Docker E2E testing</a></strong> for setup, architecture, and when to run each tier.</p>
+<h3 id="where-new-tests-go">Where new tests go<a class="headerlink" href="#where-new-tests-go" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Logic, session manager, routes, trust labels</strong> → <code>st-plugin/tests/*.test.js</code> (unit tier)</li>
+<li><strong>Plugin HTTP API, character linking, generate round-trip</strong> → <code>docker/test-runner/e2e.test.js</code> (fast tier)</li>
+<li><strong>Browser extension rendering, WS round-trip with real extension code</strong> → <code>st-plugin/tests/e2e/openclaw-bridge.e2e.js</code> (browser tier)</li>
+<li><strong>Full OC skill dispatch, end-to-end message path</strong> → <code>docker/full/test-runner/full-e2e.test.js</code> (full tier)</li>
+</ul>
 <hr />
 <h2 id="manual-end-to-end-testing">Manual end-to-end testing<a class="headerlink" href="#manual-end-to-end-testing" title="Permanent link">&para;</a></h2>
 <h3 id="fake-extension">Fake extension<a class="headerlink" href="#fake-extension" title="Permanent link">&para;</a></h3>
