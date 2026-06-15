@@ -22,6 +22,7 @@ describe('ws integration (mocked)', () => {
             unregisterClient: jest.fn(),
             getConnectedClientCount: jest.fn(() => 1),
             broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
         };
 
         jest.doMock('../session-manager', () => mockSessionManager);
