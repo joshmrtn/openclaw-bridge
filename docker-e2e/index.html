@@ -900,7 +900,7 @@
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Run the full tier</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:full
 </code></pre></div>
-<p>This command runs <code>docker compose</code> with <code>docker/full/docker-compose.full.yml</code> (17 tests, all pass).</p>
+<p>This command runs <code>docker compose</code> with <code>docker/full/docker-compose.full.yml</code> (24 tests, all pass).</p>
 <p><strong>Services:</strong></p>
 <table>
 <thead>
@@ -953,6 +953,7 @@
 <li>Lorebook memory write + read via <code>POST /characters/:name/memory</code> and <code>GET /characters/:name/memory</code> (R11 storage path)</li>
 <li><code>link-character.sh</code> round-trip: <code>--unlink</code> removes the character link, <code>link-character.sh</code> restores it</li>
 <li>Headless reconnect after ST restart (R8.4): <code>docker restart sillytavern-full</code>, wait for headless to come back, assert generation still works (240s timeout)</li>
+<li><code>verify.sh</code> health check: runs against the initial setup and again after the uninstall → reinstall → restart lifecycle, asserting 0 failures each time</li>
 </ul>
 <p><strong>Real install simulation.</strong> The full tier is uniquely valuable because it replicates a real user install from scratch:</p>
 <ul>
