@@ -96,6 +96,7 @@ services:
       - PORT=11435
       - CHARACTER_NAME=TestBot
       - CHANNEL=qa-channel
+      - MOCK_ACTION_BLOCK=<action>{"type":"discord_post","channel_id":"qa-test","content":"Test action from character"}</action>
     ports:
       - "11435:11435"
     healthcheck:

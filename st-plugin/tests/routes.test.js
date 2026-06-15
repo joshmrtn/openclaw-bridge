@@ -408,7 +408,7 @@ describe('plugin routes', () => {
         await callRoute(router, handler, req, res);
 
         expect(requestGenerate).toHaveBeenCalledWith(expect.objectContaining({
-            message: '[OWNER]\nHello',
+            message: expect.stringContaining('[OWNER]\nHello'),
         }), undefined);
         expect(appendExternalChatToHistory).toHaveBeenCalledWith(
             'Frog',
@@ -504,7 +504,7 @@ describe('plugin routes', () => {
         await callRoute(router, handler, req, res);
 
         expect(requestGenerate).toHaveBeenCalledWith(expect.objectContaining({
-            message: '[GUEST]\nHello',
+            message: expect.stringContaining('[GUEST]\nHello'),
         }), undefined);
         expect(res.body.response).toBe('[RESP]');
     });
@@ -1071,7 +1071,7 @@ describe('plugin routes', () => {
         await callRoute(router, handler, req, res);
 
         expect(requestGenerate).toHaveBeenCalledWith(expect.objectContaining({
-            message: '[HEARTBEAT]\nCheck in time',
+            message: expect.stringContaining('[HEARTBEAT]\nCheck in time'),
         }), undefined);
         expect(appendMessage).toHaveBeenCalledWith('Frog', expect.objectContaining({
             mes: expect.stringContaining('[Heartbeat on discord-bot]'),

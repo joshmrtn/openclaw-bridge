@@ -122,43 +122,64 @@ If it's a real directory rather than a symlink, re-run `dev-setup.sh`.
 
 ## Adding a new character action tool
 
-Character action tools let the ST brain instruct the OC body to take outbound actions during generation. Adding one requires changes in two files:
+Character action tools let the ST brain instruct the OC body to take outbound actions during generation. They work on two paths:
 
-### 1. Register in `st-extension/index.js`
+- **ST UI path**: ST's built-in function calling fires the tool when the character responds in chat.
+- **OC/Discord path**: `Generate('quiet', ...)` excludes native tool calling, so the tool schema is injected as text into the prompt. The LLM may output `<action>` blocks which the `/generate` handler parses and strips before returning `pending_actions` to OC.
+
+Adding a new tool requires changes in three files:
+
+### 1. Register in `st-plugin/action-tools.js` (source of truth)
+
+Add an entry to `ACTION_TOOLS`:
+
+```js
+{
+    type: 'my_action',
+    description: 'What this action does and when to use it.',
+    parameters: [
+        { name: 'param_one', description: 'What this parameter is' },
+    ],
+},
+```
+
+The `type` string must match the `case` label in step 3.
+
+### 2. Register in `st-extension/index.js`
 
 Inside `registerBridgeTools()`, add a `context.registerFunctionTool(...)` call:
 
 ```js
 context.registerFunctionTool({
-    name: 'openclaw_<action_name>',
+    name: 'openclaw_my_action',
     displayName: 'Human-readable name',
     description: 'What this tool does and when to use it.',
     parameters: {
         type: 'object',
         properties: {
-            my_param: { type: 'string', description: 'What this param is' },
+            param_one: { type: 'string', description: 'What this param is' },
         },
-        required: ['my_param'],
+        required: ['param_one'],
     },
     stealth: true,
     action: async (params) => {
-        queueCharacterAction('<action_name>', params);
+        queueCharacterAction('my_action', params);
         return { queued: true };
     },
 });
 ```
 
-### 2. Implement in `oc-plugin/src/index.ts`
+### 3. Implement in `oc-plugin/src/index.ts`
 
 Add a `case` in the `switch` inside `executeCharacterActions`:
 
 ```ts
-case "<action_name>": {
+case "my_action": {
     const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
     if (!adapter?.sendText) { outcome = "no outbound adapter"; break; }
     await adapter.sendText({
         cfg: api.config,
-        to: String(action.my_param ?? ""),
+        to: String(action.param_one ?? ""),
         text: String(action.content ?? ""),
         ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
     });
@@ -167,7 +188,7 @@ case "<action_name>": {
 }
 ```
 
-No changes to the `/generate` handler or trust enforcement are needed — `pendingActions` is already forwarded to OC and stripped for guests automatically.
+The `log-action` call after the switch already records the outcome to ST chat history. Guest action blocking is enforced in the `/generate` handler — no changes needed there.
 
 ---
 

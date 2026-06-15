@@ -14,6 +14,7 @@ const sessionManager = require('./session-manager');
 const { startWebSocketServer } = require('./ws-server');
 const headlessService = require('./headless-service');
 const lorebook = require('./lorebook');
+const { ACTION_TOOLS, buildActionPrompt, parseActionBlocks } = require('./action-tools');
 
 let wsBundle = null;
 let headlessStartupError = null;
@@ -385,7 +386,10 @@ async function init(router) {
         // R10: heartbeat path — autonomous scheduled trigger, bypasses trust labels (R10.3)
         if (isHeartbeat) {
             try {
-                const heartbeatMessage = `[HEARTBEAT]\n${message}`;
+                const heartbeatActionPrompt = buildActionPrompt(ACTION_TOOLS);
+                const heartbeatMessage = heartbeatActionPrompt
+                    ? `[HEARTBEAT]\n${message}\n\n${heartbeatActionPrompt}`
+                    : `[HEARTBEAT]\n${message}`;
                 const genResult = await sessionManager.requestGenerate({
                     character,
                     message: heartbeatMessage,
@@ -393,8 +397,9 @@ async function init(router) {
                     channel,
                     user_id,
                 }, timeoutMs);
-                const generatedText = genResult.response;
-                const actions = genResult.actions || [];
+                const { actions: parsedHeartbeatActions, text: cleanHeartbeatText } = parseActionBlocks(genResult.response);
+                const generatedText = cleanHeartbeatText;
+                const actions = [...(genResult.actions || []), ...parsedHeartbeatActions];
                 const stSideActions = genResult.st_side_actions || [];
 
                 // R11.6: process memory writes synchronously before returning
@@ -447,6 +452,8 @@ async function init(router) {
             let pendingActions = [];
             let stSideActions = [];
 
+            const actionPrompt = buildActionPrompt(ACTION_TOOLS);
+
             // Try to label message with owner/guest if link exists
             try {
                 const links = linkState.getLink(character) || {};
@@ -454,26 +461,29 @@ async function init(router) {
                 const isOwner = !!(user_id && ownerIds.includes(user_id));
                 const trustLabel = isOwner ? '[OWNER]' : '[GUEST]';
                 const labeledMessage = `${trustLabel}\n${message}`;
+                const promptedMessage = actionPrompt ? `${labeledMessage}\n\n${actionPrompt}` : labeledMessage;
 
                 try {
                     const genResult = await sessionManager.requestGenerate({
                         character,
-                        message: labeledMessage,
+                        message: promptedMessage,
                         images,
                         channel,
                         user_id,
                     }, timeoutMs);
-                    generatedText = genResult.response;
+                    const { actions: parsedActions, text: cleanText } = parseActionBlocks(genResult.response);
+                    generatedText = cleanText;
                     // R5.4: only pass actions through for owner-initiated requests
-                    pendingActions = isOwner ? (genResult.actions || []) : [];
+                    pendingActions = isOwner ? [...(genResult.actions || []), ...parsedActions] : [];
                     stSideActions = genResult.st_side_actions || [];
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;
                         throw wsError;
                     }
-                    const result = await generator.generate(character, labeledMessage, { images, channel, user_id });
-                    generatedText = typeof result === 'string' ? result : result?.response;
+                    const result = await generator.generate(character, promptedMessage, { images, channel, user_id });
+                    const rawText = typeof result === 'string' ? result : result?.response;
+                    generatedText = parseActionBlocks(rawText || '').text;
                     shouldWriteHistory = false;
                 }
             } catch (innerErr) {
@@ -484,9 +494,10 @@ async function init(router) {
                     throw innerErr;
                 }
                 // No link state or error reading it; try without label
+                const promptedBareMessage = actionPrompt ? `${message}\n\n${actionPrompt}` : message;
                 try {
-                    const genResult = await sessionManager.requestGenerate({ character, message, images, channel, user_id }, timeoutMs);
-                    generatedText = genResult.response;
+                    const genResult = await sessionManager.requestGenerate({ character, message: promptedBareMessage, images, channel, user_id }, timeoutMs);
+                    generatedText = parseActionBlocks(genResult.response).text;
                     stSideActions = genResult.st_side_actions || [];
                     // No link state means trust cannot be verified — discard actions (R5.4)
                 } catch (wsError) {
@@ -494,8 +505,9 @@ async function init(router) {
                         wsError.statusCode = 503;
                         throw wsError;
                     }
-                    const result = await generator.generate(character, message, { images, channel, user_id });
-                    generatedText = typeof result === 'string' ? result : result?.response;
+                    const result = await generator.generate(character, promptedBareMessage, { images, channel, user_id });
+                    const rawText = typeof result === 'string' ? result : result?.response;
+                    generatedText = parseActionBlocks(rawText || '').text;
                     shouldWriteHistory = false;
                 }
             }

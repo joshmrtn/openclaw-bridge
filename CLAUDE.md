@@ -139,28 +139,48 @@ Dev token auto-loaded from `data/openclaw-bridge/bridge-token.txt` when env vars
 
 ## Adding a new character action tool (R5)
 
-Character action tools let the ST brain instruct the OC body to take outbound actions during generation. Adding a new tool requires changes in two files:
+Character action tools let the ST brain instruct the OC body to take outbound actions during generation. They work on two paths:
 
-### 1. Register the tool in `st-extension/index.js`
+- **ST UI path**: the character responds natively in the ST chat UI; ST's built-in function calling fires the tool.
+- **OC/Discord path**: `Generate('quiet', ...)` excludes tool calling, so the tool schema is injected as text into the prompt instead. The LLM may output `<action>` blocks which the `/generate` handler parses and strips server-side before returning `pending_actions` to OC.
+
+Adding a new tool requires changes in three files:
+
+### 1. Register the tool in `st-plugin/action-tools.js` (source of truth)
+
+Add an entry to `ACTION_TOOLS`:
+
+```js
+{
+    type: 'my_action',
+    description: 'What this action does and when to use it.',
+    parameters: [
+        { name: 'param_one', description: 'What this parameter is' },
+    ],
+},
+```
+
+The `type` string must match the `case` label in step 3. This drives the prompt injection on the OC path — the LLM sees the description and parameter list as text.
+
+### 2. Register the tool in `st-extension/index.js` (ST UI path)
 
 Inside `registerBridgeTools()`, add a new `context.registerFunctionTool(...)` call:
 
 ```js
 context.registerFunctionTool({
-    name: 'openclaw_<action_name>',
+    name: 'openclaw_my_action',
     displayName: 'Human-readable name',
     description: 'What this tool does and when to use it.',
     parameters: {
         type: 'object',
         properties: {
-            my_param: { type: 'string', description: 'What this param is' },
-            // ...
+            param_one: { type: 'string', description: 'What this param is' },
         },
-        required: ['my_param'],
+        required: ['param_one'],
     },
-    stealth: true,  // hide tool calls from ST UI
+    stealth: true,
     action: async (params) => {
-        queueCharacterAction('<action_name>', params);
+        queueCharacterAction('my_action', params);
         return { queued: true };
     },
 });
@@ -168,19 +188,18 @@ context.registerFunctionTool({
 
 `queueCharacterAction` reads `ctx.characterId` from the ST context to scope the action to the correct character — no additional scoping needed.
 
-### 2. Implement execution in `oc-plugin/src/index.ts`
+### 3. Implement execution in `oc-plugin/src/index.ts`
 
 Add a new `case` in the `switch` inside `executeCharacterActions`:
 
 ```ts
-case "<action_name>": {
+case "my_action": {
     // Use api.config (OpenClawConfig) and api.runtime for OC SDK access.
-    // For channel sends: load the adapter for the current channel account.
     const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
     if (!adapter?.sendText) { outcome = "no outbound adapter"; break; }
     await adapter.sendText({
         cfg: api.config,
-        to: String(action.my_param ?? ""),
+        to: String(action.param_one ?? ""),
         text: String(action.content ?? ""),
         ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
     });
@@ -194,9 +213,9 @@ case "<action_name>": {
 - `api.runtime.channel.outbound.loadAdapter(channelId)` — returns a `ChannelOutboundAdapter | undefined`; always guard with `?.sendText` before calling
 - `ctx.channelId` — full OC channel account ID (e.g. `"discord-mybotname"`); routes to the same account that received the inbound message
 - `ctx.accountId` — optional multi-account discriminator; pass through so multi-account deployments route to the right bot
-- Action types are platform-specific: a Discord character uses `discord_*` tools; a Telegram character uses `telegram_*` tools; loading an adapter by `ctx.channelId` will give you the adapter for whichever platform the character is on
+- Action types are platform-specific: a Discord character uses `discord_*` tools; a Telegram character uses `telegram_*` tools
 
-No changes are needed to the plugin's `/generate` handler or trust enforcement — the `pendingActions` array is already forwarded to the OC plugin and stripped for guests automatically.
+The `log-action` call (R5.5) after the switch already records the outcome to ST chat history — no changes needed for logging. Guest action blocking (R5.4) is enforced in the `/generate` handler before `pending_actions` is returned to OC.
 
 ## Requirements
 

@@ -20,6 +20,8 @@ const { randomUUID } = require('crypto');
 const PORT = parseInt(process.env.PORT || '11435', 10);
 const CHARACTER_NAME = process.env.CHARACTER_NAME || 'TestBot';
 const CHANNEL = process.env.CHANNEL || 'qa-channel';
+// When set, appended to turn-2 responses so E2E tests can exercise the action parse path.
+const MOCK_ACTION_BLOCK = process.env.MOCK_ACTION_BLOCK || '';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -144,7 +146,7 @@ const server = http.createServer(async (req, res) => {
     // Turn 2+: tool output received → return simple text acknowledgment
     if (hasToolOutput(input)) {
       const msgId = `msg_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-      const text = 'Done.';
+      const text = MOCK_ACTION_BLOCK ? `Done. ${MOCK_ACTION_BLOCK}` : 'Done.';
       const events = [
         ...buildTextSse(msgId, text),
         {

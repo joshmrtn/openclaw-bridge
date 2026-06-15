@@ -25,6 +25,7 @@ const QA_BUS_URL = process.env.QA_BUS_URL || 'http://qa-bus:15000';
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || 'e2e-test-token';
 const OC_URL = process.env.OC_URL || 'http://openclaw:18789';
 const SILLYTAVERN_CONTAINER = process.env.SILLYTAVERN_CONTAINER || 'sillytavern-full';
+const FAKE_OLLAMA_URL = process.env.FAKE_OLLAMA_URL || 'http://fake-ollama:11434';
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
@@ -527,4 +528,85 @@ describe('link-character.sh round-trip (D5)', () => {
     expect(narratorAfterRelink?.link).toBeTruthy();
     expect(narratorAfterRelink.link.oc_agent_id).toBe('default');
   }, 30000);
+});
+
+// ── R5: outbound character actions ────────────────────────────────────────────
+// Verifies that when the ST LLM returns <action> blocks, the plugin parses them,
+// strips them from the response text, passes them to OC as pending_actions, OC
+// attempts execution, and the outcome is logged to ST chat history (R5.3/R5.5).
+describe('outbound character actions (R5)', () => {
+  const ACTION_RESPONSE = 'Sure, I will post that! <action>{"type":"discord_post","channel_id":"qa-test","content":"Test action from character"}</action>';
+  const CLEAN_TEXT = 'Sure, I will post that!';
+
+  beforeEach(async () => {
+    await post(`${QA_BUS_URL}/v1/reset`, {});
+    // Ensure TestBot has an owner so trust label is applied correctly.
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: ['qa:owner-user'] }),
+    });
+  });
+
+  test('action block in LLM response is executed and logged; response text is clean', async () => {
+    // Queue a response that contains an <action> block — ST's /generate handler
+    // will parse and strip it before returning to OC.
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: ACTION_RESPONSE });
+
+    const convId = `dm-r5-owner-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:owner-user',
+      senderName: 'Owner',
+      text: 'Please post something to the team channel.',
+    });
+
+    // Wait for the full round-trip — OC calls generate_response → ST parses action
+    // → OC calls log-action → OC sends clean text back to qa-bus.
+    const outbound = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5 owner action outbound message' });
+
+    // Response text delivered to the channel must be clean — no <action> blocks.
+    expect(outbound.message.text).not.toContain('<action>');
+    expect(outbound.message.text).toContain(CLEAN_TEXT);
+
+    // OC should have called log-action; ST chat history should contain the entry.
+    const historyResp = await stFetch('/history?character=TestBot');
+    if (historyResp.status === 200) {
+      const messages = historyResp.body.messages || [];
+      const actionLog = messages.find(m =>
+        m.content && m.content.includes('[Autonomous action') && m.content.includes('discord_post')
+      );
+      expect(actionLog).toBeDefined();
+    }
+  }, 120000);
+
+  test('guest sender cannot trigger outbound actions (R5.4)', async () => {
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: ACTION_RESPONSE });
+
+    const convId = `dm-r5-guest-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:guest-user',
+      senderName: 'Guest',
+      text: 'Please post something to the team channel.',
+    });
+
+    // Wait for OC to send a reply — it should respond normally but take no action.
+    await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5 guest action outbound message' });
+
+    // No action log should appear in history for a guest-triggered message.
+    const historyResp = await stFetch('/history?character=TestBot');
+    if (historyResp.status === 200) {
+      const messages = historyResp.body.messages || [];
+      const actionLog = messages.find(m =>
+        m.content && m.content.includes('[Autonomous action') && m.content.includes('discord_post')
+      );
+      expect(actionLog).toBeUndefined();
+    }
+  }, 120000);
 });
