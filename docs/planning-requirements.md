@@ -72,6 +72,9 @@ Running a second headless ST instance for background generation
 Finding an ST internal API that accepts a character ID without requiring UI state change
 
 This is the highest priority open problem. R2.2 and R2.3 cannot be met until R9.1 is resolved.
+
+Status: Implemented. `generateForCharacter()` in `st-extension/index.js` passes `force_chid` to `Generate('quiet', ...)`, targeting a specific character by index regardless of which character is active in the ST UI. `characters.findIndex(c => c.name === characterName)` maps name to index. No UI state is changed during generation.
+
 R9.2 — Headless operation
 The extension runs in ST's browser UI. If the browser is closed, generation cannot occur. The system must define its behavior when no browser session is active:
 
@@ -80,6 +83,8 @@ Return a configurable unavailable message
 Run ST in a headless browser (Playwright/Puppeteer) for background generation
 
 The chosen approach must be documented and implemented. R1.5 depends on this.
+
+Status: Implemented. `st-plugin/headless-service.js` launches a Chromium browser via Playwright on ST startup, loads ST in a background tab, and runs the extension there. The session manager always prefers the headless WS client over the user's browser tab. If the headless service is unavailable, generation falls back to HTTP polling (the extension polls `/http-message` and POSTs responses to `/http-response`). Set `OPENCLAW_BRIDGE_ENABLE_HEADLESS=false` to disable the headless service entirely.
 R9.3 — OC agent must not be in the inbound message path
 Spike result (2026-06-09): internal `message:received` hooks are additive — the OC agent LLM runs regardless of what the hook pushes to `event.messages`. There is no OC config option to force exclusive tool use. Typed plugin hooks with cancel/claim semantics are required.
 

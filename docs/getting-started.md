@@ -31,16 +31,15 @@ cd openclaw-bridge
 ./setup.sh
 ```
 
-`setup.sh` will:
+This does five things:
 
-1. Check your Node.js and OpenClaw versions
-2. Install the plugin's npm dependencies
-3. Find your SillyTavern installation (checks common locations) and copy the plugin and extension into it — it will ask you to confirm the path, or prompt you to enter one if it cannot find ST automatically
-4. Generate a bridge auth token at `data/openclaw-bridge/bridge-token.txt`
-5. Symlink the token and character-links file into `~/.openclaw/openclaw-bridge/` so the OC gateway plugin can find them
-6. Install the OC gateway plugin if the `openclaw` CLI is in your PATH
+1. Checks your Node.js and OpenClaw versions
+2. Installs the plugin's npm dependencies
+3. Copies the plugin and extension into your SillyTavern installation — it will find ST automatically, or ask you to confirm the path if it can't
+4. Generates a bridge auth token saved to `data/openclaw-bridge/bridge-token.txt`
+5. Installs the OC gateway plugin if the `openclaw` CLI is in your PATH
 
-**Non-interactive / scripted install:** if you know where SillyTavern is, skip the prompts:
+**If you know where SillyTavern is, skip the prompts:**
 
 ```bash
 ./setup.sh --st-path ~/SillyTavern
@@ -50,64 +49,43 @@ cd openclaw-bridge
 
 ## Step 3 — Enable server plugins in SillyTavern
 
-The bridge plugin is a server-side ST plugin. ST does not load these by default.
+ST doesn't load server plugins by default — you need to turn this on once.
 
 1. Open `SillyTavern/config.yaml` in a text editor
 2. Find `enableServerPlugins` and set it to `true`
-3. Save the file
+3. Save and close the file
 
 ---
 
 ## Step 4 — Restart SillyTavern
 
-Stop SillyTavern and start it again. On startup it will load the plugin and launch the headless Playwright browser (the background browser that handles generation).
-
-Verify the plugin loaded:
-
-```bash
-curl http://localhost:8000/api/plugins/openclaw-bridge/status
-```
-
-Expected response:
-
-```json
-{"status":"ok","version":"...","connected_ws_clients":0}
-```
+Stop SillyTavern and start it again. On startup it will load the bridge plugin and launch a background browser that handles message generation automatically — you don't need to keep a browser tab open for this to work.
 
 ---
 
-## Step 5 — Refresh your browser tab
+## Step 5 — Open SillyTavern in your browser
 
-Open or refresh SillyTavern in your browser. The extension loads automatically and connects to the plugin over WebSocket. After a few seconds you should see the client count rise in the status endpoint:
-
-```bash
-curl http://localhost:8000/api/plugins/openclaw-bridge/status
-# connected_ws_clients should be 1 or more
-```
-
-> **Tip:** The headless browser (a background Playwright instance) also counts as a connected client. If you see `connected_ws_clients: 1` before opening your browser tab, that is the headless service — which is exactly what you want.
+Open or refresh SillyTavern in your browser. The bridge extension loads automatically.
 
 ---
 
-## Step 6 — Verify the OC gateway plugin
+## Step 6 — Apply the OpenClaw config
 
 ```bash
-openclaw plugins list
-# Expected: openclaw-bridge appears in the list
-
 openclaw gateway restart
-# Applies the plugin installation
 ```
+
+This picks up the gateway plugin that `setup.sh` installed.
 
 ---
 
-## Step 7 — Run the verification script
+## Step 7 — Run the health check
 
 ```bash
 ./scripts/verify.sh
 ```
 
-This checks the full stack: plugin reachability, token auth, WebSocket clients, and headless service status. Fix any warnings before continuing.
+This checks the full stack: plugin reachability, bridge token auth, background browser status, and character links. Fix any warnings before continuing.
 
 To also verify a specific character link (once you have one):
 
@@ -115,32 +93,25 @@ To also verify a specific character link (once you have one):
 ./scripts/verify.sh --character "My Character"
 ```
 
+If anything is red, see [Troubleshooting](troubleshooting.md).
+
 ---
 
 ## What's next
 
 Add your first character: [Adding a character](adding-a-character.md)
 
-If anything went wrong during setup: [Troubleshooting](troubleshooting.md)
-
 ---
 
 ## Uninstalling
-
-To remove openclaw-bridge cleanly, run:
 
 ```bash
 ./uninstall.sh
 ```
 
-`uninstall.sh` will:
+This removes the plugin and extension from ST, uninstalls the OC gateway plugin, and cleans up the data symlinks. It will ask whether to delete your bridge token and character links — the default is to keep them so a re-install picks up where you left off.
 
-1. Find your SillyTavern installation (same auto-discovery logic as `setup.sh`) and remove the plugin and extension directories from it
-2. Uninstall the OC gateway plugin if the `openclaw` CLI is in your PATH
-3. Remove the data symlinks from `~/.openclaw/openclaw-bridge/`
-4. Ask whether to delete `data/openclaw-bridge/` (bridge token and character-links.json) — the default is to **keep** it so a re-install picks up where you left off without regenerating the token
-
-**Non-interactive / scripted removal:**
+**Non-interactive:**
 
 ```bash
 ./uninstall.sh --st-path ~/SillyTavern --yes
@@ -152,6 +123,6 @@ To remove openclaw-bridge cleanly, run:
 ./uninstall.sh --st-path ~/SillyTavern --yes --delete-data
 ```
 
-After uninstalling, restart SillyTavern to deactivate the plugin and extension.
+Restart SillyTavern after uninstalling to deactivate the plugin and extension.
 
-> **What is NOT removed:** Character cards, ST's `config.yaml` and `settings.json`, and any lorebook files. Only the files that `setup.sh` originally installed are touched.
+> **What is NOT removed:** Character cards, ST's `config.yaml` and `settings.json`, and lorebook files. Only the files that `setup.sh` originally installed are touched.
