@@ -383,6 +383,8 @@ describe('plugin routes', () => {
             registerClient: jest.fn(),
             unregisterClient: jest.fn(),
             getConnectedClientCount: jest.fn(() => 1),
+            broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
         }));
         jest.doMock('../link-state', () => ({
             getLink: jest.fn(() => ({ owner_user_ids: ['discord:1'] })),
@@ -1171,6 +1173,7 @@ describe('plugin routes', () => {
             getConnectedClientCount: jest.fn(() => 0),
             getSseClientCount: jest.fn(() => 0),
             broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
         }));
 
         const plugin = require('..');
@@ -1200,6 +1203,7 @@ describe('plugin routes', () => {
             getConnectedClientCount: jest.fn(() => 0),
             getSseClientCount: jest.fn(() => 0),
             broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
         }));
 
         const plugin = require('..');
