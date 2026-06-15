@@ -449,7 +449,7 @@ describe('setup.sh integration', () => {
   });
 });
 
-// ── D4: lorebook memory storage (R11) ────────────────────────────────────────
+// ── lorebook memory storage (R11) ────────────────────────────────────────────
 // Tests the lorebook read/write path end-to-end inside the Docker container.
 // This proves that: bearer auth works, the lorebook file is writable in the
 // container filesystem, and the GET endpoint reads back what was written.
@@ -485,11 +485,11 @@ describe('lorebook memory storage (R11)', () => {
   });
 });
 
-// ── D5: link-character.sh round-trip ─────────────────────────────────────────
+// ── link-character.sh round-trip ─────────────────────────────────────────────
 // Proves that link-character.sh --unlink removes a character link and the
 // normal link command restores it. Runs the real script inside the ST container
 // (bash/curl/python3 are available there from setup.sh / the Dockerfile).
-describe('link-character.sh round-trip (D5)', () => {
+describe('link-character.sh round-trip', () => {
   test('unlink removes Narrator link; re-link restores it', async () => {
     // 1. Verify Narrator is linked before we start.
     const before = await stFetch('/characters');
@@ -739,4 +739,113 @@ describe('R11: memory write on OC path', () => {
     expect(found).toBeDefined();
     expect(found.content).toBe('Heartbeat ran at scheduled time');
   }, 60000);
+});
+
+// ── uninstall.sh lifecycle (#40) ─────────────────────────────────────────────
+// Answers definitively: can a user follow the installation instructions to get
+// a working system, and after running uninstall.sh is everything put back
+// exactly as it was before?
+//
+// Steps:
+//   1. Verify plugin is healthy (pre-condition)
+//   2. Run uninstall.sh — assert installed dirs are gone from disk
+//   3. Run setup.sh — assert dirs are restored on disk
+//   4. Restart ST and assert the reinstalled plugin loads and returns 200
+//
+// Note: we verify uninstall via disk state (test -d) rather than checking for
+// HTTP 404 after restart. The container entrypoint always runs setup.sh on
+// startup, so a restart would immediately reinstall — that is correct Docker E2E
+// setup behaviour and does not represent how a real user uninstall works.
+// The disk assertions are the definitive check: if the files are gone,
+// the plugin is uninstalled; if they are back, it is reinstalled.
+describe('setup.sh → uninstall.sh lifecycle (#40)', () => {
+  test('uninstall removes plugin from disk; reinstall restores it', async () => {
+    // 1. Pre-condition: plugin is healthy.
+    const before = await stFetch('/status');
+    expect(before.status).toBe(200);
+
+    // 2. Uninstall inside the ST container (non-interactive: --st-path + --yes).
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/uninstall.sh` +
+      ` --st-path /home/node/app --yes`,
+      { timeout: 30000 },
+    );
+
+    // Assert plugin and extension directories are gone from disk.
+    expect(() =>
+      execSync(
+        `docker exec ${SILLYTAVERN_CONTAINER} test -d /home/node/app/plugins/openclaw-bridge`,
+        { timeout: 5000 },
+      )
+    ).toThrow(); // test -d exits 1 when absent → execSync throws
+
+    expect(() =>
+      execSync(
+        `docker exec ${SILLYTAVERN_CONTAINER} test -d` +
+        ` /home/node/app/public/scripts/extensions/openclaw-bridge`,
+        { timeout: 5000 },
+      )
+    ).toThrow();
+
+    // Assert things uninstall.sh must NOT touch are still intact.
+    // Character cards (the .png and .json files placed by the user, not by setup.sh).
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f` +
+      ` /home/node/app/data/default-user/characters/TestBot.png`,
+      { timeout: 5000 },
+    );
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f` +
+      ` /home/node/app/data/default-user/characters/Narrator.png`,
+      { timeout: 5000 },
+    );
+    // ST config.yaml and settings.json (owned by the user, never written by setup.sh).
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f /home/node/app/config/config.yaml`,
+      { timeout: 5000 },
+    );
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f` +
+      ` /home/node/app/data/default-user/settings.json`,
+      { timeout: 5000 },
+    );
+
+    // 3. Reinstall inside the ST container.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/setup.sh` +
+      ` --st-path /home/node/app`,
+      { timeout: 90000 },
+    );
+
+    // Assert directories are back on disk.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -d /home/node/app/plugins/openclaw-bridge`,
+      { timeout: 5000 },
+    ); // exits 0 when present — does not throw
+
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -d` +
+      ` /home/node/app/public/scripts/extensions/openclaw-bridge`,
+      { timeout: 5000 },
+    );
+
+    // 4. Restart ST and confirm the reinstalled plugin loads correctly.
+    execSync(`docker restart ${SILLYTAVERN_CONTAINER}`, { timeout: 30000 });
+
+    await waitFor(async () => {
+      try { const r = await stFetch('/status'); return r.status !== 200; }
+      catch { return true; }
+    }, { timeoutMs: 15000, intervalMs: 500, label: 'ST to go offline after lifecycle restart' });
+
+    await waitFor(async () => {
+      try {
+        const r = await stFetch('/status');
+        return r.status === 200;
+      } catch { return false; }
+    }, { timeoutMs: 180000, intervalMs: 3000, label: 'plugin to come back after reinstall' });
+
+    const afterReinstall = await stFetch('/status');
+    expect(afterReinstall.status).toBe(200);
+    expect(afterReinstall.body).toHaveProperty('plugin', 'openclaw-bridge');
+  }, 300000); // 5 min — one ST restart + npm install inside container
 });

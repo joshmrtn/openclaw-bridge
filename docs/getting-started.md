@@ -122,3 +122,36 @@ To also verify a specific character link (once you have one):
 Add your first character: [Adding a character](adding-a-character.md)
 
 If anything went wrong during setup: [Troubleshooting](troubleshooting.md)
+
+---
+
+## Uninstalling
+
+To remove openclaw-bridge cleanly, run:
+
+```bash
+./uninstall.sh
+```
+
+`uninstall.sh` will:
+
+1. Find your SillyTavern installation (same auto-discovery logic as `setup.sh`) and remove the plugin and extension directories from it
+2. Uninstall the OC gateway plugin if the `openclaw` CLI is in your PATH
+3. Remove the data symlinks from `~/.openclaw/openclaw-bridge/`
+4. Ask whether to delete `data/openclaw-bridge/` (bridge token and character-links.json) — the default is to **keep** it so a re-install picks up where you left off without regenerating the token
+
+**Non-interactive / scripted removal:**
+
+```bash
+./uninstall.sh --st-path ~/SillyTavern --yes
+```
+
+**Also delete bridge data (token + character links):**
+
+```bash
+./uninstall.sh --st-path ~/SillyTavern --yes --delete-data
+```
+
+After uninstalling, restart SillyTavern to deactivate the plugin and extension.
+
+> **What is NOT removed:** Character cards, ST's `config.yaml` and `settings.json`, and any lorebook files. Only the files that `setup.sh` originally installed are touched.
