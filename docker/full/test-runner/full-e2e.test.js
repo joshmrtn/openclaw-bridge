@@ -449,7 +449,7 @@ describe('setup.sh integration', () => {
   });
 });
 
-// ── D4: lorebook memory storage (R11) ────────────────────────────────────────
+// ── lorebook memory storage (R11) ────────────────────────────────────────────
 // Tests the lorebook read/write path end-to-end inside the Docker container.
 // This proves that: bearer auth works, the lorebook file is writable in the
 // container filesystem, and the GET endpoint reads back what was written.
@@ -485,11 +485,11 @@ describe('lorebook memory storage (R11)', () => {
   });
 });
 
-// ── D5: link-character.sh round-trip ─────────────────────────────────────────
+// ── link-character.sh round-trip ─────────────────────────────────────────────
 // Proves that link-character.sh --unlink removes a character link and the
 // normal link command restores it. Runs the real script inside the ST container
 // (bash/curl/python3 are available there from setup.sh / the Dockerfile).
-describe('link-character.sh round-trip (D5)', () => {
+describe('link-character.sh round-trip', () => {
   test('unlink removes Narrator link; re-link restores it', async () => {
     // 1. Verify Narrator is linked before we start.
     const before = await stFetch('/characters');
@@ -741,7 +741,7 @@ describe('R11: memory write on OC path', () => {
   }, 60000);
 });
 
-// ── D6: setup.sh → uninstall.sh lifecycle ────────────────────────────────────
+// ── uninstall.sh lifecycle (#40) ─────────────────────────────────────────────
 // Answers definitively: can a user follow the installation instructions to get
 // a working system, and after running uninstall.sh is everything put back
 // exactly as it was before?
@@ -758,7 +758,7 @@ describe('R11: memory write on OC path', () => {
 // setup behaviour and does not represent how a real user uninstall works.
 // The disk assertions are the definitive check: if the files are gone,
 // the plugin is uninstalled; if they are back, it is reinstalled.
-describe('D6: setup.sh → uninstall.sh lifecycle', () => {
+describe('setup.sh → uninstall.sh lifecycle (#40)', () => {
   test('uninstall removes plugin from disk; reinstall restores it', async () => {
     // 1. Pre-condition: plugin is healthy.
     const before = await stFetch('/status');
