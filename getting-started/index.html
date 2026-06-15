@@ -431,10 +431,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#step-5-refresh-your-browser-tab" class="md-nav__link">
+  <a href="#step-5-open-sillytavern-in-your-browser" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 5 — Refresh your browser tab
+        Step 5 — Open SillyTavern in your browser
       
     </span>
   </a>
@@ -442,10 +442,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#step-6-verify-the-oc-gateway-plugin" class="md-nav__link">
+  <a href="#step-6-apply-the-openclaw-config" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 6 — Verify the OC gateway plugin
+        Step 6 — Apply the OpenClaw config
       
     </span>
   </a>
@@ -453,10 +453,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#step-7-run-the-verification-script" class="md-nav__link">
+  <a href="#step-7-run-the-health-check" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 7 — Run the verification script
+        Step 7 — Run the health check
       
     </span>
   </a>
@@ -710,10 +710,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#step-5-refresh-your-browser-tab" class="md-nav__link">
+  <a href="#step-5-open-sillytavern-in-your-browser" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 5 — Refresh your browser tab
+        Step 5 — Open SillyTavern in your browser
       
     </span>
   </a>
@@ -721,10 +721,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#step-6-verify-the-oc-gateway-plugin" class="md-nav__link">
+  <a href="#step-6-apply-the-openclaw-config" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 6 — Verify the OC gateway plugin
+        Step 6 — Apply the OpenClaw config
       
     </span>
   </a>
@@ -732,10 +732,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#step-7-run-the-verification-script" class="md-nav__link">
+  <a href="#step-7-run-the-health-check" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 7 — Run the verification script
+        Step 7 — Run the health check
       
     </span>
   </a>
@@ -809,85 +809,62 @@
 <h2 id="step-2-run-setup">Step 2 — Run setup<a class="headerlink" href="#step-2-run-setup" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>./setup.sh
 </code></pre></div>
-<p><code>setup.sh</code> will:</p>
+<p>This does five things:</p>
 <ol>
-<li>Check your Node.js and OpenClaw versions</li>
-<li>Install the plugin's npm dependencies</li>
-<li>Find your SillyTavern installation (checks common locations) and copy the plugin and extension into it — it will ask you to confirm the path, or prompt you to enter one if it cannot find ST automatically</li>
-<li>Generate a bridge auth token at <code>data/openclaw-bridge/bridge-token.txt</code></li>
-<li>Symlink the token and character-links file into <code>~/.openclaw/openclaw-bridge/</code> so the OC gateway plugin can find them</li>
-<li>Install the OC gateway plugin if the <code>openclaw</code> CLI is in your PATH</li>
+<li>Checks your Node.js and OpenClaw versions</li>
+<li>Installs the plugin's npm dependencies</li>
+<li>Copies the plugin and extension into your SillyTavern installation — it will find ST automatically, or ask you to confirm the path if it can't</li>
+<li>Generates a bridge auth token saved to <code>data/openclaw-bridge/bridge-token.txt</code></li>
+<li>Installs the OC gateway plugin if the <code>openclaw</code> CLI is in your PATH</li>
 </ol>
-<p><strong>Non-interactive / scripted install:</strong> if you know where SillyTavern is, skip the prompts:</p>
+<p><strong>If you know where SillyTavern is, skip the prompts:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>./setup.sh<span class="w"> </span>--st-path<span class="w"> </span>~/SillyTavern
 </code></pre></div>
 <hr />
 <h2 id="step-3-enable-server-plugins-in-sillytavern">Step 3 — Enable server plugins in SillyTavern<a class="headerlink" href="#step-3-enable-server-plugins-in-sillytavern" title="Permanent link">&para;</a></h2>
-<p>The bridge plugin is a server-side ST plugin. ST does not load these by default.</p>
+<p>ST doesn't load server plugins by default — you need to turn this on once.</p>
 <ol>
 <li>Open <code>SillyTavern/config.yaml</code> in a text editor</li>
 <li>Find <code>enableServerPlugins</code> and set it to <code>true</code></li>
-<li>Save the file</li>
+<li>Save and close the file</li>
 </ol>
 <hr />
 <h2 id="step-4-restart-sillytavern">Step 4 — Restart SillyTavern<a class="headerlink" href="#step-4-restart-sillytavern" title="Permanent link">&para;</a></h2>
-<p>Stop SillyTavern and start it again. On startup it will load the plugin and launch the headless Playwright browser (the background browser that handles generation).</p>
-<p>Verify the plugin loaded:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>http://localhost:8000/api/plugins/openclaw-bridge/status
-</code></pre></div>
-<p>Expected response:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="s2">&quot;ok&quot;</span><span class="p">,</span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="nt">&quot;connected_ws_clients&quot;</span><span class="p">:</span><span class="mi">0</span><span class="p">}</span>
-</code></pre></div>
+<p>Stop SillyTavern and start it again. On startup it will load the bridge plugin and launch a background browser that handles message generation automatically — you don't need to keep a browser tab open for this to work.</p>
 <hr />
-<h2 id="step-5-refresh-your-browser-tab">Step 5 — Refresh your browser tab<a class="headerlink" href="#step-5-refresh-your-browser-tab" title="Permanent link">&para;</a></h2>
-<p>Open or refresh SillyTavern in your browser. The extension loads automatically and connects to the plugin over WebSocket. After a few seconds you should see the client count rise in the status endpoint:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>curl<span class="w"> </span>http://localhost:8000/api/plugins/openclaw-bridge/status
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># connected_ws_clients should be 1 or more</span>
-</code></pre></div>
-<blockquote>
-<p><strong>Tip:</strong> The headless browser (a background Playwright instance) also counts as a connected client. If you see <code>connected_ws_clients: 1</code> before opening your browser tab, that is the headless service — which is exactly what you want.</p>
-</blockquote>
+<h2 id="step-5-open-sillytavern-in-your-browser">Step 5 — Open SillyTavern in your browser<a class="headerlink" href="#step-5-open-sillytavern-in-your-browser" title="Permanent link">&para;</a></h2>
+<p>Open or refresh SillyTavern in your browser. The bridge extension loads automatically.</p>
 <hr />
-<h2 id="step-6-verify-the-oc-gateway-plugin">Step 6 — Verify the OC gateway plugin<a class="headerlink" href="#step-6-verify-the-oc-gateway-plugin" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>openclaw<span class="w"> </span>plugins<span class="w"> </span>list
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="c1"># Expected: openclaw-bridge appears in the list</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>openclaw<span class="w"> </span>gateway<span class="w"> </span>restart
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="c1"># Applies the plugin installation</span>
+<h2 id="step-6-apply-the-openclaw-config">Step 6 — Apply the OpenClaw config<a class="headerlink" href="#step-6-apply-the-openclaw-config" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>openclaw<span class="w"> </span>gateway<span class="w"> </span>restart
 </code></pre></div>
+<p>This picks up the gateway plugin that <code>setup.sh</code> installed.</p>
 <hr />
-<h2 id="step-7-run-the-verification-script">Step 7 — Run the verification script<a class="headerlink" href="#step-7-run-the-verification-script" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>./scripts/verify.sh
+<h2 id="step-7-run-the-health-check">Step 7 — Run the health check<a class="headerlink" href="#step-7-run-the-health-check" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>./scripts/verify.sh
 </code></pre></div>
-<p>This checks the full stack: plugin reachability, token auth, WebSocket clients, and headless service status. Fix any warnings before continuing.</p>
+<p>This checks the full stack: plugin reachability, bridge token auth, background browser status, and character links. Fix any warnings before continuing.</p>
 <p>To also verify a specific character link (once you have one):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>./scripts/verify.sh<span class="w"> </span>--character<span class="w"> </span><span class="s2">&quot;My Character&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>./scripts/verify.sh<span class="w"> </span>--character<span class="w"> </span><span class="s2">&quot;My Character&quot;</span>
 </code></pre></div>
+<p>If anything is red, see <a href="../troubleshooting/">Troubleshooting</a>.</p>
 <hr />
 <h2 id="whats-next">What's next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
 <p>Add your first character: <a href="../adding-a-character/">Adding a character</a></p>
-<p>If anything went wrong during setup: <a href="../troubleshooting/">Troubleshooting</a></p>
 <hr />
 <h2 id="uninstalling">Uninstalling<a class="headerlink" href="#uninstalling" title="Permanent link">&para;</a></h2>
-<p>To remove openclaw-bridge cleanly, run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>./uninstall.sh
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>./uninstall.sh
 </code></pre></div>
-<p><code>uninstall.sh</code> will:</p>
-<ol>
-<li>Find your SillyTavern installation (same auto-discovery logic as <code>setup.sh</code>) and remove the plugin and extension directories from it</li>
-<li>Uninstall the OC gateway plugin if the <code>openclaw</code> CLI is in your PATH</li>
-<li>Remove the data symlinks from <code>~/.openclaw/openclaw-bridge/</code></li>
-<li>Ask whether to delete <code>data/openclaw-bridge/</code> (bridge token and character-links.json) — the default is to <strong>keep</strong> it so a re-install picks up where you left off without regenerating the token</li>
-</ol>
-<p><strong>Non-interactive / scripted removal:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>./uninstall.sh<span class="w"> </span>--st-path<span class="w"> </span>~/SillyTavern<span class="w"> </span>--yes
+<p>This removes the plugin and extension from ST, uninstalls the OC gateway plugin, and cleans up the data symlinks. It will ask whether to delete your bridge token and character links — the default is to keep them so a re-install picks up where you left off.</p>
+<p><strong>Non-interactive:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>./uninstall.sh<span class="w"> </span>--st-path<span class="w"> </span>~/SillyTavern<span class="w"> </span>--yes
 </code></pre></div>
 <p><strong>Also delete bridge data (token + character links):</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>./uninstall.sh<span class="w"> </span>--st-path<span class="w"> </span>~/SillyTavern<span class="w"> </span>--yes<span class="w"> </span>--delete-data
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>./uninstall.sh<span class="w"> </span>--st-path<span class="w"> </span>~/SillyTavern<span class="w"> </span>--yes<span class="w"> </span>--delete-data
 </code></pre></div>
-<p>After uninstalling, restart SillyTavern to deactivate the plugin and extension.</p>
+<p>Restart SillyTavern after uninstalling to deactivate the plugin and extension.</p>
 <blockquote>
-<p><strong>What is NOT removed:</strong> Character cards, ST's <code>config.yaml</code> and <code>settings.json</code>, and any lorebook files. Only the files that <code>setup.sh</code> originally installed are touched.</p>
+<p><strong>What is NOT removed:</strong> Character cards, ST's <code>config.yaml</code> and <code>settings.json</code>, and lorebook files. Only the files that <code>setup.sh</code> originally installed are touched.</p>
 </blockquote>
 
 
