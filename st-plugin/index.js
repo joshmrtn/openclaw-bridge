@@ -17,6 +17,36 @@ const lorebook = require('./lorebook');
 const { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks } = require('./action-tools');
 const ST_SIDE_TYPES = new Set(ST_SIDE_TOOLS.map(t => t.type));
 
+// Validate and resolve send_message actions against the character's configured channels.
+// Unknown channel names are dropped and written to chat history so the operator can see them.
+async function resolveActions(actions, link, character) {
+    const channels = Array.isArray(link?.channels) ? link.channels : [];
+    const resolved = [];
+    for (const action of actions) {
+        if (action.type !== 'send_message') {
+            resolved.push(action);
+            continue;
+        }
+        const ch = channels.find(c => c.name === action.channel);
+        if (!ch) {
+            const configured = channels.map(c => c.name).join(', ') || '(none)';
+            const errMsg = `[send_message failed]: channel '${action.channel}' is not configured for ${character}. Configured channels: ${configured}.`;
+            console.warn(`[openclaw-bridge-plugin] ${errMsg}`);
+            try {
+                const entry = chatHistory.constructStMessage({ role: 'system', content: errMsg });
+                await chatHistory.appendMessage(character, entry);
+            } catch (logErr) {
+                console.warn('[openclaw-bridge-plugin] Failed to log send_message error to history:', logErr?.message);
+            }
+        } else {
+            const resolvedAction = { type: 'send_message', channel_id: ch.channel_id, target: ch.target, content: action.content };
+            if (action.recipient != null) resolvedAction.recipient = action.recipient;
+            resolved.push(resolvedAction);
+        }
+    }
+    return resolved;
+}
+
 let wsBundle = null;
 let headlessStartupError = null;
 
@@ -402,7 +432,8 @@ async function init(router) {
                 const generatedText = cleanHeartbeatText;
                 const parsedHbOcActions = parsedHeartbeatActions.filter(a => !ST_SIDE_TYPES.has(a.type));
                 const parsedHbStActions = parsedHeartbeatActions.filter(a => ST_SIDE_TYPES.has(a.type));
-                const actions = [...(genResult.actions || []), ...parsedHbOcActions];
+                const hbLink = (() => { try { return linkState.getLink(character); } catch { return null; } })();
+                const actions = await resolveActions([...(genResult.actions || []), ...parsedHbOcActions], hbLink, character);
                 const stSideActions = [...(genResult.st_side_actions || []), ...parsedHbStActions];
 
                 // R11.6: process memory writes synchronously before returning
@@ -479,7 +510,8 @@ async function init(router) {
                     const parsedOcActions = parsedActions.filter(a => !ST_SIDE_TYPES.has(a.type));
                     const parsedStActions = parsedActions.filter(a => ST_SIDE_TYPES.has(a.type));
                     // R5.4: only forward OC outbound actions for owner-initiated requests
-                    pendingActions = isOwner ? [...(genResult.actions || []), ...parsedOcActions] : [];
+                    const rawPendingActions = isOwner ? [...(genResult.actions || []), ...parsedOcActions] : [];
+                    pendingActions = rawPendingActions.length > 0 ? await resolveActions(rawPendingActions, links, character) : [];
                     // R11: ST-side actions (memory writes) are processed by the plugin, not forwarded to OC
                     stSideActions = [...(genResult.st_side_actions || []), ...parsedStActions];
                 } catch (wsError) {

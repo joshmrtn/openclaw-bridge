@@ -88,7 +88,7 @@ flowchart TD
 
 Every message arrives with a `user_id` in `platform:id` format (e.g. `discord:123456789`). Before generation, the ST plugin checks `character-links.json` to see if that user ID is in the character's `owner_user_ids` list:
 
-- **`[OWNER]`** — the message sender is a configured owner. The generated response may include outbound actions (e.g. `discord_post`, `openclaw_write_memory`).
+- **`[OWNER]`** — the message sender is a configured owner. The generated response may include outbound actions (e.g. `send_message`, `openclaw_write_memory`).
 - **`[GUEST]`** — everyone else. Actions are stripped from the response before it is returned to OC.
 
 The label is injected by code before generation and cannot be influenced by message content.
