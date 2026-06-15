@@ -219,7 +219,7 @@ The `log-action` call (R5.5) after the switch already records the outcome to ST 
 
 ## Requirements
 
-`docs/planning-requirements.md` is the go/no-go document for v1.0. It defines R1–R9 across channel communication, character fidelity, memory, trust/security, outbound actions, output formatting, multi-character isolation, and installation. R9 lists open problems — R9.1, R9.2, and R9.3 are all resolved. R10 (autonomous heartbeat/persistent presence) and R11 (character memory management via lorebook) are v1.0 targets with requirements drafted but not yet implemented. Review it before deciding an implementation approach is complete.
+`docs/planning-requirements.md` is the go/no-go document for v1.0. It defines R1–R9 across channel communication, character fidelity, memory, trust/security, outbound actions, output formatting, multi-character isolation, and installation. R9 lists open problems — R9.1, R9.2, and R9.3 are all resolved. R10 (autonomous heartbeat/persistent presence) is implemented and E2E tested. R5 (outbound character actions) is implemented — OC path uses `<action>` block injection/parsing; ST UI path uses native `registerFunctionTool`. R11 (character memory management via lorebook on the OC path) is the next target — ST UI path already works; OC path needs the same injection/parsing treatment as R5, with a routing fork to `stSideActions` instead of `pendingActions`. Review it before deciding an implementation approach is complete.
 
 ## Workflow
 
