@@ -14,7 +14,8 @@ const sessionManager = require('./session-manager');
 const { startWebSocketServer } = require('./ws-server');
 const headlessService = require('./headless-service');
 const lorebook = require('./lorebook');
-const { ACTION_TOOLS, buildActionPrompt, parseActionBlocks } = require('./action-tools');
+const { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks } = require('./action-tools');
+const ST_SIDE_TYPES = new Set(ST_SIDE_TOOLS.map(t => t.type));
 
 let wsBundle = null;
 let headlessStartupError = null;
@@ -386,7 +387,7 @@ async function init(router) {
         // R10: heartbeat path — autonomous scheduled trigger, bypasses trust labels (R10.3)
         if (isHeartbeat) {
             try {
-                const heartbeatActionPrompt = buildActionPrompt(ACTION_TOOLS);
+                const heartbeatActionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS]);
                 const heartbeatMessage = heartbeatActionPrompt
                     ? `[HEARTBEAT]\n${message}\n\n${heartbeatActionPrompt}`
                     : `[HEARTBEAT]\n${message}`;
@@ -399,8 +400,10 @@ async function init(router) {
                 }, timeoutMs);
                 const { actions: parsedHeartbeatActions, text: cleanHeartbeatText } = parseActionBlocks(genResult.response);
                 const generatedText = cleanHeartbeatText;
-                const actions = [...(genResult.actions || []), ...parsedHeartbeatActions];
-                const stSideActions = genResult.st_side_actions || [];
+                const parsedHbOcActions = parsedHeartbeatActions.filter(a => !ST_SIDE_TYPES.has(a.type));
+                const parsedHbStActions = parsedHeartbeatActions.filter(a => ST_SIDE_TYPES.has(a.type));
+                const actions = [...(genResult.actions || []), ...parsedHbOcActions];
+                const stSideActions = [...(genResult.st_side_actions || []), ...parsedHbStActions];
 
                 // R11.6: process memory writes synchronously before returning
                 for (const action of stSideActions) {
@@ -452,7 +455,7 @@ async function init(router) {
             let pendingActions = [];
             let stSideActions = [];
 
-            const actionPrompt = buildActionPrompt(ACTION_TOOLS);
+            const actionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS]);
 
             // Try to label message with owner/guest if link exists
             try {
@@ -473,9 +476,12 @@ async function init(router) {
                     }, timeoutMs);
                     const { actions: parsedActions, text: cleanText } = parseActionBlocks(genResult.response);
                     generatedText = cleanText;
-                    // R5.4: only pass actions through for owner-initiated requests
-                    pendingActions = isOwner ? [...(genResult.actions || []), ...parsedActions] : [];
-                    stSideActions = genResult.st_side_actions || [];
+                    const parsedOcActions = parsedActions.filter(a => !ST_SIDE_TYPES.has(a.type));
+                    const parsedStActions = parsedActions.filter(a => ST_SIDE_TYPES.has(a.type));
+                    // R5.4: only forward OC outbound actions for owner-initiated requests
+                    pendingActions = isOwner ? [...(genResult.actions || []), ...parsedOcActions] : [];
+                    // R11: ST-side actions (memory writes) are processed by the plugin, not forwarded to OC
+                    stSideActions = [...(genResult.st_side_actions || []), ...parsedStActions];
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;
@@ -497,9 +503,13 @@ async function init(router) {
                 const promptedBareMessage = actionPrompt ? `${message}\n\n${actionPrompt}` : message;
                 try {
                     const genResult = await sessionManager.requestGenerate({ character, message: promptedBareMessage, images, channel, user_id }, timeoutMs);
-                    generatedText = parseActionBlocks(genResult.response).text;
-                    stSideActions = genResult.st_side_actions || [];
-                    // No link state means trust cannot be verified — discard actions (R5.4)
+                    const { actions: parsedFallbackActions, text: fallbackText } = parseActionBlocks(genResult.response);
+                    generatedText = fallbackText;
+                    // No link state: discard OC outbound actions (R5.4); ST-side memory writes still processed
+                    stSideActions = [
+                        ...(genResult.st_side_actions || []),
+                        ...parsedFallbackActions.filter(a => ST_SIDE_TYPES.has(a.type)),
+                    ];
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;

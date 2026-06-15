@@ -1,6 +1,6 @@
 'use strict';
 
-const { ACTION_TOOLS, buildActionPrompt, parseActionBlocks } = require('../action-tools');
+const { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks } = require('../action-tools');
 
 describe('ACTION_TOOLS registry', () => {
     test('is a non-empty array', () => {
@@ -30,6 +30,50 @@ describe('ACTION_TOOLS registry', () => {
         expect(types).toContain('discord_dm');
         expect(types).toContain('telegram_post');
         expect(types).toContain('file_write');
+    });
+});
+
+describe('ST_SIDE_TOOLS registry', () => {
+    test('is a non-empty array', () => {
+        expect(Array.isArray(ST_SIDE_TOOLS)).toBe(true);
+        expect(ST_SIDE_TOOLS.length).toBeGreaterThan(0);
+    });
+
+    test('every entry has required fields with correct types', () => {
+        for (const tool of ST_SIDE_TOOLS) {
+            expect(typeof tool.type).toBe('string');
+            expect(tool.type.length).toBeGreaterThan(0);
+            expect(typeof tool.description).toBe('string');
+            expect(tool.description.length).toBeGreaterThan(0);
+            expect(Array.isArray(tool.parameters)).toBe(true);
+            for (const param of tool.parameters) {
+                expect(typeof param.name).toBe('string');
+                expect(param.name.length).toBeGreaterThan(0);
+                expect(typeof param.description).toBe('string');
+                expect(param.description.length).toBeGreaterThan(0);
+            }
+        }
+    });
+
+    test('contains write_memory', () => {
+        const types = ST_SIDE_TOOLS.map(t => t.type);
+        expect(types).toContain('write_memory');
+    });
+
+    test('write_memory has entry_key, content, and tier parameters', () => {
+        const tool = ST_SIDE_TOOLS.find(t => t.type === 'write_memory');
+        expect(tool).toBeDefined();
+        const paramNames = tool.parameters.map(p => p.name);
+        expect(paramNames).toContain('entry_key');
+        expect(paramNames).toContain('content');
+        expect(paramNames).toContain('tier');
+    });
+
+    test('ST_SIDE_TOOLS and ACTION_TOOLS have no overlapping types', () => {
+        const ocTypes = new Set(ACTION_TOOLS.map(t => t.type));
+        for (const tool of ST_SIDE_TOOLS) {
+            expect(ocTypes.has(tool.type)).toBe(false);
+        }
     });
 });
 
@@ -87,6 +131,22 @@ describe('buildActionPrompt', () => {
         const parsed = JSON.parse(prompt.match(/<action>(.+?)<\/action>/)[1]);
         expect(parsed.type).toBe('test_action');
         expect(parsed).toHaveProperty('foo');
+    });
+
+    test('combined ACTION_TOOLS + ST_SIDE_TOOLS produces a single prompt with all types', () => {
+        const combined = [...ACTION_TOOLS, ...ST_SIDE_TOOLS];
+        const prompt = buildActionPrompt(combined);
+        for (const tool of combined) {
+            expect(prompt).toContain(tool.type);
+            expect(prompt).toContain(tool.description);
+        }
+        // Only one --- header and one --- footer
+        const lines = prompt.split('\n');
+        expect(lines[0]).toBe('---');
+        expect(lines[lines.length - 1]).toBe('---');
+        // write_memory should appear in the combined output
+        expect(prompt).toContain('write_memory');
+        expect(prompt).toContain('discord_post');
     });
 });
 

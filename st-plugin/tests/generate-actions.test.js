@@ -72,6 +72,7 @@ describe('/generate action injection and parsing', () => {
         // Mock action-tools to return a known sentinel so tests don't depend on prompt content
         jest.doMock('../action-tools', () => ({
             ACTION_TOOLS: [{ type: 'discord_post', description: 'test', parameters: [] }],
+            ST_SIDE_TOOLS: [],
             buildActionPrompt: jest.fn(() => ACTION_PROMPT_SENTINEL),
             parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
         }));
@@ -305,6 +306,65 @@ describe('/generate action injection and parsing', () => {
         expect(actionLogCalls).toHaveLength(2);
     });
 
+    test('action prompt injected into main-path message includes ST-side tools (write_memory)', async () => {
+        const capturedArgs = [];
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Ribbit!', actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+        jest.doMock('../action-tools', () => ({
+            ACTION_TOOLS: [{ type: 'discord_post', description: 'test', parameters: [] }],
+            ST_SIDE_TOOLS: [{ type: 'write_memory', description: 'test', parameters: [] }],
+            buildActionPrompt: jest.fn((tools) => { capturedArgs.push(tools); return ACTION_PROMPT_SENTINEL; }),
+            parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hello', user_id: 'discord:owner1' }), makeRes());
+
+        expect(capturedArgs.length).toBeGreaterThan(0);
+        const allTypes = capturedArgs[0].map(t => t.type);
+        expect(allTypes).toContain('discord_post');
+        expect(allTypes).toContain('write_memory');
+    });
+
+    test('action prompt injected into heartbeat message includes ST-side tools (write_memory)', async () => {
+        const capturedArgs = [];
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Checking in!', actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const appendMessage = jest.fn().mockResolvedValue();
+        makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+        jest.doMock('../action-tools', () => ({
+            ACTION_TOOLS: [{ type: 'discord_post', description: 'test', parameters: [] }],
+            ST_SIDE_TOOLS: [{ type: 'write_memory', description: 'test', parameters: [] }],
+            buildActionPrompt: jest.fn((tools) => { capturedArgs.push(tools); return ACTION_PROMPT_SENTINEL; }),
+            parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+        }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null) }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), makeRes());
+
+        expect(capturedArgs.length).toBeGreaterThan(0);
+        const allTypes = capturedArgs[0].map(t => t.type);
+        expect(allTypes).toContain('discord_post');
+        expect(allTypes).toContain('write_memory');
+    });
+
     test('heartbeat path injects action prompt and parses action blocks', async () => {
         const rawResponse = 'Checking in! <action>{"type":"discord_post","channel_id":"hb","content":"status"}</action>';
         const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
@@ -348,5 +408,244 @@ describe('/generate action injection and parsing', () => {
         expect(appendMessage).toHaveBeenCalledWith('Frog', expect.objectContaining({
             mes: expect.stringContaining('[Character action queued]'),
         }));
+    });
+
+    function makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry) {
+        makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+        jest.doMock('../action-tools', () => ({
+            ACTION_TOOLS: [{ type: 'discord_post', description: 'test', parameters: [] }],
+            ST_SIDE_TOOLS: [{ type: 'write_memory', description: 'test', parameters: [] }],
+            buildActionPrompt: jest.fn(() => ACTION_PROMPT_SENTINEL),
+            parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+        }));
+        jest.doMock('../lorebook', () => ({ upsertMemoryEntry }));
+    }
+
+    test('write_memory block routes to lorebook, not to pending_actions (owner sender)', async () => {
+        const rawResponse = 'I will remember that.<action>{"type":"write_memory","entry_key":"core_facts","content":"Josh: engineer","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'core_facts', tier: 1, created: true });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'My name is Josh', user_id: 'discord:owner1' }), res);
+
+        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', expect.objectContaining({ type: 'write_memory', entry_key: 'core_facts' }));
+        expect(res.body.actions).not.toContainEqual(expect.objectContaining({ type: 'write_memory' }));
+        expect(res.body.response).not.toContain('<action>');
+        expect(res.body.response).toContain('I will remember that.');
+    });
+
+    test('write_memory block routes to lorebook even for guest sender (no trust gate)', async () => {
+        const rawResponse = 'Noted.<action>{"type":"write_memory","entry_key":"guest_info","content":"Guest: asks about weather","tier":2}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'guest_info', tier: 2, created: true });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: "What's the weather?", user_id: 'discord:guest99' }), res);
+
+        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', expect.objectContaining({ type: 'write_memory', entry_key: 'guest_info' }));
+        expect(res.body.actions).toEqual([]);
+        expect(res.body.response).not.toContain('<action>');
+    });
+
+    test('mixed response: OC action to pending_actions, write_memory to lorebook (owner sender)', async () => {
+        const rawResponse = 'On it!<action>{"type":"discord_post","channel_id":"c","content":"posting"}</action><action>{"type":"write_memory","entry_key":"core_facts","content":"User: owner","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'core_facts', tier: 1, created: true });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Do stuff', user_id: 'discord:owner1' }), res);
+
+        expect(res.body.actions).toEqual([expect.objectContaining({ type: 'discord_post' })]);
+        expect(res.body.actions).not.toContainEqual(expect.objectContaining({ type: 'write_memory' }));
+        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', expect.objectContaining({ type: 'write_memory' }));
+        expect(res.body.response).not.toContain('<action>');
+    });
+
+    test('write_memory routes to lorebook even when no link state exists (no trust gate)', async () => {
+        const rawResponse = 'Got it.<action>{"type":"write_memory","entry_key":"core_facts","content":"User: unknown","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'core_facts', tier: 1, created: true });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        // link-state throws so we fall through to the no-link-state path
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => { throw new Error('no link'); }),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hello', user_id: 'discord:anyone' }), res);
+
+        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', expect.objectContaining({ type: 'write_memory', entry_key: 'core_facts' }));
+        expect(res.body.actions).toEqual([]);
+        expect(res.body.response).not.toContain('<action>');
+        expect(res.body.response).toContain('Got it.');
+    });
+
+    test('heartbeat path: write_memory block routes to lorebook, not to OC actions', async () => {
+        const rawResponse = 'Heartbeat done.<action>{"type":"write_memory","entry_key":"hb_memory","content":"Checked in","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const appendMessage = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'hb_memory', tier: 1, created: true });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null) }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', expect.objectContaining({ type: 'write_memory', entry_key: 'hb_memory' }));
+        expect(res.body.actions).not.toContainEqual(expect.objectContaining({ type: 'write_memory' }));
+        expect(res.body.response).not.toContain('<action>');
+        expect(res.body.response).toContain('Heartbeat done.');
+    });
+
+    test('heartbeat path: OC action and write_memory in same response split correctly', async () => {
+        const rawResponse = 'Posting and remembering.<action>{"type":"discord_post","channel_id":"hb","content":"status"}</action><action>{"type":"write_memory","entry_key":"hb_log","content":"Heartbeat ran","tier":2}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const appendMessage = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'hb_log', tier: 2, created: true });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null) }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+        expect(res.body.actions).toEqual([expect.objectContaining({ type: 'discord_post' })]);
+        expect(res.body.actions).not.toContainEqual(expect.objectContaining({ type: 'write_memory' }));
+        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', expect.objectContaining({ type: 'write_memory', entry_key: 'hb_log' }));
+        expect(res.body.response).not.toContain('<action>');
+    });
+
+    test('write_memory block does not produce a [Character action queued] history entry', async () => {
+        const rawResponse = 'Noted.<action>{"type":"write_memory","entry_key":"core_facts","content":"Josh: engineer","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const appendMessage = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'core_facts', tier: 1, created: true });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Remember this', user_id: 'discord:owner1' }), makeRes());
+
+        const actionLogCalls = appendMessage.mock.calls.filter(([, entry]) =>
+            entry.mes && entry.mes.includes('[Character action queued]')
+        );
+        // write_memory is an ST-side action — no history entry should be logged for it
+        expect(actionLogCalls).toHaveLength(0);
+    });
+
+    test('lorebook error on main path does not blow up the /generate response', async () => {
+        const rawResponse = 'Got it.<action>{"type":"write_memory","entry_key":"bad_key","content":"x","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockImplementation(() => { throw new Error('lorebook write failed'); });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Remember this', user_id: 'discord:owner1' }), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.response).toBe('Got it.');
+        expect(res.body.actions).toEqual([]);
+    });
+
+    test('lorebook error on heartbeat path does not blow up the /generate response', async () => {
+        const rawResponse = 'Heartbeat done.<action>{"type":"write_memory","entry_key":"bad_key","content":"x","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const appendMessage = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn().mockImplementation(() => { throw new Error('lorebook write failed'); });
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null) }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.response).toBe('Heartbeat done.');
+        expect(res.body.actions).toEqual([]);
     });
 });

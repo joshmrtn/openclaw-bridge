@@ -610,3 +610,133 @@ describe('outbound character actions (R5)', () => {
     }
   }, 120000);
 });
+
+// ── R11: memory write on OC path ─────────────────────────────────────────────
+// Proves the full pipeline: OC message in → fake-ollama returns response with a
+// write_memory <action> block → plugin parses/strips the block and writes the
+// lorebook entry → entry confirmed via GET /characters/:name/memory.
+// The write_memory block is never forwarded to OC (it stays in stSideActions).
+describe('R11: memory write on OC path', () => {
+  const MEMORY_KEY = `oc_path_mem_${Date.now()}`;
+  const MEMORY_CONTENT = 'User told me they enjoy jazz music.';
+  const MEMORY_RESPONSE = `I will remember that.<action>{"type":"write_memory","entry_key":"${MEMORY_KEY}","content":"${MEMORY_CONTENT}","tier":1}</action>`;
+  const CLEAN_TEXT = 'I will remember that.';
+
+  beforeEach(async () => {
+    await post(`${QA_BUS_URL}/v1/reset`, {});
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: ['qa:owner-user'] }),
+    });
+  });
+
+  test('write_memory block is stripped from reply and persists to lorebook (owner sender)', async () => {
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: MEMORY_RESPONSE });
+
+    const convId = `dm-r11-owner-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:owner-user',
+      senderName: 'Owner',
+      text: 'I really enjoy jazz music, please remember that.',
+    });
+
+    // Wait for OC to deliver the reply to the qa-bus.
+    const outbound = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R11 owner memory write outbound message' });
+
+    // Reply text must be clean — the <action> block must have been stripped.
+    expect(outbound.message.text).not.toContain('<action>');
+    expect(outbound.message.text).toContain(CLEAN_TEXT);
+
+    // write_memory must NOT have been forwarded to OC as a pending action.
+    // (OC only receives actions in the `actions` array of the /generate response;
+    //  write_memory is an ST-side action and must never appear there.)
+    const generateActions = outbound.pendingActions || outbound.actions || [];
+    expect(generateActions).not.toContainEqual(expect.objectContaining({ type: 'write_memory' }));
+
+    // The lorebook entry must now exist.
+    const memResp = await stFetch('/characters/TestBot/memory');
+    expect(memResp.status).toBe(200);
+    const { entries } = memResp.body;
+    const found = entries.find(e => e.entry_key === MEMORY_KEY);
+    expect(found).toBeDefined();
+    expect(found.content).toBe(MEMORY_CONTENT);
+    expect(found.tier).toBe(1);
+  }, 120000);
+
+  test('write_memory block persists to lorebook even for guest sender (no trust gate)', async () => {
+    const convId = `dm-r11-guest-${Date.now()}`;
+    const guestMemoryKey = `oc_guest_mem_${Date.now()}`;
+    const guestResponse = `Noted.<action>{"type":"write_memory","entry_key":"${guestMemoryKey}","content":"Guest info noted","tier":2}</action>`;
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: guestResponse });
+
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:guest-user',
+      senderName: 'Guest',
+      text: 'Remember me, I am a guest.',
+    });
+
+    // Wait for OC to deliver the reply.
+    await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R11 guest memory write outbound message' });
+
+    // Memory write must have fired regardless of guest trust level.
+    const memResp = await stFetch('/characters/TestBot/memory');
+    expect(memResp.status).toBe(200);
+    const { entries } = memResp.body;
+    const found = entries.find(e => e.entry_key === guestMemoryKey);
+    expect(found).toBeDefined();
+    expect(found.content).toBe('Guest info noted');
+  }, 120000);
+
+  test('heartbeat path: write_memory block persists to lorebook', async () => {
+    const hbMemoryKey = `hb_mem_${Date.now()}`;
+    const hbResponse = `Autonomous check-in complete.<action>{"type":"write_memory","entry_key":"${hbMemoryKey}","content":"Heartbeat ran at scheduled time","tier":2}</action>`;
+
+    // Seed fake-ollama before enabling the heartbeat so the scenario is ready
+    // the moment the heartbeat fires.
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: hbResponse });
+
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({
+        oc_agent_id: 'default',
+        owner_user_ids: ['qa:owner-user'],
+        heartbeat: {
+          enabled: true,
+          channel_id: 'qa-channel',
+          target: 'hb-r11-test-conv',
+          interval_ms: 1000,
+          idle_ms: 0,
+        },
+      }),
+    });
+
+    // Wait for the heartbeat outbound reply to arrive in qa-bus.
+    await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.length > 0 ? events[0] : null;
+    }, { timeoutMs: 30000, intervalMs: 1000, label: 'R11 heartbeat memory write outbound' });
+
+    // Restore link without heartbeat so subsequent tests are unaffected.
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: ['qa:owner-user'] }),
+    });
+
+    // The lorebook entry must have been written by the heartbeat path.
+    const memResp = await stFetch('/characters/TestBot/memory');
+    expect(memResp.status).toBe(200);
+    const { entries } = memResp.body;
+    const found = entries.find(e => e.entry_key === hbMemoryKey);
+    expect(found).toBeDefined();
+    expect(found.content).toBe('Heartbeat ran at scheduled time');
+  }, 60000);
+});
