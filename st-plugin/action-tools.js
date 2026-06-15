@@ -2,27 +2,12 @@
 
 const ACTION_TOOLS = [
     {
-        type: 'discord_post',
-        description: 'Post a message to a Discord channel or thread',
+        type: 'send_message',
+        description: 'Send a message to a configured channel. Omit recipient to post to the channel\'s default target; include recipient to send a direct message to that user.',
         parameters: [
-            { name: 'channel_id', description: 'The Discord channel ID or name to post to' },
-            { name: 'content', description: 'The message text to post' },
-        ],
-    },
-    {
-        type: 'discord_dm',
-        description: 'Send a direct message to a specific Discord user',
-        parameters: [
-            { name: 'user_id', description: 'The Discord user ID to send the DM to' },
+            { name: 'channel', description: 'Name of the configured channel to send on (e.g. "discord", "telegram")' },
             { name: 'content', description: 'The message text to send' },
-        ],
-    },
-    {
-        type: 'telegram_post',
-        description: 'Post a message to a Telegram chat or channel',
-        parameters: [
-            { name: 'channel_id', description: 'The Telegram chat ID to post to' },
-            { name: 'content', description: 'The message text to post' },
+            { name: 'recipient', description: '(Optional) Platform user ID for direct messages. Omit to post to the configured channel target.' },
         ],
     },
     {

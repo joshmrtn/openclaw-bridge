@@ -24,22 +24,35 @@ describe('ACTION_TOOLS registry', () => {
         }
     });
 
-    test('contains the four expected action types', () => {
+    test('contains send_message and file_write; does not contain old platform-specific tools (#59)', () => {
         const types = ACTION_TOOLS.map(t => t.type);
-        expect(types).toContain('discord_post');
-        expect(types).toContain('discord_dm');
-        expect(types).toContain('telegram_post');
+        expect(types).toContain('send_message');
         expect(types).toContain('file_write');
+        expect(types).not.toContain('discord_post');
+        expect(types).not.toContain('discord_dm');
+        expect(types).not.toContain('telegram_post');
     });
 
-    test('telegram_post extension tool uses channel_id not chat_id', () => {
+    test('send_message has channel, content, and recipient parameters (#59)', () => {
+        const tool = ACTION_TOOLS.find(t => t.type === 'send_message');
+        expect(tool).toBeDefined();
+        const paramNames = tool.parameters.map(p => p.name);
+        expect(paramNames).toContain('channel');
+        expect(paramNames).toContain('content');
+        expect(paramNames).toContain('recipient');
+    });
+
+    test('extension registers openclaw_send_message with channel param, not old tools (#59)', () => {
         const fs = require('fs');
         const path = require('path');
         const src = fs.readFileSync(path.resolve(__dirname, '../../st-extension/index.js'), 'utf8');
-        const block = src.match(/name:\s*'openclaw_telegram_post'[\s\S]*?actionType:\s*'telegram_post'/)?.[0];
-        expect(block).toBeDefined();
-        expect(block).toContain('channel_id');
-        expect(block).not.toContain('chat_id');
+        expect(src).toContain("'openclaw_send_message'");
+        expect(src).not.toContain("'openclaw_discord_post'");
+        expect(src).not.toContain("'openclaw_telegram_post'");
+        expect(src).not.toContain("'openclaw_discord_dm'");
+        const sendMsgBlock = src.match(/name:\s*'openclaw_send_message'[\s\S]*?actionType:\s*'send_message'/)?.[0];
+        expect(sendMsgBlock).toBeDefined();
+        expect(sendMsgBlock).toContain('channel');
     });
 });
 
@@ -154,9 +167,9 @@ describe('buildActionPrompt', () => {
         const lines = prompt.split('\n');
         expect(lines[0]).toBe('---');
         expect(lines[lines.length - 1]).toBe('---');
-        // write_memory should appear in the combined output
+        // write_memory and send_message should appear in the combined output
         expect(prompt).toContain('write_memory');
-        expect(prompt).toContain('discord_post');
+        expect(prompt).toContain('send_message');
     });
 });
 

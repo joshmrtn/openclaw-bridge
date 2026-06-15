@@ -648,4 +648,204 @@ describe('/generate action injection and parsing', () => {
         expect(res.body.response).toBe('Heartbeat done.');
         expect(res.body.actions).toEqual([]);
     });
+
+    describe('send_message channel resolution (#59)', () => {
+        const channels = [{ name: 'discord', channel_id: 'discord-frog', target: '111222333' }];
+
+        test('send_message with valid channel resolves to channel_id and target in pending_actions', async () => {
+            const rawResponse = 'On it! <action>{"type":"send_message","channel":"discord","content":"Hello!"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([
+                { type: 'send_message', channel_id: 'discord-frog', target: '111222333', content: 'Hello!' },
+            ]);
+        });
+
+        test('send_message with recipient resolves and includes recipient in pending_actions', async () => {
+            const rawResponse = 'Messaging you! <action>{"type":"send_message","channel":"discord","recipient":"user999","content":"DM!"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([
+                { type: 'send_message', channel_id: 'discord-frog', target: '111222333', recipient: 'user999', content: 'DM!' },
+            ]);
+        });
+
+        test('send_message with unconfigured channel is filtered from pending_actions', async () => {
+            const rawResponse = 'Posting! <action>{"type":"send_message","channel":"telegram","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([]);
+        });
+
+        test('send_message with unconfigured channel writes error to chat history', async () => {
+            const rawResponse = 'Posting! <action>{"type":"send_message","channel":"telegram","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            const appendMessage = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory, appendMessage };
+            });
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), makeRes());
+
+            const errorCall = appendMessage.mock.calls.find(([, entry]) =>
+                entry.mes && entry.mes.includes('send_message failed') && entry.mes.includes('telegram')
+            );
+            expect(errorCall).toBeDefined();
+            expect(errorCall[1].mes).toContain('discord');
+        });
+
+        test('send_message with no channels configured is filtered and error logged', async () => {
+            const rawResponse = '<action>{"type":"send_message","channel":"discord","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            const appendMessage = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory, appendMessage };
+            });
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([]);
+            const errorCall = appendMessage.mock.calls.find(([, entry]) =>
+                entry.mes && entry.mes.includes('send_message failed')
+            );
+            expect(errorCall).toBeDefined();
+            expect(errorCall[1].mes).toContain('(none)');
+        });
+
+        test('heartbeat path: send_message with valid channel resolves correctly', async () => {
+            const rawResponse = 'Checking in! <action>{"type":"send_message","channel":"discord","content":"Status update"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            const appendMessage = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory, appendMessage };
+            });
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: [], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+            expect(res.body.actions).toEqual([
+                { type: 'send_message', channel_id: 'discord-frog', target: '111222333', content: 'Status update' },
+            ]);
+        });
+
+        test('extension-provided send_message action is resolved the same as a parsed block', async () => {
+            const extensionAction = { type: 'send_message', channel: 'discord', content: 'From extension' };
+            const requestGenerate = jest.fn().mockResolvedValue({ response: 'Done.', actions: [extensionAction] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([
+                { type: 'send_message', channel_id: 'discord-frog', target: '111222333', content: 'From extension' },
+            ]);
+        });
+
+        test('heartbeat path: send_message with unconfigured channel is filtered', async () => {
+            const rawResponse = '<action>{"type":"send_message","channel":"telegram","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            const appendMessage = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory, appendMessage };
+            });
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: [], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+            expect(res.body.actions).toEqual([]);
+        });
+    });
 });

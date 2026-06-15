@@ -459,46 +459,18 @@ async function executeCharacterActions(
 
         try {
             switch (action.type) {
-                case "discord_post": {
-                    const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
+                case "send_message": {
+                    const channelId = String(action.channel_id ?? ctx.channelId);
+                    const adapter = await api.runtime.channel.outbound.loadAdapter(channelId);
                     if (!adapter?.sendText) {
                         outcome = "no outbound adapter";
                         break;
                     }
+                    const to = action.recipient ? String(action.recipient) : String(action.target ?? "");
                     await adapter.sendText({
                         cfg: api.config,
-                        to: String(action.channel_id ?? ""),
-                        text: formatOutboundText(String(action.content ?? ""), ctx.channelId, linkEntry),
-                        ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
-                    });
-                    outcome = "sent";
-                    break;
-                }
-                case "discord_dm": {
-                    const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
-                    if (!adapter?.sendText) {
-                        outcome = "no outbound adapter";
-                        break;
-                    }
-                    await adapter.sendText({
-                        cfg: api.config,
-                        to: String(action.user_id ?? ""),
-                        text: formatOutboundText(String(action.content ?? ""), ctx.channelId, linkEntry),
-                        ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
-                    });
-                    outcome = "sent";
-                    break;
-                }
-                case "telegram_post": {
-                    const adapter = await api.runtime.channel.outbound.loadAdapter(ctx.channelId);
-                    if (!adapter?.sendText) {
-                        outcome = "no outbound adapter";
-                        break;
-                    }
-                    await adapter.sendText({
-                        cfg: api.config,
-                        to: String(action.channel_id ?? ""),
-                        text: formatOutboundText(String(action.content ?? ""), ctx.channelId, linkEntry),
+                        to,
+                        text: formatOutboundText(String(action.content ?? ""), channelId, linkEntry),
                         ...(ctx.accountId ? { accountId: ctx.accountId } : {}),
                     });
                     outcome = "sent";

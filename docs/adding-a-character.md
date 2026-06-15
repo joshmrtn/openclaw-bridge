@@ -102,6 +102,61 @@ openclaw skills list --agent {agentname}
 
 ---
 
+## Outbound messaging (send_message)
+
+A character can send messages to a channel mid-generation using the `send_message` action — for example, posting an announcement, sending a DM to a user, or reacting to something autonomously during a heartbeat.
+
+`send_message` routes by a logical channel name (e.g. `"discord"`) that you configure in `character-links.json`. The bridge looks up the matching entry, validates it, and pre-resolves the OC adapter details before the action reaches OC.
+
+### Configure channels
+
+Edit `data/openclaw-bridge/character-links.json` and add a `channels` array to the character entry:
+
+```json
+{
+  "Frog": {
+    "oc_agent_id": "frog",
+    "active": true,
+    "owner_user_ids": ["discord:YOUR_USER_ID"],
+    "channels": [
+      {
+        "name": "discord",
+        "channel_id": "discord-mybotname",
+        "target": "YOUR_DISCORD_CHANNEL_ID"
+      }
+    ]
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `name` | Logical label the character uses in the `channel` parameter (e.g. `"discord"`, `"telegram"`) |
+| `channel_id` | OC channel account ID — the same value used for `--heartbeat-channel` (e.g. `"discord-mybotname"`) |
+| `target` | Platform-specific default destination: Discord channel ID, Telegram chat ID, etc. |
+
+A character can have multiple entries for different platforms. Add one entry per channel you want the character to be able to post to.
+
+### How the character uses it
+
+The LLM can output a `send_message` action block in its response:
+
+```
+<action>{"type":"send_message","channel":"discord","content":"Hello from Frog!"}</action>
+```
+
+To send a direct message instead, include `recipient`:
+
+```
+<action>{"type":"send_message","channel":"discord","recipient":"USER_ID","content":"Just for you."}</action>
+```
+
+If the character specifies a channel name that isn't in the `channels` list, the action is dropped and an error appears in ST chat history explaining which channels are configured.
+
+> **Note:** `link-character.sh` does not yet support configuring `channels` via flags — this is tracked in a separate issue. For now, edit `character-links.json` directly.
+
+---
+
 ## Heartbeat / Autonomous presence
 
 A character can post on a schedule or when a conversation goes quiet, without waiting for a user to send a message. Two triggers are available:

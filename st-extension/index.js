@@ -620,46 +620,20 @@ function registerBridgeTools() {
 
     const toolDefs = [
         {
-            name: 'openclaw_discord_post',
-            displayName: 'Post to Discord',
-            description: 'Post a message to a Discord channel on behalf of this character.',
+            name: 'openclaw_send_message',
+            displayName: 'Send Message',
+            description: 'Send a message to a configured channel on behalf of this character. ' +
+                'Omit recipient to post to the channel\'s default target; include recipient to send a direct message to that user.',
             parameters: {
                 type: 'object',
                 properties: {
-                    content: { type: 'string', description: 'Message content to post.' },
-                    channel_id: { type: 'string', description: 'Target Discord channel ID. Defaults to the conversation channel if omitted.' },
+                    channel: { type: 'string', description: 'Name of the configured channel to send on (e.g. "discord", "telegram").' },
+                    content: { type: 'string', description: 'Message text to send.' },
+                    recipient: { type: 'string', description: '(Optional) Platform user ID for direct messages. Omit to post to the configured channel target.' },
                 },
-                required: ['content'],
+                required: ['channel', 'content'],
             },
-            actionType: 'discord_post',
-        },
-        {
-            name: 'openclaw_discord_dm',
-            displayName: 'Send Discord DM',
-            description: 'Send a direct message to a Discord user on behalf of this character.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    user_id: { type: 'string', description: 'Discord user ID to DM.' },
-                    content: { type: 'string', description: 'Message content to send.' },
-                },
-                required: ['user_id', 'content'],
-            },
-            actionType: 'discord_dm',
-        },
-        {
-            name: 'openclaw_telegram_post',
-            displayName: 'Post to Telegram',
-            description: 'Post a message to a Telegram chat on behalf of this character.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    content: { type: 'string', description: 'Message content to post.' },
-                    channel_id: { type: 'string', description: 'Telegram chat ID. Defaults to the conversation chat if omitted.' },
-                },
-                required: ['content'],
-            },
-            actionType: 'telegram_post',
+            actionType: 'send_message',
         },
         {
             name: 'openclaw_file_write',

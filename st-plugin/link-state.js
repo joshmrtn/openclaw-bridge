@@ -50,6 +50,10 @@ function getLink(characterName) {
         result.heartbeat = { ...link.heartbeat };
     }
 
+    if (Array.isArray(link.channels)) {
+        result.channels = link.channels.map(ch => ({ ...ch }));
+    }
+
     return result;
 }
 
@@ -71,6 +75,14 @@ function upsertLink(characterName, patch) {
             delete next.heartbeat;
         } else if (patch.heartbeat && typeof patch.heartbeat === 'object' && !Array.isArray(patch.heartbeat)) {
             next.heartbeat = { ...patch.heartbeat };
+        }
+    }
+
+    if ('channels' in patch) {
+        if (patch.channels === null) {
+            delete next.channels;
+        } else if (Array.isArray(patch.channels)) {
+            next.channels = patch.channels.map(ch => ({ ...ch }));
         }
     }
 

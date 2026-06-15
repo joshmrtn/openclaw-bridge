@@ -213,7 +213,7 @@ case "my_action": {
 - `api.runtime.channel.outbound.loadAdapter(channelId)` — returns a `ChannelOutboundAdapter | undefined`; always guard with `?.sendText` before calling
 - `ctx.channelId` — full OC channel account ID (e.g. `"discord-mybotname"`); routes to the same account that received the inbound message
 - `ctx.accountId` — optional multi-account discriminator; pass through so multi-account deployments route to the right bot
-- Action types are platform-specific: a Discord character uses `discord_*` tools; a Telegram character uses `telegram_*` tools
+- For plain text messaging to a channel or user, use the existing `send_message` tool rather than adding a new one — it handles all platforms via pre-resolved `action.channel_id` and `action.target`/`action.recipient`. Only add a new tool for capabilities `sendText` cannot express (e.g. reactions, attachments, thread replies).
 
 The `log-action` call (R5.5) after the switch already records the outcome to ST chat history — no changes needed for logging. Guest action blocking (R5.4) is enforced in the `/generate` handler before `pending_actions` is returned to OC.
 

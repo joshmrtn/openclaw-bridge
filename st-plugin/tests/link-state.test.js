@@ -96,4 +96,53 @@ describe('link-state', () => {
         const link = linkState.getLink('Frog');
         expect(link.heartbeat).toBeUndefined();
     });
+
+    test('upsertLink stores channels and getLink returns them (#59)', () => {
+        const linkState = require('../link-state');
+
+        const channels = [
+            { name: 'discord', channel_id: 'discord-frog', target: '111222333' },
+        ];
+        const written = linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true, channels });
+
+        expect(written.channels).toEqual(channels);
+        expect(linkState.getLink('Frog').channels).toEqual(channels);
+    });
+
+    test('upsertLink without channels field preserves existing channels (#59)', () => {
+        const linkState = require('../link-state');
+
+        const channels = [{ name: 'discord', channel_id: 'discord-frog', target: '111' }];
+        linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true, channels });
+
+        linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: false });
+
+        const link = linkState.getLink('Frog');
+        expect(link.active).toBe(false);
+        expect(link.channels).toEqual(channels);
+    });
+
+    test('upsertLink with channels: null removes channels (#59)', () => {
+        const linkState = require('../link-state');
+
+        linkState.upsertLink('Frog', {
+            oc_agent_id: 'frog',
+            active: true,
+            channels: [{ name: 'discord', channel_id: 'discord-frog', target: '111' }],
+        });
+
+        linkState.upsertLink('Frog', { oc_agent_id: 'frog', channels: null });
+
+        const link = linkState.getLink('Frog');
+        expect(link.channels).toBeUndefined();
+    });
+
+    test('getLink returns undefined channels when none configured (#59)', () => {
+        const linkState = require('../link-state');
+
+        linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true });
+
+        const link = linkState.getLink('Frog');
+        expect(link.channels).toBeUndefined();
+    });
 });
