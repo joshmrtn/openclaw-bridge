@@ -80,6 +80,11 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { version: '0.1.0' });
     }
 
+    if (method === 'POST' && path === '/reset') {
+        scenarioQueue.length = 0;
+        return json(res, 200, { ok: true });
+    }
+
     if (method === 'POST' && path === '/scenario') {
         try {
             const body = await readBody(req);

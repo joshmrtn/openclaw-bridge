@@ -158,8 +158,9 @@ beforeAll(async () => {
 }, 300000); // 5 min total setup timeout
 
 beforeEach(async () => {
-  // Clear qa-bus state between tests
+  // Clear qa-bus state and any queued fake-ollama scenarios between tests.
   await post(`${QA_BUS_URL}/v1/reset`, {});
+  await post(`${FAKE_OLLAMA_URL}/reset`, {});
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
