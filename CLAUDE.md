@@ -225,6 +225,8 @@ The `log-action` call (R5.5) after the switch already records the outcome to ST 
 
 Do not create git commits or push changes unless explicitly asked. The repository maintainer handles all commits and pushes.
 
+All implementation work must happen on a feature branch, not directly on `main`. Branch protection requires both `Unit tests` and `E2E fast tier` CI checks to pass before a PR can be merged. At the start of any new issue or task, create a branch (e.g. `feat/issue-42` or `fix/warnings`) before writing any code.
+
 ## Conventions
 
 - Route registration order in `index.js` matters for test mocks — add new routes at the end, with `log-action` registered before `generate`
