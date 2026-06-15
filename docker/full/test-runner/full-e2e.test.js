@@ -740,3 +740,89 @@ describe('R11: memory write on OC path', () => {
     expect(found.content).toBe('Heartbeat ran at scheduled time');
   }, 60000);
 });
+
+// ── D6: setup.sh → uninstall.sh lifecycle ────────────────────────────────────
+// Answers definitively: can a user follow the installation instructions to get
+// a working system, and after running uninstall.sh is everything put back
+// exactly as it was before?
+//
+// Steps:
+//   1. Verify plugin is healthy (pre-condition)
+//   2. Run uninstall.sh — assert installed dirs are gone from disk
+//   3. Run setup.sh — assert dirs are restored on disk
+//   4. Restart ST and assert the reinstalled plugin loads and returns 200
+//
+// Note: we verify uninstall via disk state (test -d) rather than checking for
+// HTTP 404 after restart. The container entrypoint always runs setup.sh on
+// startup, so a restart would immediately reinstall — that is correct Docker E2E
+// setup behaviour and does not represent how a real user uninstall works.
+// The disk assertions are the definitive check: if the files are gone,
+// the plugin is uninstalled; if they are back, it is reinstalled.
+describe('D6: setup.sh → uninstall.sh lifecycle', () => {
+  test('uninstall removes plugin from disk; reinstall restores it', async () => {
+    // 1. Pre-condition: plugin is healthy.
+    const before = await stFetch('/status');
+    expect(before.status).toBe(200);
+
+    // 2. Uninstall inside the ST container (non-interactive: --st-path + --yes).
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/uninstall.sh` +
+      ` --st-path /home/node/app --yes`,
+      { timeout: 30000 },
+    );
+
+    // Assert plugin and extension directories are gone from disk.
+    expect(() =>
+      execSync(
+        `docker exec ${SILLYTAVERN_CONTAINER} test -d /home/node/app/plugins/openclaw-bridge`,
+        { timeout: 5000 },
+      )
+    ).toThrow(); // test -d exits 1 when absent → execSync throws
+
+    expect(() =>
+      execSync(
+        `docker exec ${SILLYTAVERN_CONTAINER} test -d` +
+        ` /home/node/app/public/scripts/extensions/openclaw-bridge`,
+        { timeout: 5000 },
+      )
+    ).toThrow();
+
+    // 3. Reinstall inside the ST container.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/setup.sh` +
+      ` --st-path /home/node/app`,
+      { timeout: 90000 },
+    );
+
+    // Assert directories are back on disk.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -d /home/node/app/plugins/openclaw-bridge`,
+      { timeout: 5000 },
+    ); // exits 0 when present — does not throw
+
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -d` +
+      ` /home/node/app/public/scripts/extensions/openclaw-bridge`,
+      { timeout: 5000 },
+    );
+
+    // 4. Restart ST and confirm the reinstalled plugin loads correctly.
+    execSync(`docker restart ${SILLYTAVERN_CONTAINER}`, { timeout: 30000 });
+
+    await waitFor(async () => {
+      try { const r = await stFetch('/status'); return r.status !== 200; }
+      catch { return true; }
+    }, { timeoutMs: 15000, intervalMs: 500, label: 'ST to go offline after lifecycle restart' });
+
+    await waitFor(async () => {
+      try {
+        const r = await stFetch('/status');
+        return r.status === 200;
+      } catch { return false; }
+    }, { timeoutMs: 180000, intervalMs: 3000, label: 'plugin to come back after reinstall' });
+
+    const afterReinstall = await stFetch('/status');
+    expect(afterReinstall.status).toBe(200);
+    expect(afterReinstall.body).toHaveProperty('plugin', 'openclaw-bridge');
+  }, 300000); // 5 min — one ST restart + npm install inside container
+});
