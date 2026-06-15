@@ -946,8 +946,9 @@
 <hr />
 <h2 id="when-to-run-which-tier">When to run which tier<a class="headerlink" href="#when-to-run-which-tier" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Every PR</strong> — run the fast tier (<code>npm run test:e2e:fast</code>). It's quick (~30s) and requires no external repos.</li>
-<li><strong>Before release</strong> — run the full tier. It validates OC's skill dispatch, trust label injection, and the complete inbound→outbound message path.</li>
+<li><strong>Every PR (automatic)</strong> — GitHub Actions runs the fast tier on every push and pull request. The CI workflow (<code>ci.yml</code>) also runs unit tests first; the fast tier only starts if they pass. No action required from you.</li>
+<li><strong>Local fast-tier run</strong> — <code>npm run test:e2e:fast</code>. Useful when you want a quick regression check before pushing, or to debug a failing CI run locally.</li>
+<li><strong>Before release (manual)</strong> — run the full tier locally. It validates OC's skill dispatch, trust label injection, and the complete inbound→outbound message path. Cannot run in CI: the full tier requires the private OC repo to build <code>openclaw-bridge:oc-full</code>, which is not available on GitHub-hosted runners.</li>
 <li><strong>Debugging a generation issue</strong> — the full tier is a clean isolated environment to bisect: if it passes here but fails in production, the bug is in configuration or environment, not in code.</li>
 <li><strong>Adding a new character action tool</strong> — add a test to <code>full-e2e.test.js</code> that sends a message triggering that tool and asserts on the qa-bus outbound event or ST state.</li>
 </ul>

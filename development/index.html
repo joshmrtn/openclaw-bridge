@@ -1116,7 +1116,8 @@
 <a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:fast
 <a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>
 <a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="c1"># Docker E2E — full tier (real OC gateway + qa-bus + headless Playwright)</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:full
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="c1"># Requires openclaw repo at ~/projects/openclaw. Cannot run in CI.</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:full
 </code></pre></div>
 <p>Unit tests mock the WebSocket, session manager, and filesystem — no ST process required. Jest auto-discovers <code>*.test.js</code> files under <code>st-plugin/tests/</code>. Files under <code>st-plugin/tools/</code> are manual helpers and not picked up by Jest.</p>
 <p>The Docker E2E tiers run the full message path in isolated containers — the only mocks are the LLM and the fake channel. See <strong><a href="../docker-e2e/">Docker E2E testing</a></strong> for setup, architecture, and when to run each tier.</p>
