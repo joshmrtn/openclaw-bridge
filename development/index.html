@@ -563,10 +563,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-register-in-st-extensionindexjs" class="md-nav__link">
+  <a href="#1-register-in-st-pluginaction-toolsjs-source-of-truth" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Register in st-extension/index.js
+        1. Register in st-plugin/action-tools.js (source of truth)
       
     </span>
   </a>
@@ -574,10 +574,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-implement-in-oc-pluginsrcindexts" class="md-nav__link">
+  <a href="#2-register-in-st-extensionindexjs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Implement in oc-plugin/src/index.ts
+        2. Register in st-extension/index.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-implement-in-oc-pluginsrcindexts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Implement in oc-plugin/src/index.ts
       
     </span>
   </a>
@@ -895,10 +906,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-register-in-st-extensionindexjs" class="md-nav__link">
+  <a href="#1-register-in-st-pluginaction-toolsjs-source-of-truth" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Register in st-extension/index.js
+        1. Register in st-plugin/action-tools.js (source of truth)
       
     </span>
   </a>
@@ -906,10 +917,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-implement-in-oc-pluginsrcindexts" class="md-nav__link">
+  <a href="#2-register-in-st-extensionindexjs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Implement in oc-plugin/src/index.ts
+        2. Register in st-extension/index.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-implement-in-oc-pluginsrcindexts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Implement in oc-plugin/src/index.ts
       
     </span>
   </a>
@@ -1135,55 +1157,71 @@
 <p>If it's a real directory rather than a symlink, re-run <code>dev-setup.sh</code>.</p>
 <hr />
 <h2 id="adding-a-new-character-action-tool">Adding a new character action tool<a class="headerlink" href="#adding-a-new-character-action-tool" title="Permanent link">&para;</a></h2>
-<p>Character action tools let the ST brain instruct the OC body to take outbound actions during generation. Adding one requires changes in two files:</p>
-<h3 id="1-register-in-st-extensionindexjs">1. Register in <code>st-extension/index.js</code><a class="headerlink" href="#1-register-in-st-extensionindexjs" title="Permanent link">&para;</a></h3>
+<p>Character action tools let the ST brain instruct the OC body to take outbound actions during generation. They work on two paths:</p>
+<ul>
+<li><strong>ST UI path</strong>: ST's built-in function calling fires the tool when the character responds in chat.</li>
+<li><strong>OC/Discord path</strong>: <code>Generate('quiet', ...)</code> excludes native tool calling, so the tool schema is injected as text into the prompt. The LLM may output <code>&lt;action&gt;</code> blocks which the <code>/generate</code> handler parses and strips before returning <code>pending_actions</code> to OC.</li>
+</ul>
+<p>Adding a new tool requires changes in three files:</p>
+<h3 id="1-register-in-st-pluginaction-toolsjs-source-of-truth">1. Register in <code>st-plugin/action-tools.js</code> (source of truth)<a class="headerlink" href="#1-register-in-st-pluginaction-toolsjs-source-of-truth" title="Permanent link">&para;</a></h3>
+<p>Add an entry to <code>ACTION_TOOLS</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">    </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;my_action&#39;</span><span class="p">,</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;What this action does and when to use it.&#39;</span><span class="p">,</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nx">parameters</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;param_one&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;What this parameter is&#39;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">    </span><span class="p">],</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">},</span>
+</code></pre></div>
+<p>The <code>type</code> string must match the <code>case</code> label in step 3.</p>
+<h3 id="2-register-in-st-extensionindexjs">2. Register in <code>st-extension/index.js</code><a class="headerlink" href="#2-register-in-st-extensionindexjs" title="Permanent link">&para;</a></h3>
 <p>Inside <code>registerBridgeTools()</code>, add a <code>context.registerFunctionTool(...)</code> call:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nx">context</span><span class="p">.</span><span class="nx">registerFunctionTool</span><span class="p">({</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">    </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;openclaw_&lt;action_name&gt;&#39;</span><span class="p">,</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nx">displayName</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Human-readable name&#39;</span><span class="p">,</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;What this tool does and when to use it.&#39;</span><span class="p">,</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="nx">parameters</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">        </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;object&#39;</span><span class="p">,</span>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">        </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">            </span><span class="nx">my_param</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;string&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;What this param is&#39;</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">        </span><span class="p">},</span>
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">        </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;my_param&#39;</span><span class="p">],</span>
-<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="w">    </span><span class="p">},</span>
-<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">    </span><span class="nx">stealth</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="w">    </span><span class="nx">action</span><span class="o">:</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">(</span><span class="nx">params</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">        </span><span class="nx">queueCharacterAction</span><span class="p">(</span><span class="s1">&#39;&lt;action_name&gt;&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">params</span><span class="p">);</span>
-<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">queued</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">};</span>
-<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="w">    </span><span class="p">},</span>
-<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="p">});</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nx">context</span><span class="p">.</span><span class="nx">registerFunctionTool</span><span class="p">({</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;openclaw_my_action&#39;</span><span class="p">,</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nx">displayName</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Human-readable name&#39;</span><span class="p">,</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;What this tool does and when to use it.&#39;</span><span class="p">,</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="nx">parameters</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">        </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;object&#39;</span><span class="p">,</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">        </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">            </span><span class="nx">param_one</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;string&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;What this param is&#39;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">        </span><span class="p">},</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">        </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;param_one&#39;</span><span class="p">],</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">    </span><span class="p">},</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="w">    </span><span class="nx">stealth</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="w">    </span><span class="nx">action</span><span class="o">:</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">(</span><span class="nx">params</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="w">        </span><span class="nx">queueCharacterAction</span><span class="p">(</span><span class="s1">&#39;my_action&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">params</span><span class="p">);</span>
+<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">queued</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">};</span>
+<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="w">    </span><span class="p">},</span>
+<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a><span class="p">});</span>
 </code></pre></div>
-<h3 id="2-implement-in-oc-pluginsrcindexts">2. Implement in <code>oc-plugin/src/index.ts</code><a class="headerlink" href="#2-implement-in-oc-pluginsrcindexts" title="Permanent link">&para;</a></h3>
+<h3 id="3-implement-in-oc-pluginsrcindexts">3. Implement in <code>oc-plugin/src/index.ts</code><a class="headerlink" href="#3-implement-in-oc-pluginsrcindexts" title="Permanent link">&para;</a></h3>
 <p>Add a <code>case</code> in the <code>switch</code> inside <code>executeCharacterActions</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">case</span><span class="w"> </span><span class="s2">&quot;&lt;action_name&gt;&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">adapter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">api</span><span class="p">.</span><span class="nx">runtime</span><span class="p">.</span><span class="nx">channel</span><span class="p">.</span><span class="nx">outbound</span><span class="p">.</span><span class="nx">loadAdapter</span><span class="p">(</span><span class="nx">ctx</span><span class="p">.</span><span class="nx">channelId</span><span class="p">);</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">adapter</span><span class="o">?</span><span class="p">.</span><span class="nx">sendText</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">outcome</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;no outbound adapter&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">break</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">adapter</span><span class="p">.</span><span class="nx">sendText</span><span class="p">({</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">        </span><span class="nx">cfg</span><span class="o">:</span><span class="w"> </span><span class="kt">api.config</span><span class="p">,</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">        </span><span class="nx">to</span><span class="o">:</span><span class="w"> </span><span class="kt">String</span><span class="p">(</span><span class="nx">action</span><span class="p">.</span><span class="nx">my_param</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">),</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">        </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="kt">String</span><span class="p">(</span><span class="nx">action</span><span class="p">.</span><span class="nx">content</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">),</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">        </span><span class="p">...(</span><span class="nx">ctx</span><span class="p">.</span><span class="nx">accountId</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">accountId</span><span class="o">:</span><span class="w"> </span><span class="kt">ctx.accountId</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="p">{}),</span>
-<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">    </span><span class="p">});</span>
-<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">    </span><span class="nx">outcome</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;sent&quot;</span><span class="p">;</span>
-<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">    </span><span class="k">break</span><span class="p">;</span>
-<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">case</span><span class="w"> </span><span class="s2">&quot;my_action&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">adapter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">api</span><span class="p">.</span><span class="nx">runtime</span><span class="p">.</span><span class="nx">channel</span><span class="p">.</span><span class="nx">outbound</span><span class="p">.</span><span class="nx">loadAdapter</span><span class="p">(</span><span class="nx">ctx</span><span class="p">.</span><span class="nx">channelId</span><span class="p">);</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">adapter</span><span class="o">?</span><span class="p">.</span><span class="nx">sendText</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">outcome</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;no outbound adapter&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">break</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">adapter</span><span class="p">.</span><span class="nx">sendText</span><span class="p">({</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">        </span><span class="nx">cfg</span><span class="o">:</span><span class="w"> </span><span class="kt">api.config</span><span class="p">,</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">        </span><span class="nx">to</span><span class="o">:</span><span class="w"> </span><span class="kt">String</span><span class="p">(</span><span class="nx">action</span><span class="p">.</span><span class="nx">param_one</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">),</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">        </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="kt">String</span><span class="p">(</span><span class="nx">action</span><span class="p">.</span><span class="nx">content</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">),</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">        </span><span class="p">...(</span><span class="nx">ctx</span><span class="p">.</span><span class="nx">accountId</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">accountId</span><span class="o">:</span><span class="w"> </span><span class="kt">ctx.accountId</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="p">{}),</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">    </span><span class="nx">outcome</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;sent&quot;</span><span class="p">;</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">    </span><span class="k">break</span><span class="p">;</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="p">}</span>
 </code></pre></div>
-<p>No changes to the <code>/generate</code> handler or trust enforcement are needed — <code>pendingActions</code> is already forwarded to OC and stripped for guests automatically.</p>
+<p>The <code>log-action</code> call after the switch already records the outcome to ST chat history. Guest action blocking is enforced in the <code>/generate</code> handler — no changes needed there.</p>
 <hr />
 <h2 id="repository-structure">Repository structure<a class="headerlink" href="#repository-structure" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>st-plugin/              Node.js CommonJS server plugin loaded by SillyTavern
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>st-plugin/tests/        Jest unit tests (auto-discovered)
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>st-plugin/tools/        Manual test helpers — not picked up by Jest
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>st-extension/           Browser JS extension loaded by SillyTavern
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>oc-plugin/              OpenClaw plugin (TypeScript); compiled to dist/
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>skills/character-bridge/ OC skill definitions — YAML + Markdown
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>sillytavern/            Git submodule — ST vendor checkout for dev/testing only
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>data/                   Runtime data (bridge token, character-links.json)
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>docs/                   User-facing documentation
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>scripts/                Shell helpers (link-character.sh, verify.sh)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>st-plugin/              Node.js CommonJS server plugin loaded by SillyTavern
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>st-plugin/tests/        Jest unit tests (auto-discovered)
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>st-plugin/tools/        Manual test helpers — not picked up by Jest
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>st-extension/           Browser JS extension loaded by SillyTavern
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>oc-plugin/              OpenClaw plugin (TypeScript); compiled to dist/
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>skills/character-bridge/ OC skill definitions — YAML + Markdown
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>sillytavern/            Git submodule — ST vendor checkout for dev/testing only
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>data/                   Runtime data (bridge token, character-links.json)
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>docs/                   User-facing documentation
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>scripts/                Shell helpers (link-character.sh, verify.sh)
 </code></pre></div>
 <h3 id="key-files">Key files<a class="headerlink" href="#key-files" title="Permanent link">&para;</a></h3>
 <table>
