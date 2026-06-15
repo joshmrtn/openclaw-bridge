@@ -2,12 +2,13 @@
 
 The Docker E2E suite proves the complete message path with only two things mocked: the LLM and the fake channel (a synthetic Discord stand-in). Everything else — OC gateway, character-bridge skill, ST plugin, headless Playwright, trust label enforcement, history writes — runs from real code inside Docker containers.
 
-There are two tiers depending on how much infrastructure you have available:
+There are three Docker tiers depending on how much infrastructure you have available:
 
-| Tier | Services | Mock depth | When to use |
-|------|----------|------------|-------------|
-| **Fast** | ST + fake-extension + fake-ollama | LLM + extension echo | CI, quick regression, no OC repo needed |
-| **Full** | ST + OC gateway + qa-bus + mock-llm + fake-ollama | LLM only | Pre-release, OC integration changes, debugging the full path |
+| Tier | Command | CI | Services | Mock depth | When to use |
+|------|---------|-----|----------|------------|-------------|
+| **Fast** | `npm run test:e2e:fast` | ✅ | ST + fake-extension + fake-ollama | LLM + extension echo | Every PR; quick regression; no OC repo needed |
+| **Browser** | `npm run test:e2e:browser` | ✅ | ST + fake-extension + Chromium | LLM | Every PR; validates real browser extension code |
+| **Full** | `npm run test:e2e:full` | ❌ local only | ST + OC gateway + qa-bus + mock-llm + fake-ollama | LLM only | Pre-release; OC integration changes; requires `~/projects/openclaw` |
 
 ---
 
@@ -19,7 +20,7 @@ Tests ST, the plugin, and the headless WebSocket round-trip. The extension is re
 npm run test:e2e:fast
 ```
 
-This command runs `docker compose` with `docker/docker-compose.yml`, waits for services to be healthy, then executes the Jest suite inside the `test-runner` container (19 tests).
+This command runs `docker compose` with `docker/docker-compose.yml`, waits for services to be healthy, then executes the Jest suite inside the `test-runner` container (22 tests).
 
 **Services:**
 
@@ -41,6 +42,37 @@ This command runs `docker compose` with `docker/docker-compose.yml`, waits for s
 - Character OC-side actions: `actions` array returned to caller (owner only; guests get empty array)
 - Multi-character isolation: TestBot and Narrator generate independent responses
 - `setup.sh --st-path`: script exits 0, copies plugin files, generates a bridge token
+
+---
+
+## Browser tier
+
+Tests the real `st-extension` code — the only tier that loads the actual extension JavaScript in a Chromium browser and validates the full WebSocket round-trip. The fast tier uses `fake-extension` (an echo server) which bypasses the extension entirely; the browser tier catches bugs that only surface when the real extension code runs.
+
+```bash
+npm run test:e2e:browser
+```
+
+**Services:**
+
+| Container | Image | Role |
+|-----------|-------|------|
+| `sillytavern` | shared with fast tier | ST with plugin (headless Playwright service disabled) |
+| `fake-extension` | shared with fast tier | WebSocket echo server (provides a WS client so non-browser tests in the stack still work) |
+| `browser-test-runner` | built from `docker/browser-test-runner/` | Playwright + Chromium; loads and exercises `st-extension/index.js` |
+
+**What it covers:**
+
+- Extension WS registration and connection handshake
+- `Generate('quiet', { force_chid })` called with correct parameters
+- Same-character generate requests are serialized (no concurrent generation for one character)
+- Trust label (`[OWNER]`/`[GUEST]`) present in the prompt passed to `Generate()`
+- Notification panel renders in the ST UI on `POST /test-notify`
+- Management panel injects into the ST character editor
+
+**Why the browser registers as headless:**
+
+Playwright drives Chromium non-interactively, making it functionally a headless client. The `bootExtension` helper sets `globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless'` before loading the extension so `session-manager.getClient()` picks it up (it only selects headless clients, never the user's interactive browser — this is by design to prevent UI hijacking).
 
 ---
 
@@ -128,14 +160,16 @@ Valid qa-channel config:
 
 ```
 docker/
-├── docker-compose.yml              Fast tier compose file
-├── sillytavern/                    ST Dockerfile + config (fast)
+├── docker-compose.yml              Fast + browser tier compose file
+├── sillytavern/                    ST Dockerfile + config (fast + browser)
 │   ├── Dockerfile
 │   └── config.yaml                 securityOverride: true required for Docker
-├── fake-extension/                 WebSocket echo server
+├── fake-extension/                 WebSocket echo server (fast + browser)
 ├── fake-ollama/                    Fixed-response Ollama mock
 ├── test-runner/                    Fast-tier Jest suite
 │   └── e2e.test.js
+├── browser-test-runner/            Browser-tier Playwright runner
+│   └── Dockerfile                  node:22 + playwright install chromium --with-deps
 └── full/
     ├── docker-compose.full.yml     Full tier compose file
     ├── build-oc.sh                 Builds openclaw-bridge:oc-qa and :oc-full
@@ -175,8 +209,9 @@ docker compose -f docker/full/docker-compose.full.yml build full-test-runner
 
 ## When to run which tier
 
-- **Every PR (automatic)** — GitHub Actions runs the fast tier on every push and pull request. The CI workflow (`ci.yml`) also runs unit tests first; the fast tier only starts if they pass. No action required from you.
-- **Local fast-tier run** — `npm run test:e2e:fast`. Useful when you want a quick regression check before pushing, or to debug a failing CI run locally.
+- **Every PR (automatic)** — GitHub Actions runs unit tests, the fast tier, and the browser tier on every push and pull request. All three must pass before a PR can be merged. No action required from you.
+- **Local fast or browser run** — `npm run test:e2e:fast` / `npm run test:e2e:browser`. Useful when you want to reproduce a CI failure locally or do a quick regression check before pushing.
 - **Before release (manual)** — run the full tier locally. It validates OC's skill dispatch, trust label injection, and the complete inbound→outbound message path. Cannot run in CI: the full tier requires the private OC repo to build `openclaw-bridge:oc-full`, which is not available on GitHub-hosted runners.
 - **Debugging a generation issue** — the full tier is a clean isolated environment to bisect: if it passes here but fails in production, the bug is in configuration or environment, not in code.
 - **Adding a new character action tool** — add a test to `full-e2e.test.js` that sends a message triggering that tool and asserts on the qa-bus outbound event or ST state.
+- **Adding a browser extension feature** — add a test to `st-plugin/tests/e2e/openclaw-bridge.e2e.js` (browser tier); use the `bootExtension` helper to load the extension in Chromium and interact via `page` and `request`.

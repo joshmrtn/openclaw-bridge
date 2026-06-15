@@ -32,8 +32,21 @@ cd sillytavern && node server.js
 
 ## Tests
 
+### Tier overview
+
+| Tier | Command | CI | What it tests |
+|------|---------|-----|---------------|
+| **Unit** | `npm test` | ✅ automatic | Jest — plugin logic, session manager, trust labels, link state, chat history |
+| **Docker fast** | `npm run test:e2e:fast` | ✅ automatic | Full HTTP + WS round-trip via fake-extension; no browser, no OC repo needed |
+| **Docker browser** | `npm run test:e2e:browser` | ✅ automatic | Real `st-extension` code loaded in Chromium — the only tier that exercises the actual browser extension |
+| **Full** | `npm run test:e2e:full` | ❌ local only | Real OC gateway end-to-end; requires `~/projects/openclaw` — too large for CI |
+
+All three automatic tiers run on every push and pull request. A PR cannot be merged unless all three are green.
+
+### Running tests locally
+
 ```bash
-# All unit tests
+# Unit tests (no ST required)
 npm test
 
 # Faster: suppress Playwright startup noise
@@ -45,17 +58,26 @@ npm test -- --testPathPattern=session-manager
 # Plugin tests only
 npm test -- st-plugin
 
-# Docker E2E — fast tier (ST + fake-extension + fake-ollama, no OC repo needed)
+# Docker E2E — fast tier
 npm run test:e2e:fast
 
-# Docker E2E — full tier (real OC gateway + qa-bus + headless Playwright)
-# Requires openclaw repo at ~/projects/openclaw. Cannot run in CI.
+# Docker E2E — browser tier (real extension in Chromium)
+npm run test:e2e:browser
+
+# Docker E2E — full tier (requires openclaw repo at ~/projects/openclaw)
 npm run test:e2e:full
 ```
 
 Unit tests mock the WebSocket, session manager, and filesystem — no ST process required. Jest auto-discovers `*.test.js` files under `st-plugin/tests/`. Files under `st-plugin/tools/` are manual helpers and not picked up by Jest.
 
-The Docker E2E tiers run the full message path in isolated containers — the only mocks are the LLM and the fake channel. See **[Docker E2E testing](docker-e2e.md)** for setup, architecture, and when to run each tier.
+The Docker E2E tiers run the full message path in isolated containers. See **[Docker E2E testing](docker-e2e.md)** for setup, architecture, and when to run each tier.
+
+### Where new tests go
+
+- **Logic, session manager, routes, trust labels** → `st-plugin/tests/*.test.js` (unit tier)
+- **Plugin HTTP API, character linking, generate round-trip** → `docker/test-runner/e2e.test.js` (fast tier)
+- **Browser extension rendering, WS round-trip with real extension code** → `st-plugin/tests/e2e/openclaw-bridge.e2e.js` (browser tier)
+- **Full OC skill dispatch, end-to-end message path** → `docker/full/test-runner/full-e2e.test.js` (full tier)
 
 ---
 

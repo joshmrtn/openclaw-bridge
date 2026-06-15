@@ -1594,6 +1594,7 @@ function init() {
                 }
                 ensureSillyTavernApis();
                 registerBridgeTools();
+                registerManagementPanelHooks();
                 console.log('[openclaw-bridge] Step 3: connection attempt started');
             } catch (e) {
                 console.error('[openclaw-bridge] ❌ ERROR in delayed init():', e);
@@ -1611,6 +1612,12 @@ export {
     generateForCharacter,
 };
 
-// Expose a test-friendly global so E2E tests can observe state and trigger actions
-globalThis.openclawBridge = globalThis.openclawBridge || { state: STATE, connect, sendSocketMessage };
+// Expose a test-friendly global so E2E tests can observe state and trigger actions.
+// state/connect/sendSocketMessage come from the first-loaded instance (|| guard), so
+// openclawBridge.state.connected tracks the real connection. refreshManagementPanel is
+// always assigned so it is present even when a second module instance loads (blob import).
+if (!globalThis.openclawBridge) {
+    globalThis.openclawBridge = { state: STATE, connect, sendSocketMessage };
+}
+globalThis.openclawBridge.refreshManagementPanel = refreshManagementPanel;
 globalThis.openclawBridgeInit = globalThis.openclawBridgeInit || init;

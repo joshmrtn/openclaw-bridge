@@ -120,6 +120,31 @@ test('plugin health endpoint returns ok', async () => {
     expect(res.ok).toBe(true);
 });
 
+test('plugin health response has expected shape', async () => {
+    const res = await stFetch('/health');
+    const data = await res.json();
+    expect(data).toHaveProperty('uptime');
+    expect(data).toHaveProperty('headless');
+    expect(data).toHaveProperty('clients');
+});
+
+test('plugin health client counts are non-negative', async () => {
+    const res = await stFetch('/health');
+    const data = await res.json();
+    expect(data.clients.headless).toBeGreaterThanOrEqual(0);
+    expect(data.clients.ui).toBeGreaterThanOrEqual(0);
+    expect(data.clients.total).toBeGreaterThanOrEqual(0);
+});
+
+test('unauthenticated request to /generate returns 401', async () => {
+    const res = await fetch(`${ST_URL}/api/plugins/openclaw-bridge/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: 'TestBot', message: 'hi', user_id: 'u1', channel: 'c1' }),
+    });
+    expect(res.status).toBe(401);
+});
+
 test('plugin status shows at least one connected WS client', async () => {
     const res = await stFetch('/status');
     const data = await res.json();

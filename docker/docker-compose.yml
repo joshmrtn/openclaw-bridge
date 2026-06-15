@@ -110,3 +110,29 @@ services:
         condition: service_healthy
     profiles:
       - test
+
+  # ── browser-test-runner ───────────────────────────────────────────────────────
+  # Runs the Playwright browser E2E suite against ST + fake-extension.
+  # Loads the real st-extension code in a Chromium browser and exercises the full
+  # WS round-trip without relying on a user's local ST install.
+  # Only started when --profile browser-test is passed:
+  #   docker compose --profile browser-test run --rm browser-test-runner
+  browser-test-runner:
+    build:
+      context: ..
+      dockerfile: docker/browser-test-runner/Dockerfile
+      cache_from:
+        - type=gha,scope=browser-test-runner
+      cache_to:
+        - type=gha,scope=browser-test-runner,mode=max
+    environment:
+      - OPENCLAW_BRIDGE_ST_URL=http://sillytavern:8000
+      - OPENCLAW_BRIDGE_AUTH_TOKEN=e2e-test-token
+      - OPENCLAW_BRIDGE_ENABLE_HEADLESS=false
+    depends_on:
+      sillytavern:
+        condition: service_healthy
+      fake-extension:
+        condition: service_healthy
+    profiles:
+      - browser-test

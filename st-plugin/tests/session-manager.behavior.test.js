@@ -96,6 +96,35 @@ describe('session-manager behavior', () => {
         sessionManager.unregisterClient(fakeClient);
     });
 
+    test('HTTP polling round-trip: requestGenerate enqueues, pop + handleHttpResponse resolves it', async () => {
+        const prevMs = process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS;
+        process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS = '0'; // skip wait window; enqueue immediately
+        try {
+            // No WS client registered — generate falls to HTTP polling queue
+            const promise = sessionManager.requestGenerate({ character: 'Frog' }, 2000);
+
+            // Simulates extension polling /http-message: message is available immediately
+            const msg = sessionManager.popHttpOutboundMessage('headless');
+            expect(msg).not.toBeNull();
+            expect(msg.type).toBe('generate');
+            expect(msg.payload).toMatchObject({ character: 'Frog' });
+
+            // Simulates extension calling back /http-response after running Generate()
+            const handled = sessionManager.handleHttpResponse({
+                requestId: msg.requestId,
+                response: 'Ribbit!',
+                actions: [],
+                st_side_actions: [],
+            });
+            expect(handled).toBe(true);
+
+            await expect(promise).resolves.toMatchObject({ response: 'Ribbit!' });
+        } finally {
+            if (prevMs !== undefined) process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS = prevMs;
+            else delete process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS;
+        }
+    });
+
     test('popHttpOutboundMessage returns null when queue is empty', () => {
         expect(sessionManager.popHttpOutboundMessage()).toBeNull();
         expect(sessionManager.popHttpOutboundMessage('headless')).toBeNull();
