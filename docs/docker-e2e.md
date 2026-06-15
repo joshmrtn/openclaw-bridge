@@ -88,7 +88,7 @@ bash docker/full/build-oc.sh
 npm run test:e2e:full
 ```
 
-This command runs `docker compose` with `docker/full/docker-compose.full.yml` (17 tests, all pass).
+This command runs `docker compose` with `docker/full/docker-compose.full.yml` (24 tests, all pass).
 
 **Services:**
 
@@ -111,6 +111,7 @@ This command runs `docker compose` with `docker/full/docker-compose.full.yml` (1
 - Lorebook memory write + read via `POST /characters/:name/memory` and `GET /characters/:name/memory` (R11 storage path)
 - `link-character.sh` round-trip: `--unlink` removes the character link, `link-character.sh` restores it
 - Headless reconnect after ST restart (R8.4): `docker restart sillytavern-full`, wait for headless to come back, assert generation still works (240s timeout)
+- `verify.sh` health check: runs against the initial setup and again after the uninstall → reinstall → restart lifecycle, asserting 0 failures each time
 
 **Real install simulation.** The full tier is uniquely valuable because it replicates a real user install from scratch:
 

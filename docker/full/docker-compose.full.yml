@@ -65,10 +65,10 @@ services:
       fake-ollama:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "src/healthcheck.js"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/plugins/openclaw-bridge/status", "-H", "Authorization: Bearer e2e-test-token"]
       interval: 5s
       timeout: 5s
-      start_period: 90s
+      start_period: 120s
       retries: 30
 
   # ── qa-bus ─────────────────────────────────────────────────────────────────

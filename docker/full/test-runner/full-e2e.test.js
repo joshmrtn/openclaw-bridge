@@ -448,6 +448,15 @@ describe('setup.sh integration', () => {
     expect(Array.isArray(chars)).toBe(true);
     expect(chars.some(c => c.name === 'TestBot' || c === 'TestBot')).toBe(true);
   });
+
+  test('verify.sh reports all checks pass after setup', () => {
+    const output = execSync(
+      `docker exec -e OPENCLAW_BRIDGE_TOKEN=e2e-test-token ${SILLYTAVERN_CONTAINER} ` +
+      `bash /repo/scripts/verify.sh --st-url http://localhost:8000`,
+      { timeout: 30000 },
+    ).toString();
+    expect(output).toContain('0 failed');
+  }, 30000);
 });
 
 // ── lorebook memory storage (R11) ────────────────────────────────────────────
@@ -848,5 +857,21 @@ describe('setup.sh → uninstall.sh lifecycle (#40)', () => {
     const afterReinstall = await stFetch('/status');
     expect(afterReinstall.status).toBe(200);
     expect(afterReinstall.body).toHaveProperty('plugin', 'openclaw-bridge');
+
+    // Wait for headless Playwright to reconnect — verify.sh fails if no WS clients.
+    await waitFor(async () => {
+      try {
+        const r = await stFetch('/status');
+        return r.status === 200 && (r.body.connected_ws_clients ?? 0) > 0;
+      } catch { return false; }
+    }, { timeoutMs: 120000, intervalMs: 3000, label: 'headless WS client to reconnect after reinstall' });
+
+    // verify.sh confirms the reinstalled setup is fully healthy end-to-end.
+    const verifyOut = execSync(
+      `docker exec -e OPENCLAW_BRIDGE_TOKEN=e2e-test-token ${SILLYTAVERN_CONTAINER} ` +
+      `bash /repo/scripts/verify.sh --st-url http://localhost:8000`,
+      { timeout: 30000 },
+    ).toString();
+    expect(verifyOut).toContain('0 failed');
   }, 300000); // 5 min — one ST restart + npm install inside container
 });
