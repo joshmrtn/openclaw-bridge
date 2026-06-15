@@ -474,6 +474,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#uninstalling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Uninstalling
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -742,6 +753,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#uninstalling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Uninstalling
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -845,6 +867,28 @@
 <h2 id="whats-next">What's next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
 <p>Add your first character: <a href="../adding-a-character/">Adding a character</a></p>
 <p>If anything went wrong during setup: <a href="../troubleshooting/">Troubleshooting</a></p>
+<hr />
+<h2 id="uninstalling">Uninstalling<a class="headerlink" href="#uninstalling" title="Permanent link">&para;</a></h2>
+<p>To remove openclaw-bridge cleanly, run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>./uninstall.sh
+</code></pre></div>
+<p><code>uninstall.sh</code> will:</p>
+<ol>
+<li>Find your SillyTavern installation (same auto-discovery logic as <code>setup.sh</code>) and remove the plugin and extension directories from it</li>
+<li>Uninstall the OC gateway plugin if the <code>openclaw</code> CLI is in your PATH</li>
+<li>Remove the data symlinks from <code>~/.openclaw/openclaw-bridge/</code></li>
+<li>Ask whether to delete <code>data/openclaw-bridge/</code> (bridge token and character-links.json) — the default is to <strong>keep</strong> it so a re-install picks up where you left off without regenerating the token</li>
+</ol>
+<p><strong>Non-interactive / scripted removal:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>./uninstall.sh<span class="w"> </span>--st-path<span class="w"> </span>~/SillyTavern<span class="w"> </span>--yes
+</code></pre></div>
+<p><strong>Also delete bridge data (token + character links):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>./uninstall.sh<span class="w"> </span>--st-path<span class="w"> </span>~/SillyTavern<span class="w"> </span>--yes<span class="w"> </span>--delete-data
+</code></pre></div>
+<p>After uninstalling, restart SillyTavern to deactivate the plugin and extension.</p>
+<blockquote>
+<p><strong>What is NOT removed:</strong> Character cards, ST's <code>config.yaml</code> and <code>settings.json</code>, and any lorebook files. Only the files that <code>setup.sh</code> originally installed are touched.</p>
+</blockquote>
 
 
 
