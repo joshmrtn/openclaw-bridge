@@ -478,6 +478,7 @@ async function init(router) {
                     if (action.type === 'write_memory') {
                         try {
                             lorebook.upsertMemoryEntry(character, action);
+                            console.info(`[openclaw-bridge-plugin] Memory written: entry_key=${action.entry_key} character=${character}`);
                         } catch (memErr) {
                             console.warn('[openclaw-bridge-plugin] Heartbeat memory write failed:', memErr?.message);
                         }

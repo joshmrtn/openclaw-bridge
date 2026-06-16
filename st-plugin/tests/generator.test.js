@@ -15,10 +15,6 @@ describe('generator (mock)', () => {
         const sample = { name: 'Frog', description: 'Frog is warm and likes tea.' };
         fs.writeFileSync(path.join(chars, 'Frog.json'), JSON.stringify(sample));
 
-        // lorebooks (no-op here; lore is handled by ST Generate in the extension)
-        const loreDir = path.join(tmpDir, 'lorebooks', 'Frog');
-        fs.mkdirSync(loreDir, { recursive: true });
-
         // chats
         const chats = path.join(tmpDir, 'chats', 'Frog');
         fs.mkdirSync(chats, { recursive: true });
@@ -29,8 +25,8 @@ describe('generator (mock)', () => {
         fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    test('assembleMessages includes system, lore, history, and incoming', async () => {
-        const assembled = await gen.assembleMessages('Frog', 'Do you like tea?', { charDir: path.join(tmpDir, 'characters'), loreDir: path.join(tmpDir, 'lorebooks'), chatsDir: path.join(tmpDir, 'chats') });
+    test('assembleMessages includes system prompt, chat history, and incoming message (lore handled by ST Generate)', async () => {
+        const assembled = await gen.assembleMessages('Frog', 'Do you like tea?', { charDir: path.join(tmpDir, 'characters'), chatsDir: path.join(tmpDir, 'chats') });
         expect(Array.isArray(assembled)).toBe(true);
         expect(assembled[0].role).toBe('system');
         const contents = assembled.map(m => m.content).join(' ');
@@ -43,7 +39,6 @@ describe('generator (mock)', () => {
     test('assembleMessages passes through images as multimodal content', async () => {
         const assembled = await gen.assembleMessages('Frog', 'Look at this', {
             charDir: path.join(tmpDir, 'characters'),
-            loreDir: path.join(tmpDir, 'lorebooks'),
             chatsDir: path.join(tmpDir, 'chats'),
             images: ['data:image/jpeg;base64,abc123'],
         });
@@ -59,7 +54,7 @@ describe('generator (mock)', () => {
     });
 
     test('generate appends incoming and mock response to chat history', async () => {
-        const opts = { charDir: path.join(tmpDir, 'characters'), loreDir: path.join(tmpDir, 'lorebooks'), chatsDir: path.join(tmpDir, 'chats') };
+        const opts = { charDir: path.join(tmpDir, 'characters'), chatsDir: path.join(tmpDir, 'chats') };
         const result = await gen.generate('Frog', 'Do you like tea?', opts);
         expect(result.response).toBe('[MOCK RESPONSE]');
 
@@ -72,7 +67,6 @@ describe('generator (mock)', () => {
     test('generate preserves multimodal incoming content in chat history', async () => {
         const opts = {
             charDir: path.join(tmpDir, 'characters'),
-            loreDir: path.join(tmpDir, 'lorebooks'),
             chatsDir: path.join(tmpDir, 'chats'),
             images: ['data:image/jpeg;base64,abc123'],
         };
