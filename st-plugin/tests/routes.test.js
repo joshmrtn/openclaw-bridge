@@ -1337,4 +1337,337 @@ describe('plugin routes', () => {
         expect(res.statusCode).toBe(404);
         expect(res.body.error).toMatch(/Character not found: Unknown/);
     });
+
+    test('POST /characters/:name/link passes channels array to upsertLink (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const channels = [{ name: 'discord', channel_id: 'discord-frogbot', target: '123456' }];
+        const upsertLink = jest.fn(() => ({ oc_agent_id: 'frog', active: true, owner_user_ids: [], channels }));
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', owner_user_ids: [], channels },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(upsertLink).toHaveBeenCalledWith('Frog', expect.objectContaining({ channels }));
+        expect(res.body.link.channels).toEqual(channels);
+    });
+
+    test('POST /characters/:name/link passes channels: null to upsertLink to clear channels (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const upsertLink = jest.fn(() => ({ oc_agent_id: 'frog', active: true, owner_user_ids: [] }));
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', channels: null },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(upsertLink).toHaveBeenCalledWith('Frog', expect.objectContaining({ channels: null }));
+    });
+
+    test('POST /characters/:name/link omits channels from patch when not supplied (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const upsertLink = jest.fn(() => ({ oc_agent_id: 'frog', active: true, owner_user_ids: [] }));
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        const patchArg = upsertLink.mock.calls[0][1];
+        expect(patchArg).not.toHaveProperty('channels');
+    });
+
+    test('POST /characters/:name/link accepts empty channels array to clear channels (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const upsertLink = jest.fn(() => ({ oc_agent_id: 'frog', active: true, owner_user_ids: [] }));
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', channels: [] },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(upsertLink).toHaveBeenCalledWith('Frog', expect.objectContaining({ channels: [] }));
+    });
+
+    test('POST /characters/:name/link returns 400 when channel entry name is whitespace-only (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', channels: [{ name: '   ', channel_id: 'discord-frogbot' }] },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/channel entry.*name/i);
+    });
+
+    test('POST /characters/:name/link returns 400 when channel entry channel_id is whitespace-only (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', channels: [{ name: 'discord', channel_id: '   ' }] },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/channel entry.*channel_id/i);
+    });
+
+    test('POST /characters/:name/link returns 400 when channels is not an array (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', channels: 'discord' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/channels must be an array or null/);
+    });
+
+    test('POST /characters/:name/link returns 400 when a channel entry is missing name (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', channels: [{ channel_id: 'discord-frogbot' }] },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/channel entry.*name/i);
+    });
+
+    test('POST /characters/:name/link returns 400 when a channel entry is missing channel_id (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', channels: [{ name: 'discord' }] },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/channel entry.*channel_id/i);
+    });
+
+    test('GET /characters/:name/link returns link with channels (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const channels = [{ name: 'discord', channel_id: 'discord-frogbot', target: '123' }];
+        const link = { oc_agent_id: 'frog', active: true, owner_user_ids: [], channels };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({ listCharacters: jest.fn().mockResolvedValue([]) }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => link), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ character: 'Frog', link });
+    });
+
+    test('GET /characters/:name/link omits channels key when none configured (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const link = { oc_agent_id: 'frog', active: true, owner_user_ids: [] };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({ listCharacters: jest.fn().mockResolvedValue([]) }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => link), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.link).not.toHaveProperty('channels');
+    });
+
+    test('GET /characters/:name/link returns 404 when character has no link entry (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({ listCharacters: jest.fn().mockResolvedValue([]) }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(404);
+        expect(res.body.error).toMatch(/No link found for: Frog/);
+    });
+
+    test('GET /characters/:name/link returns 400 when name param is empty (#60)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({ listCharacters: jest.fn().mockResolvedValue([]) }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink: jest.fn() }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: '' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/Character name is required/);
+    });
 });

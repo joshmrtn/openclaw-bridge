@@ -540,6 +540,91 @@ describe('link-character.sh round-trip', () => {
   }, 30000);
 });
 
+// ── link-character.sh --channel flags (#60) ───────────────────────────────────
+// Verifies that --channel/--channel-id/--channel-target/--remove-channel flags
+// correctly mutate the channels array in character-links.json via the plugin API.
+// Uses Narrator (already linked) so we don't disturb TestBot's message-path tests.
+describe('link-character.sh --channel flags (#60)', () => {
+  const BASE_CMD =
+    `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/scripts/link-character.sh ` +
+    `--character Narrator --agent default --token e2e-test-token --plugin-url http://localhost:8000`;
+
+  async function getNarratorLink() {
+    const r = await stFetch('/characters/Narrator/link');
+    expect(r.status).toBe(200);
+    return r.body.link;
+  }
+
+  beforeEach(async () => {
+    // Reset: clear any channels left by a previous test.
+    await stFetch('/characters/Narrator/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', channels: null }),
+    });
+  });
+
+  test('--channel adds a channel entry to the link (#60)', async () => {
+    execSync(
+      `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-target 111222333`,
+      { timeout: 15000 },
+    );
+
+    const link = await getNarratorLink();
+    expect(Array.isArray(link.channels)).toBe(true);
+    const ch = link.channels.find(c => c.name === 'discord');
+    expect(ch).toBeDefined();
+    expect(ch.channel_id).toBe('discord-narratorbot');
+    expect(ch.target).toBe('111222333');
+  }, 30000);
+
+  test('--channel without --channel-target omits target field (#60)', async () => {
+    execSync(
+      `${BASE_CMD} --channel telegram --channel-id telegram-narratorbot`,
+      { timeout: 15000 },
+    );
+
+    const link = await getNarratorLink();
+    const ch = link.channels.find(c => c.name === 'telegram');
+    expect(ch).toBeDefined();
+    expect(ch.channel_id).toBe('telegram-narratorbot');
+    expect(ch).not.toHaveProperty('target');
+  }, 30000);
+
+  test('second --channel call merges without clobbering existing channels (#60)', async () => {
+    // Add discord first.
+    execSync(
+      `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-target 111`,
+      { timeout: 15000 },
+    );
+    // Add telegram in a separate call — should not remove discord.
+    execSync(
+      `${BASE_CMD} --channel telegram --channel-id telegram-narratorbot`,
+      { timeout: 15000 },
+    );
+
+    const link = await getNarratorLink();
+    expect(link.channels).toHaveLength(2);
+    expect(link.channels.find(c => c.name === 'discord')).toBeDefined();
+    expect(link.channels.find(c => c.name === 'telegram')).toBeDefined();
+  }, 30000);
+
+  test('--remove-channel removes a single entry without clobbering others (#60)', async () => {
+    // Set up two channels.
+    execSync(
+      `${BASE_CMD} --channel discord --channel-id discord-narratorbot ` +
+      `--channel telegram --channel-id telegram-narratorbot`,
+      { timeout: 15000 },
+    );
+
+    // Remove telegram only.
+    execSync(`${BASE_CMD} --remove-channel telegram`, { timeout: 15000 });
+
+    const link = await getNarratorLink();
+    expect(link.channels.find(c => c.name === 'discord')).toBeDefined();
+    expect(link.channels.find(c => c.name === 'telegram')).toBeUndefined();
+  }, 30000);
+});
+
 // ── R5: outbound character actions ────────────────────────────────────────────
 // Verifies that when the ST LLM returns <action> blocks, the plugin parses them,
 // strips them from the response text, passes them to OC as pending_actions, OC

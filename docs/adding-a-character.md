@@ -110,24 +110,44 @@ A character can send messages to a channel mid-generation using the `send_messag
 
 ### Configure channels
 
-Edit `data/openclaw-bridge/character-links.json` and add a `channels` array to the character entry:
+Use `link-character.sh` with the `--channel` flags to add channels without editing `character-links.json` directly:
 
-```json
-{
-  "Frog": {
-    "oc_agent_id": "frog",
-    "active": true,
-    "owner_user_ids": ["discord:YOUR_USER_ID"],
-    "channels": [
-      {
-        "name": "discord",
-        "channel_id": "discord-mybotname",
-        "target": "YOUR_DISCORD_CHANNEL_ID"
-      }
-    ]
-  }
-}
+```bash
+./scripts/link-character.sh \
+  --character "Frog" \
+  --agent frog \
+  --channel discord \
+  --channel-id discord-mybotname \
+  --channel-target YOUR_DISCORD_CHANNEL_ID
 ```
+
+Flags are repeatable — add multiple channels in one call:
+
+```bash
+./scripts/link-character.sh \
+  --character "Frog" \
+  --agent frog \
+  --channel discord --channel-id discord-mybotname --channel-target CHANNEL_ID \
+  --channel telegram --channel-id telegram-mybotname
+```
+
+Each call **merges** into the existing channel list by name — running the script twice with different `--channel` values won't clobber the first entry. To remove a channel by name:
+
+```bash
+./scripts/link-character.sh \
+  --character "Frog" \
+  --agent frog \
+  --remove-channel telegram
+```
+
+| Flag | Description |
+|---|---|
+| `--channel NAME` | Logical name the character uses in the `channel` parameter (e.g. `"discord"`, `"telegram"`) |
+| `--channel-id ID` | OC channel account ID (e.g. `"discord-mybotname"`); required when `--channel` is used |
+| `--channel-target TARGET` | Default destination for this channel — Discord channel ID, Telegram chat ID, etc. (optional) |
+| `--remove-channel NAME` | Remove the channel entry with this name |
+
+The underlying `channels` schema stored in `character-links.json`:
 
 | Field | Description |
 |---|---|
@@ -135,7 +155,7 @@ Edit `data/openclaw-bridge/character-links.json` and add a `channels` array to t
 | `channel_id` | OC channel account ID — the same value used for `--heartbeat-channel` (e.g. `"discord-mybotname"`) |
 | `target` | Platform-specific default destination: Discord channel ID, Telegram chat ID, etc. |
 
-A character can have multiple entries for different platforms. Add one entry per channel you want the character to be able to post to.
+A character can have multiple entries for different platforms.
 
 ### How the character uses it
 
@@ -152,8 +172,6 @@ To send a direct message instead, include `recipient`:
 ```
 
 If the character specifies a channel name that isn't in the `channels` list, the action is dropped and an error appears in ST chat history explaining which channels are configured.
-
-> **Note:** `link-character.sh` does not yet support configuring `channels` via flags — this is tracked in a separate issue. For now, edit `character-links.json` directly.
 
 ---
 

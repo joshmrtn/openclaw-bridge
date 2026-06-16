@@ -186,6 +186,28 @@ describe('character linking', () => {
         const data = await res.json();
         expect(data.removed).toBe(true);
     });
+
+    test('GET /characters/:name/link returns the link for a linked character (#60)', async () => {
+        const channels = [{ name: 'discord', channel_id: 'discord-testbot', target: '999' }];
+        await stFetch('/characters/TestBot/link', {
+            method: 'POST',
+            body: { oc_agent_id: 'testbot-agent', owner_user_ids: [], channels },
+        });
+
+        const res = await stFetch('/characters/TestBot/link');
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.link.oc_agent_id).toBe('testbot-agent');
+        expect(Array.isArray(data.link.channels)).toBe(true);
+        expect(data.link.channels[0].name).toBe('discord');
+        expect(data.link.channels[0].channel_id).toBe('discord-testbot');
+    });
+
+    test('GET /characters/:name/link returns 404 for an unlinked character (#60)', async () => {
+        await stFetch('/characters/Narrator/link', { method: 'DELETE' }).catch(() => {});
+        const res = await stFetch('/characters/Narrator/link');
+        expect(res.status).toBe(404);
+    });
 });
 
 // ── Generate round-trip ───────────────────────────────────────────────────────
@@ -292,26 +314,59 @@ describe('multi-character isolation', () => {
 // ── link-character.sh integration ────────────────────────────────────────────
 
 describe('link-character.sh', () => {
+    const BASE_CMD = `bash ${REPO}/scripts/link-character.sh` +
+        ` --character Narrator --agent script-agent` +
+        ` --plugin-url ${ST_URL} --token ${BRIDGE_TOKEN}`;
+
     afterEach(async () => {
         // Clean up the link created by the script so other tests are unaffected.
         await stFetch('/characters/Narrator/link', { method: 'DELETE' }).catch(() => {});
     });
 
     test('links a character via script and link appears via REST', async () => {
-        execSync(
-            `bash ${REPO}/scripts/link-character.sh` +
-            ` --character Narrator` +
-            ` --agent script-agent` +
-            ` --plugin-url ${ST_URL}` +
-            ` --token ${BRIDGE_TOKEN}`,
-            { stdio: 'pipe' },
-        );
+        execSync(BASE_CMD, { stdio: 'pipe' });
         const res = await stFetch('/characters');
         const chars = await res.json();
         const narrator = chars.find(c => c.name === 'Narrator');
         expect(narrator).toBeDefined();
         expect(narrator.link?.oc_agent_id).toBe('script-agent');
         expect(narrator.active).toBe(true);
+    });
+
+    test('--channel adds a channel readable via GET /characters/:name/link (#60)', async () => {
+        execSync(
+            `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-target 42`,
+            { stdio: 'pipe' },
+        );
+        const res = await stFetch('/characters/Narrator/link');
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        const ch = (data.link.channels || []).find(c => c.name === 'discord');
+        expect(ch).toBeDefined();
+        expect(ch.channel_id).toBe('discord-narratorbot');
+        expect(ch.target).toBe('42');
+    });
+
+    test('second --channel call merges without clobbering existing channels (#60)', async () => {
+        execSync(`${BASE_CMD} --channel discord --channel-id discord-narratorbot`, { stdio: 'pipe' });
+        execSync(`${BASE_CMD} --channel telegram --channel-id telegram-narratorbot`, { stdio: 'pipe' });
+        const res = await stFetch('/characters/Narrator/link');
+        const data = await res.json();
+        expect(data.link.channels.find(c => c.name === 'discord')).toBeDefined();
+        expect(data.link.channels.find(c => c.name === 'telegram')).toBeDefined();
+    });
+
+    test('--remove-channel removes one entry and leaves others (#60)', async () => {
+        execSync(
+            `${BASE_CMD} --channel discord --channel-id discord-narratorbot` +
+            ` --channel telegram --channel-id telegram-narratorbot`,
+            { stdio: 'pipe' },
+        );
+        execSync(`${BASE_CMD} --remove-channel telegram`, { stdio: 'pipe' });
+        const res = await stFetch('/characters/Narrator/link');
+        const data = await res.json();
+        expect(data.link.channels.find(c => c.name === 'discord')).toBeDefined();
+        expect(data.link.channels.find(c => c.name === 'telegram')).toBeUndefined();
     });
 });
 
