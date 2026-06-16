@@ -71,3 +71,28 @@ jobs:
 
       - name: Run browser-tier E2E
         run: npm run test:e2e:browser
+
+  macos-compat:
+    name: macOS compatibility
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Shell script syntax check
+        run: bash -n setup.sh update.sh uninstall.sh dev-setup.sh start.sh scripts/link-character.sh scripts/verify.sh migrations/0001_baseline.sh
+
+      - name: Shell script smoke tests
+        run: |
+          bash setup.sh --help
+          bash update.sh --help
+          bash update.sh --skip-pull --skip-st --skip-oc --yes || true
+
+      - name: Unit tests
+        run: OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
