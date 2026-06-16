@@ -36,7 +36,6 @@ function _buildIncomingContent(incomingText, images = []) {
 
 async function assembleMessages(characterName, incomingText, opts = {}) {
     const charDir = opts.charDir;
-    const loreDir = opts.loreDir;
     const chatsDir = opts.chatsDir;
     const images = Array.isArray(opts.images) ? opts.images : [];
 
@@ -46,10 +45,6 @@ async function assembleMessages(characterName, incomingText, opts = {}) {
     // system prompt
     const systemMsg = { role: 'system', content: `Character: ${charDescription}` };
 
-    // lorebook entries are applied by SillyTavern's Generate() in the extension
-    const matchedLore = [];
-    const loreMsgs = [];
-
     // chat history
     const history = await chatHistory.readLatestChat(characterName, chatsDir);
     const historyMsgs = _toStMessages(history);
@@ -57,7 +52,7 @@ async function assembleMessages(characterName, incomingText, opts = {}) {
     // incoming message as the last user message
     const incomingMsg = { role: 'user', content: _buildIncomingContent(incomingText, images) };
 
-    const assembled = [systemMsg, ...loreMsgs, ...historyMsgs, incomingMsg];
+    const assembled = [systemMsg, ...historyMsgs, incomingMsg];
     return assembled;
 }
 

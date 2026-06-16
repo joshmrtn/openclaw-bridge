@@ -66,7 +66,7 @@ function readLinkState(): Record<string, LinkEntry> {
 }
 
 // ---------------------------------------------------------------------------
-// Sender info cache (R31)
+// Sender info cache (R3.1)
 // Populated by the inbound_claim hook (which provides senderName), consumed in
 // before_dispatch so name + avatar are ready when we POST to /generate.
 // ---------------------------------------------------------------------------
