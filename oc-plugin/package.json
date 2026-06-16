@@ -10,5 +10,8 @@
       "entry": "./src/index.ts"
     },
     "extensions": ["./dist/index.js"]
+  },
+  "devDependencies": {
+    "typescript": "^5"
   }
 }

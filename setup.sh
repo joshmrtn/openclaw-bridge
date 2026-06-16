@@ -112,6 +112,11 @@ install_into_st() {
     echo "  Extension: ${ext_dst}"
     echo
     echo "  Restart SillyTavern, then refresh your browser tab to activate the extension."
+
+    # Persist the resolved ST path so update.sh can re-use it without prompting.
+    local config_dir="${script_dir}/data/openclaw-bridge"
+    mkdir -p "${config_dir}"
+    printf 'st_path=%q\n' "${st_path}" > "${config_dir}/config"
 }
 
 # ─── Locate SillyTavern and install plugin + extension ────────────────────────
@@ -138,6 +143,8 @@ elif [[ -d "${script_dir}/sillytavern" ]]; then
     # to the source are reflected immediately without re-running setup.
     echo "Developer mode: SillyTavern submodule detected — installing as symlinks."
     bash "${script_dir}/dev-setup.sh"
+    mkdir -p "${script_dir}/data/openclaw-bridge"
+    printf 'st_path=%q\n' "${script_dir}/sillytavern" > "${script_dir}/data/openclaw-bridge/config"
 
 else
     # Interactive mode: auto-discover, then confirm or prompt.
@@ -244,6 +251,12 @@ echo
 token_dir="${script_dir}/data/openclaw-bridge"
 token_file="${token_dir}/bridge-token.txt"
 mkdir -p "${token_dir}"
+
+schema_version_file="${token_dir}/schema-version.txt"
+if [ ! -f "${schema_version_file}" ]; then
+    printf '1' > "${schema_version_file}"
+    echo "Initialized schema version: ${schema_version_file}"
+fi
 
 if [ ! -f "${token_file}" ]; then
     if command -v openssl >/dev/null 2>&1; then
