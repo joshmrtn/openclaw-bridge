@@ -10,7 +10,7 @@
         "test:e2e:browser": "docker compose -f docker/docker-compose.yml down --remove-orphans 2>/dev/null; docker compose -f docker/docker-compose.yml --profile browser-test run --build --rm browser-test-runner",
         "docker:up": "docker compose -f docker/docker-compose.yml up --wait sillytavern fake-extension fake-ollama",
         "docker:down": "docker compose -f docker/docker-compose.yml down",
-        "test:e2e:full": "docker compose -f docker/full/docker-compose.full.yml down --remove-orphans 2>/dev/null; docker compose -f docker/full/docker-compose.full.yml --profile full-test build full-test-runner && docker compose -f docker/full/docker-compose.full.yml --profile full-test run --rm full-test-runner",
+        "test:e2e:full": "docker compose -f docker/full/docker-compose.full.yml down --remove-orphans 2>/dev/null; docker rm -f openclaw-bridge-e2e-full-link-setup-1 openclaw-bridge-e2e-full-character-links-init-1 2>/dev/null || true; docker compose -f docker/full/docker-compose.full.yml --profile full-test build full-test-runner && docker compose -f docker/full/docker-compose.full.yml --profile full-test run --rm full-test-runner",
         "docker:full:up": "docker compose -f docker/full/docker-compose.full.yml up --wait sillytavern-full openclaw qa-bus mock-llm fake-ollama",
         "docker:full:down": "docker compose -f docker/full/docker-compose.full.yml down --remove-orphans",
         "docker:full:build-oc": "bash docker/full/build-oc.sh",
