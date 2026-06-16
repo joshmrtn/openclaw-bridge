@@ -48,6 +48,7 @@ R7.3 Concurrent messages for different characters must be processed independentl
 R7.4 Concurrent messages for the same character must be serialized — processed one at a time in arrival order. No message must be dropped or produce a corrupted response due to concurrency.
 
 R8: Installation and Operation
+R8.0 Platform support: macOS is the primary target platform. Linux (Ubuntu) is the secondary target and must be supported at parity. Windows support is planned but deferred to a post-release milestone; no Windows-specific work is required for v1.0. All shell scripts, setup tooling, and runtime behaviour must be verified on macOS and Linux before v1.0 ships.
 R8.1 Installation on a supported platform (macOS, Ubuntu) must be completable by following setup.sh and README.md without requiring knowledge of Node.js, Python, or OC internals.
 R8.2 Adding a new character must be completable entirely through SillyTavern's UI after initial setup. No terminal commands must be required for routine character management.
 R8.3 The system must start reliably via start.sh. If a required dependency (Docker, OC gateway) is not running, the script must produce a clear error message identifying what is missing rather than failing silently.

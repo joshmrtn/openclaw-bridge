@@ -836,6 +836,158 @@ describe('R11: memory write on OC path', () => {
   }, 60000);
 });
 
+// ── update.sh lifecycle (#69) ────────────────────────────────────────────────
+// Tests the update.sh deployment steps inside the existing sillytavern-full
+// container. The container has no .git directory (excluded by .dockerignore),
+// so all tests pass --skip-pull. OC-copy tests pre-create a fake OC install dir.
+//
+// Scenarios covered:
+//   1. Stale ST install refreshed — update.sh restores a removed plugin file
+//   2. Pending migration runs — schema version advances from 0 → 1
+//   3. OC dist copy — update.sh copies dist/ into a pre-created fake OC dir
+//   4. Idempotency — second run exits 0 and does not change schema version
+describe('update.sh lifecycle (#69)', () => {
+  const UPDATE_FLAGS = '--skip-pull --st-path /home/node/app --yes';
+  const DATA_DIR = '/repo/data/openclaw-bridge';
+
+  // Restore schema-version.txt to a known good state after each test so
+  // tests that mutate it don't poison later ones.
+  afterEach(() => {
+    try {
+      execSync(
+        `docker exec ${SILLYTAVERN_CONTAINER} sh -c 'printf "1" > ${DATA_DIR}/schema-version.txt'`,
+        { timeout: 5000 },
+      );
+    } catch { /* best-effort */ }
+  });
+
+  test('stale ST install is refreshed and verify.sh passes after update', async () => {
+    // Pre-condition: plugin is healthy.
+    const before = await stFetch('/status');
+    expect(before.status).toBe(200);
+
+    // Simulate a stale install by removing the plugin's main entry point.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} rm /home/node/app/plugins/openclaw-bridge/index.js`,
+      { timeout: 5000 },
+    );
+
+    // Run update.sh — it should restore the file.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/update.sh ${UPDATE_FLAGS} --skip-oc`,
+      { timeout: 120000 },
+    );
+
+    // File must be back on disk.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f /home/node/app/plugins/openclaw-bridge/index.js`,
+      { timeout: 5000 },
+    );
+
+    // Restart ST and confirm the plugin loads.
+    execSync(`docker restart ${SILLYTAVERN_CONTAINER}`, { timeout: 30000 });
+
+    await waitFor(async () => {
+      try { const r = await stFetch('/status'); return r.status !== 200; }
+      catch { return true; }
+    }, { timeoutMs: 15000, intervalMs: 500, label: 'ST to go offline after update restart' });
+
+    await waitFor(async () => {
+      try { const r = await stFetch('/status'); return r.status === 200; }
+      catch { return false; }
+    }, { timeoutMs: 180000, intervalMs: 3000, label: 'plugin to reload after update' });
+
+    // Wait for headless WS client so verify.sh doesn't fail on client count.
+    await waitFor(async () => {
+      try {
+        const r = await stFetch('/status');
+        return r.status === 200 && (r.body.connected_ws_clients ?? 0) > 0;
+      } catch { return false; }
+    }, { timeoutMs: 120000, intervalMs: 3000, label: 'headless WS to reconnect after update restart' });
+
+    const verifyOut = execSync(
+      `docker exec -e OPENCLAW_BRIDGE_TOKEN=e2e-test-token ${SILLYTAVERN_CONTAINER} ` +
+      `bash /repo/scripts/verify.sh --st-url http://localhost:8000`,
+      { timeout: 30000 },
+    ).toString();
+    expect(verifyOut).toContain('0 failed');
+  }, 300000);
+
+  test('pending migration runs and schema version advances', () => {
+    // Reset schema version to 0 to simulate a pending migration.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} sh -c 'printf "0" > ${DATA_DIR}/schema-version.txt'`,
+      { timeout: 5000 },
+    );
+
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/update.sh ${UPDATE_FLAGS} --skip-oc`,
+      { timeout: 60000 },
+    );
+
+    const versionRaw = execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} cat ${DATA_DIR}/schema-version.txt`,
+      { timeout: 5000 },
+    ).toString().trim();
+
+    expect(parseInt(versionRaw, 10)).toBeGreaterThanOrEqual(1);
+  }, 90000);
+
+  test('OC dist copy works when install dir exists', () => {
+    // Use the node user's home — the container runs as node, so $HOME=/home/node
+    // even when docker exec is given -u root. Using the correct home ensures
+    // update.sh's $HOME/.openclaw/... path resolves to the dir we create here.
+    const fakeOcDir = '/home/node/.openclaw/extensions/openclaw-bridge/dist';
+
+    // Pre-create a fake OC install dir and place a sentinel file in it.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} sh -c ` +
+      `'mkdir -p ${fakeOcDir} && printf "stale" > ${fakeOcDir}/index.js'`,
+      { timeout: 5000 },
+    );
+
+    // Run update.sh without --skip-oc so the dist copy step fires.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/update.sh ${UPDATE_FLAGS}`,
+      { timeout: 120000 },
+    );
+
+    // The copied file must be the real compiled output, not our "stale" sentinel.
+    const content = execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} cat ${fakeOcDir}/index.js`,
+      { timeout: 5000 },
+    ).toString();
+    expect(content).not.toBe('stale');
+    expect(content.length).toBeGreaterThan(100);
+  }, 150000);
+
+  test('idempotency — second run exits 0 and schema version is unchanged', () => {
+    // First run: everything already current.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/update.sh ${UPDATE_FLAGS} --skip-oc`,
+      { timeout: 60000 },
+    );
+
+    const versionAfterFirst = execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} cat ${DATA_DIR}/schema-version.txt`,
+      { timeout: 5000 },
+    ).toString().trim();
+
+    // Second run: must succeed without error.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/update.sh ${UPDATE_FLAGS} --skip-oc`,
+      { timeout: 60000 },
+    );
+
+    const versionAfterSecond = execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} cat ${DATA_DIR}/schema-version.txt`,
+      { timeout: 5000 },
+    ).toString().trim();
+
+    expect(versionAfterSecond).toBe(versionAfterFirst);
+  }, 150000);
+});
+
 // ── uninstall.sh lifecycle (#40) ─────────────────────────────────────────────
 // Answers definitively: can a user follow the installation instructions to get
 // a working system, and after running uninstall.sh is everything put back

@@ -43,6 +43,25 @@ Pass `--st-path ~/SillyTavern` to skip the interactive prompts.
 
 Full first-time instructions: **[Getting started](docs/getting-started.md)**
 
+## Updating
+
+When a new version is available, pull it and redeploy in one step:
+
+```bash
+./update.sh
+```
+
+`update.sh` pulls the latest changes, recompiles the OC plugin, runs any pending
+data migrations, and copies the updated plugin and extension into SillyTavern.
+After it finishes, restart SillyTavern and the OpenClaw gateway.
+
+`update.sh` remembers the SillyTavern path you used during setup — no prompts on
+subsequent runs. If your SillyTavern installation has moved, pass `--st-path`:
+
+```bash
+./update.sh --st-path ~/SillyTavern
+```
+
 ---
 
 ## Documentation
