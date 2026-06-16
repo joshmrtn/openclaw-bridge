@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
         --skip-oc)  ARG_SKIP_OC=true; shift ;;
         --skip-pull) ARG_SKIP_PULL=true; shift ;;
         --help|-h)
-            sed -n '2,/^set -/{ /^set -/d; s/^# \{0,1\}//; p }' "$0"
+            awk 'NR>1 && /^set -/{exit} NR>1{sub(/^# ?/, ""); print}' "$0"
             exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
