@@ -238,7 +238,7 @@ async function init(router) {
 
     router.post('/characters/:name/link', async (request, response) => {
         const characterName = normalizeCharacterName(request?.params?.name);
-        const { oc_agent_id = null, owner_user_ids = null, heartbeat = undefined } = request.body || {};
+        const { oc_agent_id = null, owner_user_ids = null, heartbeat = undefined, channels = undefined } = request.body || {};
 
         if (!characterName) {
             response.status(400).json({ error: 'Character name is required' });
@@ -254,6 +254,23 @@ async function init(router) {
             (typeof heartbeat !== 'object' || Array.isArray(heartbeat))) {
             response.status(400).json({ error: 'heartbeat must be an object or null' });
             return;
+        }
+
+        if (channels !== undefined && channels !== null) {
+            if (!Array.isArray(channels)) {
+                response.status(400).json({ error: 'channels must be an array or null' });
+                return;
+            }
+            for (const ch of channels) {
+                if (typeof ch.name !== 'string' || !ch.name.trim()) {
+                    response.status(400).json({ error: 'each channel entry must have a non-empty name' });
+                    return;
+                }
+                if (typeof ch.channel_id !== 'string' || !ch.channel_id.trim()) {
+                    response.status(400).json({ error: 'each channel entry must have a non-empty channel_id' });
+                    return;
+                }
+            }
         }
 
         try {
@@ -272,6 +289,9 @@ async function init(router) {
             };
             if (heartbeat !== undefined) {
                 patch.heartbeat = heartbeat;
+            }
+            if (channels !== undefined) {
+                patch.channels = channels;
             }
             const link = linkState.upsertLink(characterName, patch);
 
@@ -300,6 +320,23 @@ async function init(router) {
         } catch (err) {
             response.status(500).json({ error: err.message });
         }
+    });
+
+    router.get('/characters/:name/link', (request, response) => {
+        const characterName = normalizeCharacterName(request?.params?.name);
+
+        if (!characterName) {
+            response.status(400).json({ error: 'Character name is required' });
+            return;
+        }
+
+        const link = linkState.getLink(characterName);
+        if (!link) {
+            response.status(404).json({ error: `No link found for: ${characterName}` });
+            return;
+        }
+
+        response.json({ character: characterName, link });
     });
 
     router.get('/characters/:name/memory', (request, response) => {

@@ -20,6 +20,10 @@
 #   --heartbeat-target ID    Target channel or user for heartbeat posts (optional)
 #   --heartbeat-account ID   OC account ID for multi-account deployments (optional)
 #   --disable-heartbeat      Remove existing heartbeat config from this character
+#   --channel NAME           Logical channel name for send_message (e.g. "discord"); repeat for multiple
+#   --channel-id ID          OC channel account ID paired with --channel (e.g. "discord-frogbot")
+#   --channel-target TARGET  Platform-specific default destination for this channel (optional)
+#   --remove-channel NAME    Remove a channel entry by name; repeat for multiple
 
 set -euo pipefail
 
@@ -41,6 +45,14 @@ HEARTBEAT_TARGET=""
 HEARTBEAT_ACCOUNT=""
 DISABLE_HEARTBEAT=false
 
+# Channel flags — parallel arrays: CHANNEL_NAMES[i] pairs with CHANNEL_IDS[i] and CHANNEL_TARGETS[i]
+declare -a CHANNEL_NAMES=()
+declare -a CHANNEL_IDS=()
+declare -a CHANNEL_TARGETS=()
+declare -a REMOVE_CHANNELS=()
+# Tracks whether --channel-target was supplied for each entry ("" means not supplied)
+declare -a CHANNEL_TARGET_SET=()
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --character) CHARACTER="$2"; shift 2 ;;
@@ -56,6 +68,10 @@ while [[ $# -gt 0 ]]; do
         --heartbeat-target)      HEARTBEAT_TARGET="$2"; shift 2 ;;
         --heartbeat-account)     HEARTBEAT_ACCOUNT="$2"; shift 2 ;;
         --disable-heartbeat)     DISABLE_HEARTBEAT=true; shift ;;
+        --channel)        CHANNEL_NAMES+=("$2"); CHANNEL_IDS+=(""); CHANNEL_TARGETS+=(""); CHANNEL_TARGET_SET+=(""); shift 2 ;;
+        --channel-id)     CHANNEL_IDS[${#CHANNEL_IDS[@]}-1]="$2"; shift 2 ;;
+        --channel-target) CHANNEL_TARGETS[${#CHANNEL_TARGETS[@]}-1]="$2"; CHANNEL_TARGET_SET[${#CHANNEL_TARGET_SET[@]}-1]="yes"; shift 2 ;;
+        --remove-channel) REMOVE_CHANNELS+=("$2"); shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -134,6 +150,14 @@ if [[ "${DISABLE_HEARTBEAT}" == false && -n "${HEARTBEAT_CHANNEL}${HEARTBEAT_INT
     fi
 fi
 
+# Validate channel flag pairing: every --channel must have a --channel-id
+for i in "${!CHANNEL_NAMES[@]}"; do
+    if [[ -z "${CHANNEL_IDS[$i]}" ]]; then
+        echo "Error: --channel '${CHANNEL_NAMES[$i]}' requires a matching --channel-id" >&2
+        exit 1
+    fi
+done
+
 # Build owner_user_ids JSON array
 owner_json="["
 first=true
@@ -155,48 +179,109 @@ if [[ "${DISABLE_HEARTBEAT}" == true || -n "${HEARTBEAT_CHANNEL}" || -n "${HEART
     HEARTBEAT_GIVEN=true
 fi
 
-if [[ "${HEARTBEAT_GIVEN}" == true ]]; then
-    # Use python3 to safely build JSON (handles prompt escaping and numeric fields)
-    body=$(python3 -c "
+# Determine if any channel flags were passed
+CHANNELS_GIVEN=false
+if [[ ${#CHANNEL_NAMES[@]} -gt 0 || ${#REMOVE_CHANNELS[@]} -gt 0 ]]; then
+    CHANNELS_GIVEN=true
+fi
+
+# If channel mutations requested, GET current channels first then merge client-side
+CHANNELS_JSON_CURRENT="[]"
+if [[ "${CHANNELS_GIVEN}" == true ]]; then
+    get_resp=$(_st_curl -w "\n%{http_code}" "${endpoint}" \
+        -H "Authorization: Bearer ${TOKEN}" 2>/dev/null) || true
+    get_http="${get_resp##*$'\n'}"
+    get_body="${get_resp%$'\n'*}"
+    if [[ "${get_http}" -ge 200 && "${get_http}" -lt 300 ]]; then
+        CHANNELS_JSON_CURRENT=$(python3 -c \
+            "import json,sys; d=json.loads(sys.stdin.read()); print(json.dumps(d.get('link',{}).get('channels',[])))" \
+            <<< "${get_body}" 2>/dev/null) || CHANNELS_JSON_CURRENT="[]"
+    fi
+    # 404 = no link yet; start with an empty channel list
+fi
+
+# Build the channel add/remove lists as JSON for the Python builder
+channel_adds_json=$(python3 -c "
+import json, sys
+names   = json.loads(sys.argv[1])
+ids     = json.loads(sys.argv[2])
+targets = json.loads(sys.argv[3])
+tset    = json.loads(sys.argv[4])
+entries = []
+for i, name in enumerate(names):
+    entry = {'name': name, 'channel_id': ids[i]}
+    if tset[i]:
+        entry['target'] = targets[i]
+    entries.append(entry)
+print(json.dumps(entries))
+" \
+    "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "${CHANNEL_NAMES[@]+"${CHANNEL_NAMES[@]}"}")" \
+    "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "${CHANNEL_IDS[@]+"${CHANNEL_IDS[@]}"}")" \
+    "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "${CHANNEL_TARGETS[@]+"${CHANNEL_TARGETS[@]}"}")" \
+    "$(python3 -c "import json,sys; print(json.dumps([bool(x) for x in sys.argv[1:]]))" "${CHANNEL_TARGET_SET[@]+"${CHANNEL_TARGET_SET[@]}"}")" \
+2>/dev/null) || channel_adds_json="[]"
+
+channel_removes_json=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" \
+    "${REMOVE_CHANNELS[@]+"${REMOVE_CHANNELS[@]}"}" 2>/dev/null) || channel_removes_json="[]"
+
+# Use python3 to safely build the full request body
+body=$(python3 -c "
 import json, sys
 
-disable   = sys.argv[1] == 'true'
-agent_id  = sys.argv[2]
-owners    = json.loads(sys.argv[3])
-channel   = sys.argv[4]
-interval  = sys.argv[5]
-idle      = sys.argv[6]
-prompt    = sys.argv[7]
-target    = sys.argv[8]
-account   = sys.argv[9]
+agent_id       = sys.argv[1]
+owners         = json.loads(sys.argv[2])
+hb_disable     = sys.argv[3] == 'true'
+hb_given       = sys.argv[4] == 'true'
+hb_channel     = sys.argv[5]
+hb_interval    = sys.argv[6]
+hb_idle        = sys.argv[7]
+hb_prompt      = sys.argv[8]
+hb_target      = sys.argv[9]
+hb_account     = sys.argv[10]
+ch_given       = sys.argv[11] == 'true'
+ch_current     = json.loads(sys.argv[12])
+ch_adds        = json.loads(sys.argv[13])
+ch_removes     = json.loads(sys.argv[14])
 
 data = {'oc_agent_id': agent_id, 'owner_user_ids': owners}
 
-if disable:
-    data['heartbeat'] = None
-else:
-    hb = {'enabled': True, 'channel_id': channel}
-    if interval: hb['interval_ms'] = int(interval)
-    if idle:     hb['idle_threshold_ms'] = int(idle)
-    if prompt:   hb['prompt'] = prompt
-    if target:   hb['target'] = target
-    if account:  hb['account_id'] = account
-    data['heartbeat'] = hb
+if hb_given:
+    if hb_disable:
+        data['heartbeat'] = None
+    else:
+        hb = {'enabled': True, 'channel_id': hb_channel}
+        if hb_interval: hb['interval_ms'] = int(hb_interval)
+        if hb_idle:     hb['idle_threshold_ms'] = int(hb_idle)
+        if hb_prompt:   hb['prompt'] = hb_prompt
+        if hb_target:   hb['target'] = hb_target
+        if hb_account:  hb['account_id'] = hb_account
+        data['heartbeat'] = hb
+
+if ch_given:
+    # Start from current channels, upsert adds by name, then remove by name
+    by_name = {ch['name']: ch for ch in (ch_current or [])}
+    for entry in ch_adds:
+        by_name[entry['name']] = entry
+    for name in ch_removes:
+        by_name.pop(name, None)
+    data['channels'] = list(by_name.values())
 
 print(json.dumps(data))
 " \
-    "${DISABLE_HEARTBEAT}" \
     "${AGENT_ID}" \
     "${owner_json}" \
+    "${DISABLE_HEARTBEAT}" \
+    "${HEARTBEAT_GIVEN}" \
     "${HEARTBEAT_CHANNEL}" \
     "${HEARTBEAT_INTERVAL_MS}" \
     "${HEARTBEAT_IDLE_MS}" \
     "${HEARTBEAT_PROMPT}" \
     "${HEARTBEAT_TARGET}" \
-    "${HEARTBEAT_ACCOUNT}")
-else
-    body="{\"oc_agent_id\":\"${AGENT_ID}\",\"owner_user_ids\":${owner_json}}"
-fi
+    "${HEARTBEAT_ACCOUNT}" \
+    "${CHANNELS_GIVEN}" \
+    "${CHANNELS_JSON_CURRENT}" \
+    "${channel_adds_json}" \
+    "${channel_removes_json}")
 
 echo "Linking '${CHARACTER}' → agent '${AGENT_ID}'..."
 if [[ ${#OWNER_IDS[@]} -gt 0 ]]; then
@@ -206,6 +291,12 @@ if [[ "${DISABLE_HEARTBEAT}" == true ]]; then
     echo "Heartbeat: disabling"
 elif [[ -n "${HEARTBEAT_CHANNEL}" ]]; then
     echo "Heartbeat: enabled on channel '${HEARTBEAT_CHANNEL}'"
+fi
+if [[ ${#CHANNEL_NAMES[@]} -gt 0 ]]; then
+    echo "Channels: adding/updating ${CHANNEL_NAMES[*]}"
+fi
+if [[ ${#REMOVE_CHANNELS[@]} -gt 0 ]]; then
+    echo "Channels: removing ${REMOVE_CHANNELS[*]}"
 fi
 echo
 
