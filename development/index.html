@@ -502,6 +502,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#always-fresh-docker-builds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Always-fresh Docker builds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#running-tests-locally" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -884,6 +895,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#always-fresh-docker-builds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Always-fresh Docker builds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#running-tests-locally" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1216,6 +1238,11 @@
 </tbody>
 </table>
 <p>All three automatic tiers run on every push and pull request. A PR cannot be merged unless all three are green.</p>
+<h3 id="always-fresh-docker-builds">Always-fresh Docker builds<a class="headerlink" href="#always-fresh-docker-builds" title="Permanent link">&para;</a></h3>
+<p>Every <code>test:e2e:*</code> command begins with <code>docker compose down --rmi local</code> before rebuilding. This is intentional and load-bearing — do not remove it.</p>
+<p>The problem it prevents: <code>docker compose run --build service-name</code> only rebuilds the image for the named service (the test runner). Dependency services — <code>sillytavern</code>, <code>fake-extension</code>, <code>fake-ollama</code>, etc. — are reused from whatever image was built last. If source code has changed since the last build, those services silently run stale code. Tests then pass or fail for the wrong reasons, and hours are lost chasing phantom bugs.</p>
+<p><code>--rmi local</code> removes all compose-built images (pulled images like <code>alpine</code> and pre-built images like <code>openclaw-bridge:oc-full</code> are unaffected). On the next run, every locally-built service is rebuilt from scratch. Docker layer caching means this is fast in practice — only layers whose source files changed are re-executed.</p>
+<p>The full tier additionally passes <code>--volumes</code> to flush the <code>character-links</code> named volume; <code>character-links-init</code> and <code>link-setup</code> recreate it correctly on every run.</p>
 <h3 id="running-tests-locally">Running tests locally<a class="headerlink" href="#running-tests-locally" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Unit tests (no ST required)</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>npm<span class="w"> </span><span class="nb">test</span>
