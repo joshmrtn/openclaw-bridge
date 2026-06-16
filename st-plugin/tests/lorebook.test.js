@@ -114,4 +114,36 @@ describe('lorebook', () => {
         const p = path.basename(lorebookPath('Char/With:Special*Chars', tmpDir));
         expect(p).not.toMatch(/[/:*?"<>|]/);
     });
+
+    test('comment substring match does not claim an author entry — check is exact equality (R11.3)', () => {
+        const filePath = lorebookPath('Frog', tmpDir);
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+        // Author entry whose comment CONTAINS the prefix pattern but is not an exact match —
+        // the kind of comment that a loose substring check would incorrectly claim.
+        const authorEntry = {
+            uid: 0,
+            comment: `see ${AUTO_MEMORY_PREFIX}::frogs for details`,
+            content: 'Author content — must not be overwritten',
+            constant: false,
+            key: [],
+            extensions: {},
+        };
+        fs.writeFileSync(filePath, JSON.stringify({ entries: { '0': authorEntry } }), 'utf8');
+
+        upsertMemoryEntry('Frog', { entry_key: 'frogs', content: 'auto memory content' }, tmpDir);
+
+        const book = readLorebook('Frog', tmpDir);
+        // Author entry must be completely untouched
+        expect(book.entries['0'].content).toBe('Author content — must not be overwritten');
+        expect(book.entries['0'].comment).toBe(`see ${AUTO_MEMORY_PREFIX}::frogs for details`);
+        // A new auto-memory entry must have been created separately with the exact prefix format
+        const autoEntry = Object.values(book.entries).find(
+            e => e?.extensions?.['openclaw-bridge']?.entry_key === 'frogs',
+        );
+        expect(autoEntry).toBeDefined();
+        expect(autoEntry.comment).toBe(`${AUTO_MEMORY_PREFIX}::frogs`);
+        expect(autoEntry.content).toBe('auto memory content');
+    });
 });

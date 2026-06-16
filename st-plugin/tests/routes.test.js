@@ -1670,4 +1670,126 @@ describe('plugin routes', () => {
         expect(res.statusCode).toBe(400);
         expect(res.body.error).toMatch(/Character name is required/);
     });
+
+    test('GET /characters/:name/memory returns empty list when no lorebook file exists (R11)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => {} })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../lorebook', () => ({ readLorebook: jest.fn(() => null) }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/characters/:name/memory');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.entries).toEqual([]);
+    });
+
+    test('GET /characters/:name/memory returns only auto-memory entries, not author-written ones (R11.3)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => {} })) };
+        const mockBook = {
+            entries: {
+                '0': {
+                    uid: 0,
+                    comment: 'Author-written entry about frogs',
+                    content: 'Original author content',
+                    constant: false,
+                    key: ['frog'],
+                    extensions: {},
+                },
+                '1': {
+                    uid: 1,
+                    comment: '[auto-memory]::core_facts',
+                    content: 'Josh: engineer',
+                    constant: true,
+                    key: [],
+                    extensions: { 'openclaw-bridge': { entry_key: 'core_facts', tier: 1 } },
+                },
+            },
+        };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../lorebook', () => ({ readLorebook: jest.fn(() => mockBook) }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/characters/:name/memory');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.entries).toHaveLength(1);
+        expect(res.body.entries[0].entry_key).toBe('core_facts');
+        expect(res.body.entries[0].content).toBe('Josh: engineer');
+        expect(res.body.entries[0].tier).toBe(1);
+    });
+
+    test('POST /characters/:name/memory calls upsertMemoryEntry and returns result (R11.3)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => {} })) };
+        const upsertMemoryEntry = jest.fn().mockReturnValue({ entry_key: 'core_facts', tier: 1, created: true });
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../lorebook', () => ({ upsertMemoryEntry }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/memory');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { entry_key: 'core_facts', content: 'Josh: engineer', tier: 1 },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', {
+            entry_key: 'core_facts',
+            content: 'Josh: engineer',
+            tier: 1,
+            keywords: '',
+        });
+        expect(res.body).toEqual({ success: true, entry_key: 'core_facts', tier: 1, created: true });
+    });
+
+    test('POST /characters/:name/memory returns 400 when upsertMemoryEntry throws (R11.3)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => {} })) };
+        const upsertMemoryEntry = jest.fn().mockImplementation(() => {
+            throw new Error('entry_key and content are required');
+        });
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../lorebook', () => ({ upsertMemoryEntry }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/memory');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { content: 'missing entry_key' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/entry_key and content are required/);
+    });
 });
