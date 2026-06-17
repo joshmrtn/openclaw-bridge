@@ -9,9 +9,15 @@
     "plugin": {
       "entry": "./src/index.ts"
     },
-    "extensions": ["./dist/index.js"]
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "scripts": {
+    "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }

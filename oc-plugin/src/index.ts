@@ -184,17 +184,29 @@ function shouldStripAsteriskMarkup(channelId: string, linkEntry: LinkEntry): boo
     return channelType === "telegram";
 }
 
+// Guards against ReDoS: long lines skip table classification entirely.
+const TABLE_LINE_MAX = 500;
+
+// Returns true for markdown table separator rows (|---|---| or | :--: |).
+// Uses a length guard and a negated character class instead of a nested quantifier
+// to prevent catastrophic backtracking on adversarial input.
+function isTableSeparatorRow(line: string): boolean {
+    if (line.length > TABLE_LINE_MAX) return false;
+    const t = line.trim();
+    if (t.length < 3 || t[0] !== "|" || t[t.length - 1] !== "|") return false;
+    return !/[^|:\-\s]/.test(t.slice(1, -1));
+}
+
 // Strip inline and block-level markdown, preserving semantic content. Collapses extra whitespace.
 export function formatOutboundText(text: string, channelId: string, linkEntry: LinkEntry): string {
     if (!shouldStripAsteriskMarkup(channelId, linkEntry)) return text;
 
     const lines = text.split("\n");
     const processed = lines
-        // Remove table separator rows (lines containing only |, -, :, and spaces)
-        .filter(line => !/^\s*\|[-:\s|]+\|\s*$/.test(line))
+        .filter(line => !isTableSeparatorRow(line))
         .map(line => {
             // Table data rows: | foo | bar | → foo | bar
-            if (/^\s*\|/.test(line) && /\|\s*$/.test(line.trim())) {
+            if (line.length <= TABLE_LINE_MAX && /^\s*\|/.test(line) && /\|\s*$/.test(line.trim())) {
                 return line.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
                     .split("|").map(c => c.trim()).filter(Boolean).join(" | ");
             }
