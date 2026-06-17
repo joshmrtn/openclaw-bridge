@@ -214,18 +214,24 @@ async function start(options = {}) {
                 const onUnexpectedClose = () => {
                     if (STATE.isRunning) {
                         console.warn('[openclaw-bridge-headless] Page closed unexpectedly — scheduling reconnect');
-                        _reconnect(options).catch(() => {});
+                        _reconnect(options).catch((err) => {
+                            console.error('[openclaw-bridge-headless] Reconnect error after page close:', err.message);
+                        });
                     }
                 };
                 STATE.page.on('crash', () => {
                     console.warn('[openclaw-bridge-headless] Page crashed — scheduling reconnect');
-                    _reconnect(options).catch(() => {});
+                    _reconnect(options).catch((err) => {
+                        console.error('[openclaw-bridge-headless] Reconnect error after page crash:', err.message);
+                    });
                 });
                 STATE.page.on('close', onUnexpectedClose);
                 STATE.browser.on('disconnected', () => {
                     if (STATE.isRunning && !STATE._reconnecting) {
                         console.warn('[openclaw-bridge-headless] Browser disconnected — scheduling reconnect');
-                        _reconnect(options).catch(() => {});
+                        _reconnect(options).catch((err) => {
+                            console.error('[openclaw-bridge-headless] Reconnect error after browser disconnect:', err.message);
+                        });
                     }
                 });
             }
