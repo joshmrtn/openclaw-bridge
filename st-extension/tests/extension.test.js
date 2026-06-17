@@ -109,3 +109,131 @@ describe('stripInstructTemplate', () => {
         expect(stripInstructTemplate(raw)).toBe('Line one\nLine two');
     });
 });
+
+// ---------------------------------------------------------------------------
+// withCharacterLock
+// Pure copy — avoids importing browser globals.
+// Parameterised on `state` so tests can inject an isolated Map without needing
+// the full extension STATE object.
+// ---------------------------------------------------------------------------
+function withCharacterLock(state, characterName, task) {
+    const previous = state.characterLocks.get(characterName) || Promise.resolve();
+    const next = previous.then(task, task);
+    state.characterLocks.set(characterName, next.catch((err) => {
+        console.error('[openclaw-bridge] Character lock task threw:', err);
+    }));
+    return next;
+}
+
+describe('withCharacterLock', () => {
+    let errorSpy;
+    beforeEach(() => { errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {}); });
+    afterEach(() => { errorSpy.mockRestore(); });
+
+    it('logs an error when the queued task throws', async () => {
+        const state = { characterLocks: new Map() };
+        const err = new Error('task failed');
+
+        await expect(
+            withCharacterLock(state, 'Alice', async () => { throw err; })
+        ).rejects.toThrow('task failed');
+
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Character lock'),
+            err
+        );
+    });
+
+    it('keeps the lock chain usable after a failed task', async () => {
+        const state = { characterLocks: new Map() };
+        const results = [];
+
+        const first = withCharacterLock(state, 'Alice', async () => { throw new Error('boom'); });
+        const second = withCharacterLock(state, 'Alice', async () => { results.push('second'); });
+
+        await Promise.allSettled([first, second]);
+        expect(results).toEqual(['second']);
+    });
+
+    it('resolves the return value when the task succeeds', async () => {
+        const state = { characterLocks: new Map() };
+
+        const result = await withCharacterLock(state, 'Alice', async () => 'ok');
+        expect(result).toBe('ok');
+        expect(errorSpy).not.toHaveBeenCalled();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// sendSocketMessage
+// Pure copy — avoids importing browser globals.
+// Parameterised on `state` so tests can inject a mock socket.
+// WS_OPEN mirrors WebSocket.OPEN === 1 from the browser spec.
+// ---------------------------------------------------------------------------
+const WS_OPEN = 1;
+
+function sendSocketMessage(state, payload) {
+    if (!state.socket || state.socket.readyState !== WS_OPEN) return;
+    try {
+        state.socket.send(JSON.stringify(payload));
+    } catch (err) {
+        console.error('[openclaw-bridge] Socket send failed:', err.message);
+        try { state.socket.close(); } catch (_) {}
+    }
+}
+
+describe('sendSocketMessage', () => {
+    let errorSpy;
+    beforeEach(() => { errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {}); });
+    afterEach(() => { errorSpy.mockRestore(); });
+
+    it('logs an error and closes the socket when send() throws', () => {
+        const mockSocket = {
+            readyState: WS_OPEN,
+            send: jest.fn(() => { throw new Error('InvalidStateError'); }),
+            close: jest.fn(),
+        };
+
+        sendSocketMessage({ socket: mockSocket }, { type: 'test' });
+
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Socket send failed'),
+            expect.stringContaining('InvalidStateError')
+        );
+        expect(mockSocket.close).toHaveBeenCalled();
+    });
+
+    it('serialises the payload and sends it on success', () => {
+        const mockSocket = {
+            readyState: WS_OPEN,
+            send: jest.fn(),
+            close: jest.fn(),
+        };
+        const payload = { type: 'generate_response', requestId: 'abc' };
+
+        sendSocketMessage({ socket: mockSocket }, payload);
+
+        expect(mockSocket.send).toHaveBeenCalledWith(JSON.stringify(payload));
+        expect(mockSocket.close).not.toHaveBeenCalled();
+        expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the socket is not open', () => {
+        const mockSocket = {
+            readyState: 3, // CLOSED
+            send: jest.fn(),
+            close: jest.fn(),
+        };
+
+        sendSocketMessage({ socket: mockSocket }, { type: 'test' });
+
+        expect(mockSocket.send).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when there is no socket', () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        sendSocketMessage({ socket: null }, { type: 'test' });
+        expect(errorSpy).not.toHaveBeenCalled();
+        warnSpy.mockRestore();
+    });
+});

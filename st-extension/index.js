@@ -645,7 +645,9 @@ function addNotification({ character, text, timestamp }) {
 function withCharacterLock(characterName, task) {
     const previous = STATE.characterLocks.get(characterName) || Promise.resolve();
     const next = previous.then(task, task);
-    STATE.characterLocks.set(characterName, next.catch(() => { }));
+    STATE.characterLocks.set(characterName, next.catch((err) => {
+        console.error('[openclaw-bridge] Character lock task threw:', err);
+    }));
     return next;
 }
 
@@ -1117,7 +1119,12 @@ function sendSocketMessage(payload) {
         return;
     }
 
-    STATE.socket.send(JSON.stringify(payload));
+    try {
+        STATE.socket.send(JSON.stringify(payload));
+    } catch (err) {
+        console.error('[openclaw-bridge] Socket send failed:', err.message);
+        try { STATE.socket.close(); } catch (_) {}
+    }
 }
 
 function startHttpPollingFallback() {
