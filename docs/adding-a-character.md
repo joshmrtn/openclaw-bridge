@@ -54,6 +54,19 @@ Replace `{agentname}`, `{Character Display Name}`, and `{token}` with real value
 
 ## Step 4 — Link the character in SillyTavern
 
+Open the character's card in SillyTavern's **Creator** tab. The bridge adds an **External Presence** section at the bottom of the form. Fill in:
+
+- **OC Agent ID** — the agent ID from Step 1 (e.g. `frog`)
+- **Owner User IDs** — one per line or comma-separated, in `platform:id` format (e.g. `discord:123456789012345678`). Owner messages receive `[OWNER]` trust; all others receive `[GUEST]`.
+
+Enable the toggle, then click **Save link**. Use **Test connection** to confirm the plugin can reach OC before moving on.
+
+---
+
+### Via shell script (alternative)
+
+`link-character.sh` covers the same fields and also lets you configure heartbeat and channels in one call — useful if you prefer the terminal, are scripting a multi-character setup, or want to hand the task to an agent:
+
 ```bash
 ./scripts/link-character.sh \
   --character "{STCharacterName}" \
@@ -63,9 +76,9 @@ Replace `{agentname}`, `{Character Display Name}`, and `{token}` with real value
 
 - `--character` must match the ST character name exactly (case-sensitive)
 - `--agent` is the OC agent ID from Step 1
-- `--owner` sets a trusted owner ID in `platform:id` format, e.g. `discord:123456789012345678` — repeat for multiple owners; owner messages receive `[OWNER]` trust, all others receive `[GUEST]`
+- `--owner` sets a trusted owner ID — repeat for multiple owners
 
-Or use curl directly:
+Or call the API directly:
 
 ```bash
 TOKEN=$(cat data/openclaw-bridge/bridge-token.txt)

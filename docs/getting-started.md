@@ -14,6 +14,8 @@ Before starting, ensure:
 - **OpenClaw gateway** is installed and running — `openclaw health` returns ok
 - **Node.js 22+** is available — `node -v` to check
 
+> **Back up your ST data first.** Before installing any plugin, copy your `SillyTavern/data/` folder somewhere safe — it holds your character cards, chat histories, lorebooks, and settings. This is good practice for any ST plugin, not specific to openclaw-bridge.
+
 ---
 
 ## Step 1 — Clone the repository

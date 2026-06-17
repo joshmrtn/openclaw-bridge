@@ -66,8 +66,6 @@ curl -H "Authorization: Bearer $(cat data/openclaw-bridge/bridge-token.txt)" \
   http://localhost:8000/api/plugins/openclaw-bridge/status
 ```
 
-If you see 403s in the ST server log during normal operation (not curl), set `disableCsrf: true` in `SillyTavern/config.yaml` for local development.
-
 ---
 
 ## Character not found / generation returns 400
