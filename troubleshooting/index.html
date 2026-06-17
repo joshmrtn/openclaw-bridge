@@ -855,7 +855,6 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="k">$(</span>cat<span class="w"> </span>data/openclaw-bridge/bridge-token.txt<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>http://localhost:8000/api/plugins/openclaw-bridge/status
 </code></pre></div>
-<p>If you see 403s in the ST server log during normal operation (not curl), set <code>disableCsrf: true</code> in <code>SillyTavern/config.yaml</code> for local development.</p>
 <hr />
 <h2 id="character-not-found-generation-returns-400">Character not found / generation returns 400<a class="headerlink" href="#character-not-found-generation-returns-400" title="Permanent link">&para;</a></h2>
 <p>The <code>character</code> field in <code>/generate</code> must match the ST character name exactly, including capitalisation and spaces. Check the character's filename in ST's <code>data/default-user/characters/</code> — the name without the <code>.png</code> extension is what the API expects.</p>

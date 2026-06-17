@@ -444,6 +444,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Step 4 — Link the character in SillyTavern">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#via-shell-script-alternative" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Via shell script (alternative)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -791,6 +808,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Step 4 — Link the character in SillyTavern">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#via-shell-script-alternative" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Via shell script (alternative)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1014,6 +1048,15 @@
 <p><code>profile: "minimal"</code> gives the agent only <code>session_status</code> as its base tool set, structurally denying exec, cron, browser, gateway, and calendar tools at the config layer. <code>allow: ["read", "write"]</code> then grants workspace file access needed for character memory. See <a href="../oc-security/">OpenClaw security</a> for a full explanation of why this matters.</p>
 <hr />
 <h2 id="step-4-link-the-character-in-sillytavern">Step 4 — Link the character in SillyTavern<a class="headerlink" href="#step-4-link-the-character-in-sillytavern" title="Permanent link">&para;</a></h2>
+<p>Open the character's card in SillyTavern's <strong>Creator</strong> tab. The bridge adds an <strong>External Presence</strong> section at the bottom of the form. Fill in:</p>
+<ul>
+<li><strong>OC Agent ID</strong> — the agent ID from Step 1 (e.g. <code>frog</code>)</li>
+<li><strong>Owner User IDs</strong> — one per line or comma-separated, in <code>platform:id</code> format (e.g. <code>discord:123456789012345678</code>). Owner messages receive <code>[OWNER]</code> trust; all others receive <code>[GUEST]</code>.</li>
+</ul>
+<p>Enable the toggle, then click <strong>Save link</strong>. Use <strong>Test connection</strong> to confirm the plugin can reach OC before moving on.</p>
+<hr />
+<h3 id="via-shell-script-alternative">Via shell script (alternative)<a class="headerlink" href="#via-shell-script-alternative" title="Permanent link">&para;</a></h3>
+<p><code>link-character.sh</code> covers the same fields and also lets you configure heartbeat and channels in one call — useful if you prefer the terminal, are scripting a multi-character setup, or want to hand the task to an agent:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;{STCharacterName}&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--agent<span class="w"> </span><span class="s2">&quot;{agentname}&quot;</span><span class="w"> </span><span class="se">\</span>
@@ -1022,9 +1065,9 @@
 <ul>
 <li><code>--character</code> must match the ST character name exactly (case-sensitive)</li>
 <li><code>--agent</code> is the OC agent ID from Step 1</li>
-<li><code>--owner</code> sets a trusted owner ID in <code>platform:id</code> format, e.g. <code>discord:123456789012345678</code> — repeat for multiple owners; owner messages receive <code>[OWNER]</code> trust, all others receive <code>[GUEST]</code></li>
+<li><code>--owner</code> sets a trusted owner ID — repeat for multiple owners</li>
 </ul>
-<p>Or use curl directly:</p>
+<p>Or call the API directly:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">TOKEN</span><span class="o">=</span><span class="k">$(</span>cat<span class="w"> </span>data/openclaw-bridge/bridge-token.txt<span class="k">)</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/plugins/openclaw-bridge/characters/<span class="o">{</span>STCharacterName<span class="o">}</span>/link<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="si">${</span><span class="nv">TOKEN</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
