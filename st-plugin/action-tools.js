@@ -53,6 +53,7 @@ const ST_SIDE_TOOLS = [
             { name: 'entry_key', description: "Unique identifier for this memory, e.g. 'core_facts' or 'user_prefs'" },
             { name: 'content', description: 'The memory content to store. For core_facts: one subject per line with comma-separated facts.' },
             { name: 'tier', description: 'Memory tier: 1 = always active (core facts), 2 = keyword-triggered recall' },
+            { name: 'keywords', description: 'Comma-separated trigger keywords for tier 2 entries. Ignored for tier 1.' },
         ],
     },
 ];

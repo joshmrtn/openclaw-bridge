@@ -83,19 +83,67 @@ describe('ST_SIDE_TOOLS registry', () => {
         expect(types).toContain('write_memory');
     });
 
-    test('write_memory has entry_key, content, and tier parameters', () => {
+    test('write_memory has entry_key, content, tier, and keywords parameters (#84)', () => {
         const tool = ST_SIDE_TOOLS.find(t => t.type === 'write_memory');
         expect(tool).toBeDefined();
         const paramNames = tool.parameters.map(p => p.name);
         expect(paramNames).toContain('entry_key');
         expect(paramNames).toContain('content');
         expect(paramNames).toContain('tier');
+        expect(paramNames).toContain('keywords');
     });
 
     test('ST_SIDE_TOOLS and ACTION_TOOLS have no overlapping types', () => {
         const ocTypes = new Set(ACTION_TOOLS.map(t => t.type));
         for (const tool of ST_SIDE_TOOLS) {
             expect(ocTypes.has(tool.type)).toBe(false);
+        }
+    });
+});
+
+describe('registry parity with st-extension (#84)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const extSrc = fs.readFileSync(path.resolve(__dirname, '../../st-extension/index.js'), 'utf8');
+
+    // Extract every openclaw_* tool name appearing as a string literal in the source.
+    // The extension defines tool names in the toolDefs array and via direct registerFunctionTool
+    // calls, so matching string literals is more reliable than matching call-site structure.
+    function extractRegisteredNames(src) {
+        const names = new Set();
+        const re = /['"]openclaw_([a-z_]+)['"]/g;
+        let m;
+        while ((m = re.exec(src)) !== null) {
+            names.add(`openclaw_${m[1]}`);
+        }
+        return [...names];
+    }
+
+    test('every ACTION_TOOLS type has a matching openclaw_<type> registration in the extension', () => {
+        const registered = extractRegisteredNames(extSrc);
+        for (const tool of ACTION_TOOLS) {
+            const expected = `openclaw_${tool.type}`;
+            expect(registered).toContain(expected);
+        }
+    });
+
+    test('every ST_SIDE_TOOLS type has a matching openclaw_<type> registration in the extension', () => {
+        const registered = extractRegisteredNames(extSrc);
+        for (const tool of ST_SIDE_TOOLS) {
+            const expected = `openclaw_${tool.type}`;
+            expect(registered).toContain(expected);
+        }
+    });
+
+    test('every openclaw_* registration in the extension has a matching type in ACTION_TOOLS or ST_SIDE_TOOLS', () => {
+        const allTypes = new Set([
+            ...ACTION_TOOLS.map(t => t.type),
+            ...ST_SIDE_TOOLS.map(t => t.type),
+        ]);
+        const registered = extractRegisteredNames(extSrc).filter(n => n.startsWith('openclaw_'));
+        for (const name of registered) {
+            const type = name.replace(/^openclaw_/, '');
+            expect(allTypes).toContain(type);
         }
     });
 });
