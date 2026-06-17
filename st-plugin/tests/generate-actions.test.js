@@ -847,6 +847,76 @@ describe('/generate action injection and parsing', () => {
 
             expect(res.body.actions).toEqual([]);
         });
+
+        test('send_message with channel entry missing channel_id is filtered from pending_actions (#86)', async () => {
+            const malformedChannels = [{ name: 'discord', target: '111222333' }];
+            const rawResponse = '<action>{"type":"send_message","channel":"discord","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels: malformedChannels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([]);
+        });
+
+        test('send_message with channel entry missing target is filtered from pending_actions (#86)', async () => {
+            const malformedChannels = [{ name: 'discord', channel_id: 'discord-frog' }];
+            const rawResponse = '<action>{"type":"send_message","channel":"discord","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels: malformedChannels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([]);
+        });
+
+        test('send_message with malformed channel entry writes error to chat history (#86)', async () => {
+            const malformedChannels = [{ name: 'discord' }];
+            const rawResponse = '<action>{"type":"send_message","channel":"discord","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            const appendMessage = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory, appendMessage };
+            });
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels: malformedChannels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), makeRes());
+
+            const errorCall = appendMessage.mock.calls.find(([, entry]) =>
+                entry.mes && entry.mes.includes('send_message failed') && entry.mes.includes('discord')
+            );
+            expect(errorCall).toBeDefined();
+        });
     });
 
     test('write_memory with missing entry_key is skipped on main path — upsertMemoryEntry not called (#87)', async () => {
