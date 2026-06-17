@@ -1,24 +1,16 @@
 'use strict';
 
-const ACTION_TOOLS = [
-    {
-        type: 'send_message',
-        description: 'Send a message to a configured channel. Omit recipient to post to the channel\'s default target; include recipient to send a direct message to that user.',
-        parameters: [
-            { name: 'channel', description: 'Name of the configured channel to send on (e.g. "discord", "telegram")' },
-            { name: 'content', description: 'The message text to send' },
-            { name: 'recipient', description: '(Optional) Platform user ID for direct messages. Omit to post to the configured channel target.' },
-        ],
-    },
-    {
-        type: 'file_write',
-        description: 'Write content to a file in your workspace',
-        parameters: [
-            { name: 'path', description: 'Relative file path within your workspace' },
-            { name: 'content', description: 'The text content to write' },
-        ],
-    },
-];
+const { ACTION_TOOL_DEFS, ST_SIDE_TOOL_DEFS } = require('../shared/tool-defs');
+
+function _toOcPathFormat(defs) {
+    return defs.map(def => ({
+        type: def.type,
+        description: def.description,
+        parameters: def.parameters.map(p => ({ name: p.name, description: p.description })),
+    }));
+}
+
+const ACTION_TOOLS = _toOcPathFormat(ACTION_TOOL_DEFS);
 
 function buildActionPrompt(tools) {
     if (!tools || tools.length === 0) return '';
@@ -43,20 +35,7 @@ function buildActionPrompt(tools) {
     return lines.join('\n');
 }
 
-const ST_SIDE_TOOLS = [
-    {
-        type: 'write_memory',
-        description: "Write or update a persistent memory entry in this character's lorebook. " +
-            "Use entry_key='core_facts' for the always-active Tier 1 memory (injected every generation — keep it concise). " +
-            "Call this whenever the user shares information the character should remember permanently.",
-        parameters: [
-            { name: 'entry_key', description: "Unique identifier for this memory, e.g. 'core_facts' or 'user_prefs'" },
-            { name: 'content', description: 'The memory content to store. For core_facts: one subject per line with comma-separated facts.' },
-            { name: 'tier', description: 'Memory tier: 1 = always active (core facts), 2 = keyword-triggered recall' },
-            { name: 'keywords', description: 'Comma-separated trigger keywords for tier 2 entries. Ignored for tier 1.' },
-        ],
-    },
-];
+const ST_SIDE_TOOLS = _toOcPathFormat(ST_SIDE_TOOL_DEFS);
 
 const ACTION_BLOCK_RE = /<action>([\s\S]*?)<\/action>/g;
 

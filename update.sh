@@ -209,7 +209,10 @@ if [[ "${ARG_SKIP_ST}" == false ]]; then
         local plugin_dst="${st_path}/plugins/openclaw-bridge"
         local ext_dst="${st_path}/public/scripts/extensions/openclaw-bridge"
 
-        mkdir -p "${plugin_dst}" "${ext_dst}"
+        local shared_dst="${st_path}/plugins/shared"
+
+        mkdir -p "${plugin_dst}" "${ext_dst}" "${shared_dst}"
+        cp -r "${script_dir}/shared/."       "${shared_dst}/"
         cp -r "${script_dir}/st-plugin/."    "${plugin_dst}/"
         cp -r "${script_dir}/st-extension/." "${ext_dst}/"
 

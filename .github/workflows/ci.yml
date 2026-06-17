@@ -21,6 +21,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Build extension bundle
+        run: npm run build:extension
+
+      - name: Verify committed bundle is up to date
+        run: git diff --exit-code st-extension/index.js
+
       - name: Run unit tests
         run: OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
 
@@ -93,6 +99,12 @@ jobs:
           bash setup.sh --help
           bash update.sh --help
           bash update.sh --skip-pull --skip-st --skip-oc --yes || true
+
+      - name: Build extension bundle
+        run: npm run build:extension
+
+      - name: Verify committed bundle is up to date
+        run: git diff --exit-code st-extension/index.js
 
       - name: Unit tests
         run: OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
