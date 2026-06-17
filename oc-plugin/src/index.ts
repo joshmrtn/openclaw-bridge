@@ -29,6 +29,11 @@ const TOKEN_FILE = resolve(OC_BRIDGE_DATA, "bridge-token.txt");
 const ST_BASE =
     process.env.OPENCLAW_BRIDGE_ST_URL ?? "http://127.0.0.1:8000";
 
+const HEARTBEAT_TIMEOUT_MS = parseInt(
+    process.env.OPENCLAW_BRIDGE_HEARTBEAT_TIMEOUT_MS ?? "60000",
+    10
+);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -369,6 +374,19 @@ async function postJson(
 // Heartbeat execution (R10)
 // ---------------------------------------------------------------------------
 
+export function withTimeout<T>(ms: number, label: string, promise: Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            console.warn(`[openclaw-bridge] ${label} timed out after ${ms}ms`);
+            reject(new Error(`${label} timed out after ${ms}ms`));
+        }, ms);
+        promise.then(
+            (v) => { clearTimeout(timer); resolve(v); },
+            (e) => { clearTimeout(timer); reject(e); }
+        );
+    });
+}
+
 async function runHeartbeat(
     character: string,
     link: LinkEntry,
@@ -390,16 +408,20 @@ async function runHeartbeat(
     console.log(`[openclaw-bridge] Heartbeat trigger=${trigger} character=${character} channel=${channelId}`);
 
     try {
-        const result = await postJson(
-            `${ST_BASE}/api/plugins/openclaw-bridge/generate`,
-            token,
-            {
-                character,
-                message: prompt,
-                user_id: "heartbeat:system",
-                is_heartbeat: true,
-                channel: channelId || null,
-            }
+        const result = await withTimeout(
+            HEARTBEAT_TIMEOUT_MS,
+            `heartbeat(${character})`,
+            postJson(
+                `${ST_BASE}/api/plugins/openclaw-bridge/generate`,
+                token,
+                {
+                    character,
+                    message: prompt,
+                    user_id: "heartbeat:system",
+                    is_heartbeat: true,
+                    channel: channelId || null,
+                }
+            )
         );
 
         if (result.status !== 200) {
