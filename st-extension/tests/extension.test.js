@@ -237,3 +237,136 @@ describe('sendSocketMessage', () => {
         warnSpy.mockRestore();
     });
 });
+
+// ---------------------------------------------------------------------------
+// generateForCharacter — name override and restoration logic
+// Pure copies of the two pieces of generateForCharacter() that manage the
+// temporary setCharacterName() call:
+//   1. applyNameOverride  — mirrors lines 890–913
+//   2. restoreCharacterName — mirrors the finally block lines 1040–1051
+// Both are parameterised so no browser globals are needed.
+// ---------------------------------------------------------------------------
+
+function applyNameOverride(characterName, setFn, globalSetFn) {
+    let nameOverridden = false;
+    if (typeof setFn === 'function') {
+        try {
+            setFn(characterName);
+            nameOverridden = true;
+        } catch (e) {
+            console.warn('[openclaw-bridge] setCharacterName failed:', e);
+        }
+    } else if (typeof globalSetFn === 'function') {
+        try {
+            globalSetFn(characterName);
+            nameOverridden = true;
+        } catch (e) {
+            console.warn('[openclaw-bridge] global setCharacterName failed:', e);
+        }
+    }
+    return nameOverridden;
+}
+
+// NOTE: this copy reflects the FIXED guard (typeof previousName2 === 'string').
+// The source was updated to match — the test exists to prevent regression.
+function restoreCharacterName(nameOverridden, previousName2, setFn) {
+    if (nameOverridden && typeof setFn === 'function') {
+        if (typeof previousName2 === 'string') {
+            try {
+                setFn(previousName2);
+            } catch (e) {
+                console.warn('[openclaw-bridge] Failed to restore name2:', e);
+            }
+        }
+    }
+}
+
+describe('generateForCharacter — name override', () => {
+    let warnSpy;
+    beforeEach(() => { warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {}); });
+    afterEach(() => { warnSpy.mockRestore(); });
+
+    it('calls setFn with characterName and returns nameOverridden=true on success', () => {
+        const setFn = jest.fn();
+        const result = applyNameOverride('Frog', setFn, null);
+        expect(setFn).toHaveBeenCalledWith('Frog');
+        expect(result).toBe(true);
+    });
+
+    it('returns nameOverridden=false and warns when setFn throws', () => {
+        const setFn = jest.fn(() => { throw new Error('ST not ready'); });
+        const result = applyNameOverride('Frog', setFn, null);
+        expect(result).toBe(false);
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('setCharacterName failed'),
+            expect.any(Error),
+        );
+    });
+
+    it('falls back to globalSetFn when setFn is not a function', () => {
+        const globalSetFn = jest.fn();
+        const result = applyNameOverride('Toad', undefined, globalSetFn);
+        expect(globalSetFn).toHaveBeenCalledWith('Toad');
+        expect(result).toBe(true);
+    });
+
+    it('returns nameOverridden=false and warns when globalSetFn throws', () => {
+        const globalSetFn = jest.fn(() => { throw new Error('global not ready'); });
+        const result = applyNameOverride('Toad', undefined, globalSetFn);
+        expect(result).toBe(false);
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('global setCharacterName failed'),
+            expect.any(Error),
+        );
+    });
+
+    it('returns nameOverridden=false when neither setFn nor globalSetFn is available', () => {
+        const result = applyNameOverride('Frog', undefined, undefined);
+        expect(result).toBe(false);
+        expect(warnSpy).not.toHaveBeenCalled();
+    });
+});
+
+describe('generateForCharacter — name restoration (finally block)', () => {
+    let warnSpy;
+    beforeEach(() => { warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {}); });
+    afterEach(() => { warnSpy.mockRestore(); });
+
+    it('restores previousName2 when nameOverridden is true and previousName2 is a string', () => {
+        const setFn = jest.fn();
+        restoreCharacterName(true, 'Frog', setFn);
+        expect(setFn).toHaveBeenCalledWith('Frog');
+    });
+
+    it('does not call setFn when previousName2 is undefined', () => {
+        const setFn = jest.fn();
+        restoreCharacterName(true, undefined, setFn);
+        expect(setFn).not.toHaveBeenCalled();
+    });
+
+    it('does not call setFn when previousName2 is null', () => {
+        const setFn = jest.fn();
+        restoreCharacterName(true, null, setFn);
+        expect(setFn).not.toHaveBeenCalled();
+    });
+
+    it('does not call setFn when nameOverridden is false', () => {
+        const setFn = jest.fn();
+        restoreCharacterName(false, 'Frog', setFn);
+        expect(setFn).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when setFn is not a function', () => {
+        expect(() => restoreCharacterName(true, 'Frog', null)).not.toThrow();
+        expect(() => restoreCharacterName(true, 'Frog', undefined)).not.toThrow();
+    });
+
+    it('catches and warns when setFn throws during restoration', () => {
+        const setFn = jest.fn(() => { throw new Error('restore failed'); });
+        restoreCharacterName(true, 'Frog', setFn);
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Failed to restore name2'),
+            expect.any(Error),
+        );
+    });
+});

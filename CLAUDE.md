@@ -232,5 +232,5 @@ All implementation work must happen on a feature branch, not directly on `main`.
 - Route registration order in `index.js` matters for test mocks — add new routes at the end, with `log-action` registered before `generate`
 - Plugin test helpers belong in `st-plugin/tools/` or `st-plugin/tests/helpers/` — not in locations matching Jest's `testMatch` globs
 - Minimize global side-effects in `init()` so tests can mock modules and call handlers directly
-- The extension is browser code — verify UI integration manually by loading in the ST dev server; do not unit-test browser globals
+- The extension is browser code — UI integration requires manual verification in the ST dev server. Pure logic (functions that don't reference browser globals) must be tested using the pure-copy pattern in `st-extension/tests/extension.test.js`: copy the function, parameterise away any globals, and test in isolation
 - Do not create git commits or push changes without explicit instruction from the repository maintainer
