@@ -2,6 +2,8 @@ FROM ghcr.io/sillytavern/sillytavern:latest
 
 # Copy the bridge plugin and extension into the ST installation.
 # ST finds ws at /home/node/app/node_modules/ws, so no separate npm install needed.
+# shared/ is placed one level above the plugin dir so require('../shared/tool-defs') resolves.
+COPY --chown=node:node shared/ /home/node/app/plugins/shared/
 COPY --chown=node:node st-plugin/ /home/node/app/plugins/openclaw-bridge/
 COPY --chown=node:node st-extension/ /home/node/app/public/scripts/extensions/third-party/openclaw-bridge/
 

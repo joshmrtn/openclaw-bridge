@@ -15,6 +15,11 @@ if [[ ! -d "${plugin_source}" ]]; then
     exit 1
 fi
 
+# Build the extension bundle before symlinking so ST loads a current copy.
+printf '%s\n' "Building extension bundle..."
+npm --prefix "${script_dir}" run build:extension
+printf '%s\n' "Extension bundle built."
+
 if [[ ! -d "${st_dir}" ]]; then
     printf '%s\n' "Missing SillyTavern directory: ${st_dir}" >&2
     printf '%s\n' "Set ST_DIR=/path/to/SillyTavern and run this script again." >&2

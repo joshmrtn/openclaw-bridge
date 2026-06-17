@@ -37,10 +37,13 @@ bash ./dev-setup.sh
 ## Repository Structure
 
 ```
+shared/                 Shared modules consumed by both plugin and extension
+shared/tool-defs.js     Single source of truth for ACTION_TOOL_DEFS and ST_SIDE_TOOL_DEFS
 st-plugin/              Node.js CommonJS server plugin loaded by SillyTavern
 st-plugin/tests/        Jest unit tests (auto-discovered by jest.config.cjs)
 st-plugin/tools/        Manual test helpers — NOT picked up by Jest testMatch globs
-st-extension/           Browser JS extension loaded by SillyTavern's extension system
+st-extension/src/       Extension source (ESM; imports from shared/tool-defs.js)
+st-extension/index.js   Committed esbuild bundle — what ST actually loads; rebuild with npm run build:extension
 st-extension/tests/     Extension tests (manual/Playwright)
 oc-plugin/              OpenClaw plugin (TypeScript); compiled to oc-plugin/dist/index.js
 skills/character-bridge/ OC skill definitions — YAML frontmatter + Markdown
@@ -71,7 +74,8 @@ then restart OC. If an OC plugin fix appears to have no effect, check `~/.opencl
 | `st-plugin/link-state.js` | Persisted character → OC agent link config (`character-links.json`) |
 | `st-plugin/chat-history.js` | JSONL read/write for ST chat files |
 | `st-plugin/headless-service.js` | Playwright headless browser for background generation without UI |
-| `st-extension/index.js` | Extension bootstrap, `generateForCharacter()` implementation |
+| `st-extension/src/index.js` | Extension source: bootstrap, `generateForCharacter()` implementation |
+| `shared/tool-defs.js` | `ACTION_TOOL_DEFS` + `ST_SIDE_TOOL_DEFS` — single source of truth for tool definitions |
 | `skills/character-bridge/SKILL.md` | OC tool schemas (`generate_response`, `log_action`) and agent instructions |
 
 ## Critical Architecture Decisions
