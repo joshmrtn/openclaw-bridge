@@ -19,7 +19,9 @@ tools:
           description: The full message text from the user
         channel:
           type: string
-          description: Channel type, e.g. "discord", "telegram", "whatsapp"
+          description: >
+            Full OC channel account ID as assigned in your OpenClaw config,
+            e.g. "discord-frogbot". Not the platform type — the full account ID.
         user_id:
           type: string
           description: >
@@ -123,6 +125,46 @@ writing creatively, etc.):
 1. Perform the action using the appropriate tool
 2. Call `log_action` with a brief description
 3. This keeps the character's SillyTavern memory up to date
+
+## Error handling
+
+When `generate_response` returns an error, follow this policy:
+
+- **503 Service Unavailable** — ST or the headless service is not ready
+  (e.g. still starting up). Wait 10 seconds and retry once. If the retry
+  also fails, log the failure and skip replying for this message.
+- **500 Internal Server Error** — An unexpected error occurred inside ST.
+  Do not retry. Log the error and skip replying. Cascading retries on 500s
+  will not help and may overload the pipeline.
+- **Timeout (no response within your configured deadline)** — Treat the
+  same as 503: one retry after 10 seconds, then give up for this message.
+- **401 / 403** — Configuration error (bad token or URL). Do not retry.
+  Alert the operator.
+
+Never silently drop an error — always log what happened so the operator
+can diagnose it.
+
+## Action invocation paths
+
+Character action tools (e.g. `send_message`, `write_memory`) work
+differently depending on how the response is generated:
+
+**OC / Discord path** (`generate_response` via this skill):
+`Generate('quiet', ...)` does not support native function calling. Instead,
+the action tool schemas are injected as text into the prompt. The LLM
+outputs `<action>` blocks in its text; the plugin parses them, strips them
+from the visible reply, and returns them to OC as `pending_actions`. You
+do not call these tools yourself on this path — the plugin handles it.
+
+**ST UI path** (character responding in the SillyTavern chat UI):
+Native function calling is active. The extension registers each tool via
+`registerFunctionTool`. The LLM invokes them directly; results are handled
+by the extension before the response reaches the UI.
+
+If you are adding a new action tool, it must be registered in both
+`st-plugin/action-tools.js` (OC path, text injection) and
+`st-extension/index.js` (ST UI path, native tool registration). Registering
+in only one location means the tool silently does nothing on the other path.
 
 ## What you must not do
 
