@@ -206,10 +206,15 @@ function setManagementLoading(isLoading) {
     STATE.managementLoading = isLoading;
     const fields = STATE.managementFields;
     if (!fields) return;
-    const { toggleInput, ocAgentInput, ownerIdsInput, saveButton, testButton } = fields;
+    const { toggleInput, ocAgentInput, ownerIdsInput, channelsContainer, saveButton, testButton } = fields;
     [toggleInput, ocAgentInput, ownerIdsInput, saveButton, testButton].forEach(el => {
         if (el) el.disabled = isLoading;
     });
+    if (channelsContainer) {
+        channelsContainer.querySelectorAll('input, button').forEach(el => {
+            el.disabled = isLoading;
+        });
+    }
 }
 
 function parseOwnerIds(rawValue) {
@@ -218,6 +223,38 @@ function parseOwnerIds(rawValue) {
         .split(/[\n,]/)
         .map(value => value.trim())
         .filter(Boolean);
+}
+
+function renderChannelRow(entry = {}) {
+    const row = document.createElement('div');
+    row.className = 'openclaw-bridge-channel-row';
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'text_pole openclaw-bridge-channel-name';
+    nameInput.placeholder = 'name (e.g. discord)';
+    nameInput.value = entry.name || '';
+
+    const idInput = document.createElement('input');
+    idInput.type = 'text';
+    idInput.className = 'text_pole openclaw-bridge-channel-id';
+    idInput.placeholder = 'channel_id (e.g. discord-frogbot)';
+    idInput.value = entry.channel_id || '';
+
+    const targetInput = document.createElement('input');
+    targetInput.type = 'text';
+    targetInput.className = 'text_pole openclaw-bridge-channel-target';
+    targetInput.placeholder = 'target (optional)';
+    targetInput.value = entry.target || '';
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'openclaw-bridge-button openclaw-bridge-button--small';
+    removeButton.textContent = 'Remove';
+    removeButton.addEventListener('click', () => row.remove());
+
+    row.append(nameInput, idInput, targetInput, removeButton);
+    return row;
 }
 
 function ensureManagementPanel() {
@@ -275,6 +312,23 @@ function ensureManagementPanel() {
     ownerHint.textContent = 'Comma- or newline-separated. Owners receive [OWNER] label.';
     ownerField.append(ownerLabel, ownerIdsInput, ownerHint);
 
+    const channelsField = document.createElement('div');
+    channelsField.className = 'openclaw-bridge-field';
+    const channelsLabel = document.createElement('label');
+    channelsLabel.textContent = 'Channels';
+    const channelsContainer = document.createElement('div');
+    channelsContainer.className = 'openclaw-bridge-channels';
+    const addChannelButton = document.createElement('button');
+    addChannelButton.type = 'button';
+    addChannelButton.className = 'openclaw-bridge-button openclaw-bridge-button--small';
+    addChannelButton.textContent = 'Add channel';
+    addChannelButton.addEventListener('click', () => {
+        channelsContainer.append(renderChannelRow());
+    });
+    const channelsHint = document.createElement('small');
+    channelsHint.textContent = 'Each channel needs a name and channel_id. Target is optional.';
+    channelsField.append(channelsLabel, channelsContainer, addChannelButton, channelsHint);
+
     const actions = document.createElement('div');
     actions.className = 'openclaw-bridge-actions';
     const saveButton = document.createElement('button');
@@ -295,7 +349,7 @@ function ensureManagementPanel() {
     authNote.className = 'openclaw-bridge-status is-muted';
     authNote.textContent = 'Uses current SillyTavern session for auth.';
 
-    body.append(agentField, ownerField, actions, authNote, status);
+    body.append(agentField, ownerField, channelsField, actions, authNote, status);
     root.append(header, body);
     container.append(root);
 
@@ -305,6 +359,7 @@ function ensureManagementPanel() {
         toggleInput,
         ocAgentInput,
         ownerIdsInput,
+        channelsContainer,
         saveButton,
         testButton,
     };
@@ -332,35 +387,45 @@ async function loadLinkState(characterName) {
 
     setManagementLoading(true);
     try {
-        const response = await fetch('/api/plugins/openclaw-bridge/characters', {
-            method: 'GET',
-            headers: buildPluginHeaders({ omitContentType: true }),
-        });
+        const response = await fetch(
+            `/api/plugins/openclaw-bridge/characters/${encodeURIComponent(characterName)}/link`,
+            { method: 'GET', headers: buildPluginHeaders({ omitContentType: true }) },
+        );
+
+        const fields = STATE.managementFields;
+        if (!fields) return;
+
+        if (response.status === 404) {
+            fields.ocAgentInput.value = '';
+            fields.ownerIdsInput.value = '';
+            fields.toggleInput.checked = false;
+            fields.channelsContainer.replaceChildren();
+            setManagementStatus('Not linked yet.', 'muted');
+            return;
+        }
 
         if (!response.ok) {
             const text = await response.text();
             throw new Error(text || `Failed to load link state (${response.status})`);
         }
 
-        const characters = await response.json();
-        const entry = Array.isArray(characters)
-            ? characters.find(item => item?.name === characterName)
-            : null;
+        const { link } = await response.json();
 
-        const fields = STATE.managementFields;
-        if (!fields) return;
-
-        if (entry?.link) {
-            fields.ocAgentInput.value = entry.link.oc_agent_id || '';
-            fields.ownerIdsInput.value = Array.isArray(entry.link.owner_user_ids)
-                ? entry.link.owner_user_ids.join(', ')
+        if (link) {
+            fields.ocAgentInput.value = link.oc_agent_id || '';
+            fields.ownerIdsInput.value = Array.isArray(link.owner_user_ids)
+                ? link.owner_user_ids.join(', ')
                 : '';
-            fields.toggleInput.checked = Boolean(entry.active);
-            setManagementStatus(`Linked as ${entry.link.oc_agent_id || 'unknown'}.`, 'success');
+            fields.toggleInput.checked = Boolean(link.active);
+            fields.channelsContainer.replaceChildren(
+                ...( Array.isArray(link.channels) ? link.channels : [] ).map(renderChannelRow)
+            );
+            setManagementStatus(`Linked as ${link.oc_agent_id || 'unknown'}.`, 'success');
         } else {
             fields.ocAgentInput.value = '';
             fields.ownerIdsInput.value = '';
             fields.toggleInput.checked = false;
+            fields.channelsContainer.replaceChildren();
             setManagementStatus('Not linked yet.', 'muted');
         }
     } catch (error) {
@@ -388,15 +453,30 @@ async function saveLinkState() {
 
     const ownerIds = parseOwnerIds(fields.ownerIdsInput.value);
 
+    const channels = [];
+    for (const row of fields.channelsContainer.querySelectorAll('.openclaw-bridge-channel-row')) {
+        const name = row.querySelector('.openclaw-bridge-channel-name')?.value.trim() || '';
+        const channelId = row.querySelector('.openclaw-bridge-channel-id')?.value.trim() || '';
+        const target = row.querySelector('.openclaw-bridge-channel-target')?.value.trim() || '';
+        if (!name || !channelId) {
+            setManagementStatus('Each channel requires a name and channel ID.', 'error');
+            return;
+        }
+        const entry = { name, channel_id: channelId };
+        if (target) entry.target = target;
+        channels.push(entry);
+    }
+
     setManagementLoading(true);
     try {
         const response = await fetch(`/api/plugins/openclaw-bridge/characters/${encodeURIComponent(characterName)}/link`, {
             method: 'POST',
-            headers: buildPluginHeaders(),
+            headers: { ...buildPluginHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 oc_agent_id: ocAgentId,
                 owner_user_ids: ownerIds,
                 active: Boolean(fields.toggleInput.checked),
+                channels,
             }),
         });
 
@@ -1594,4 +1674,5 @@ if (!globalThis.openclawBridge) {
     globalThis.openclawBridge = { state: STATE, connect, sendSocketMessage };
 }
 globalThis.openclawBridge.refreshManagementPanel = refreshManagementPanel;
+globalThis.openclawBridgeLoadLinkState = loadLinkState;
 globalThis.openclawBridgeInit = globalThis.openclawBridgeInit || init;

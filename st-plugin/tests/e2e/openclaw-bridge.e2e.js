@@ -245,3 +245,214 @@ test('management panel injects into character editor', async ({ page }) => {
 
     await expect(page.locator('#openclaw-bridge-management')).toHaveCount(1);
 });
+
+// Dedicated character name for management panel tests — isolated from the generate
+// tests that use CHARACTER_NAME so save/load state cannot collide.
+const PANEL_CHARACTER = 'ToadManagementTest';
+
+async function mountManagementPanel(page) {
+    // Docker ST runs with disableCsrfProtection: true so fetchCsrfToken() returns null
+    // and buildPluginHeaders() sends no auth. Intercept all browser-side plugin API
+    // requests and add the Bearer token so they pass the plugin's auth middleware.
+    await page.route('**/api/plugins/openclaw-bridge/**', async route => {
+        await route.continue({
+            headers: { ...route.request().headers(), Authorization: `Bearer ${AUTH_TOKEN}` },
+        });
+    });
+
+    await page.evaluate(() => {
+        const block = document.createElement('div');
+        block.id = 'rm_ch_create_block';
+        const form = document.createElement('form');
+        block.append(form);
+        document.body.append(block);
+        window.openclawBridge.refreshManagementPanel();
+    });
+    await expect(page.locator('#openclaw-bridge-management')).toHaveCount(1);
+}
+
+test('management panel loads saved link state into fields', async ({ page, request, baseURL }) => {
+    // Establish a known baseline link with a channel entry before the panel loads.
+    const linkResponse = await request.post(
+        `${baseURL}/api/plugins/openclaw-bridge/characters/${encodeURIComponent(PANEL_CHARACTER)}/link`,
+        {
+            headers: {
+                Authorization: `Bearer ${AUTH_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+            data: {
+                oc_agent_id: 'toad-agent',
+                owner_user_ids: ['discord:owner1'],
+                active: true,
+                channels: [{ name: 'discord', channel_id: 'discord-toadbot', target: '#pond' }],
+            },
+        },
+    );
+    expect(linkResponse.ok()).toBeTruthy();
+
+    await bootExtension(page, {
+        characterName: PANEL_CHARACTER,
+        generateImpl: async () => MOCK_RESPONSE,
+    });
+    await mountManagementPanel(page);
+
+    // Wait for the auto-triggered loadLinkState (from refreshManagementPanel) to complete.
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .toContainText('Linked as', { timeout: 5000 });
+
+    await expect(page.locator('#openclaw-bridge-management .openclaw-bridge-channel-row')).toHaveCount(1);
+
+    const nameVal = await page.locator('.openclaw-bridge-channel-name').first().inputValue();
+    const idVal = await page.locator('.openclaw-bridge-channel-id').first().inputValue();
+    const targetVal = await page.locator('.openclaw-bridge-channel-target').first().inputValue();
+    expect(nameVal).toBe('discord');
+    expect(idVal).toBe('discord-toadbot');
+    expect(targetVal).toBe('#pond');
+});
+
+test('management panel save posts link and persists channel to plugin', async ({ page, request, baseURL }) => {
+    // Seed with a known link so refreshManagementPanel auto-loads it into the form.
+    await request.post(
+        `${baseURL}/api/plugins/openclaw-bridge/characters/${encodeURIComponent(PANEL_CHARACTER)}/link`,
+        {
+            headers: {
+                Authorization: `Bearer ${AUTH_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+            data: { oc_agent_id: 'toad-agent', owner_user_ids: [], active: false, channels: [] },
+        },
+    );
+
+    await bootExtension(page, {
+        characterName: PANEL_CHARACTER,
+        generateImpl: async () => MOCK_RESPONSE,
+    });
+    await mountManagementPanel(page);
+
+    // Wait for the auto-triggered loadLinkState to complete — ensures inputs are
+    // populated and enabled before we try to interact with them.
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .toContainText('Linked as', { timeout: 5000 });
+
+    // Add a channel row via the "Add channel" button and fill it in.
+    await page.evaluate(() => {
+        const root = document.getElementById('openclaw-bridge-management');
+        [...root.querySelectorAll('button')].find(b => b.textContent === 'Add channel').click();
+        root.querySelector('.openclaw-bridge-channel-name').value = 'telegram';
+        root.querySelector('.openclaw-bridge-channel-id').value = 'telegram-toadbot';
+        root.querySelector('.openclaw-bridge-channel-target').value = '@pond';
+        [...root.querySelectorAll('button')].find(b => b.textContent === 'Save link').click();
+    });
+
+    // Wait for the status to update to saved.
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .toContainText('Link saved', { timeout: 5000 });
+
+    // Verify the plugin stored what we sent.
+    const getResponse = await request.get(
+        `${baseURL}/api/plugins/openclaw-bridge/characters/${encodeURIComponent(PANEL_CHARACTER)}/link`,
+        { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } },
+    );
+    expect(getResponse.ok()).toBeTruthy();
+    const { link } = await getResponse.json();
+    expect(link?.channels).toEqual([
+        { name: 'telegram', channel_id: 'telegram-toadbot', target: '@pond' },
+    ]);
+});
+
+test('management panel active toggle persists via save', async ({ page, request, baseURL }) => {
+    // Seed with active: true so the toggle loads as checked.
+    await request.post(
+        `${baseURL}/api/plugins/openclaw-bridge/characters/${encodeURIComponent(PANEL_CHARACTER)}/link`,
+        {
+            headers: {
+                Authorization: `Bearer ${AUTH_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+            data: { oc_agent_id: 'toad-agent', owner_user_ids: [], active: true, channels: [] },
+        },
+    );
+
+    await bootExtension(page, {
+        characterName: PANEL_CHARACTER,
+        generateImpl: async () => MOCK_RESPONSE,
+    });
+    await mountManagementPanel(page);
+
+    // Wait for the auto-triggered loadLinkState to complete — confirms the toggle
+    // is populated before we interact.
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .toContainText('Linked as', { timeout: 5000 });
+
+    // Confirm the toggle loaded as checked, uncheck it, then click Save.
+    // Using page.evaluate to avoid Playwright actionability races with setManagementLoading
+    // briefly disabling the toggle between loadLinkState calls.
+    const wasChecked = await page.evaluate(() => {
+        const root = document.getElementById('openclaw-bridge-management');
+        const toggle = root.querySelector('input[type="checkbox"]');
+        const checked = toggle.checked;
+        toggle.checked = false;
+        [...root.querySelectorAll('button')].find(b => b.textContent === 'Save link').click();
+        return checked;
+    });
+    expect(wasChecked).toBe(true);
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .toContainText('Link saved', { timeout: 5000 });
+
+    const getResponse = await request.get(
+        `${baseURL}/api/plugins/openclaw-bridge/characters/${encodeURIComponent(PANEL_CHARACTER)}/link`,
+        { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } },
+    );
+    const { link } = await getResponse.json();
+    expect(link?.active).toBe(false);
+});
+
+test('management panel shows error when OC Agent ID is empty', async ({ page }) => {
+    await bootExtension(page, {
+        characterName: PANEL_CHARACTER,
+        generateImpl: async () => MOCK_RESPONSE,
+    });
+    await mountManagementPanel(page);
+
+    // Wait for auto-triggered loadLinkState to settle so we know the form is in a stable
+    // state (previous tests may have left a saved link that auto-populates the field).
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .not.toHaveText('Not configured.', { timeout: 5000 });
+
+    // Explicitly clear the OC Agent ID field then click Save — client-side validation
+    // should catch the empty value and show an error without sending any request.
+    await page.evaluate(() => {
+        const root = document.getElementById('openclaw-bridge-management');
+        root.querySelector('input[type="text"]').value = '';
+        [...root.querySelectorAll('button')].find(b => b.textContent === 'Save link').click();
+    });
+
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .toContainText('required', { timeout: 3000 });
+});
+
+test('management panel shows error when channel row is missing name or channel_id', async ({ page }) => {
+    await bootExtension(page, {
+        characterName: PANEL_CHARACTER,
+        generateImpl: async () => MOCK_RESPONSE,
+    });
+    await mountManagementPanel(page);
+
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .not.toHaveText('Not configured.', { timeout: 5000 });
+
+    // Add a channel row but leave name blank — only channel_id is filled.
+    await page.evaluate(() => {
+        const root = document.getElementById('openclaw-bridge-management');
+        // Ensure the agent field has a value so we get past the first validation check.
+        const agentInput = root.querySelector('input[type="text"]');
+        if (!agentInput.value) agentInput.value = 'toad-agent';
+        [...root.querySelectorAll('button')].find(b => b.textContent === 'Add channel').click();
+        root.querySelector('.openclaw-bridge-channel-id').value = 'discord-toadbot';
+        // Leave .openclaw-bridge-channel-name blank.
+        [...root.querySelectorAll('button')].find(b => b.textContent === 'Save link').click();
+    });
+
+    await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
+        .toContainText('channel requires', { timeout: 3000 });
+});
