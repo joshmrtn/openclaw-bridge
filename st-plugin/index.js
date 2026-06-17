@@ -293,7 +293,7 @@ async function init(router) {
             if (channels !== undefined) {
                 patch.channels = channels;
             }
-            const link = linkState.upsertLink(characterName, patch);
+            const link = await linkState.upsertLink(characterName, patch);
 
             response.json({ character: characterName, link });
         } catch (err) {
@@ -310,7 +310,7 @@ async function init(router) {
         }
 
         try {
-            const removed = linkState.removeLink(characterName);
+            const removed = await linkState.removeLink(characterName);
             if (!removed) {
                 response.status(404).json({ error: `No link found for character: ${characterName}` });
                 return;
