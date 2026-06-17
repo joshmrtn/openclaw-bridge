@@ -848,4 +848,102 @@ describe('/generate action injection and parsing', () => {
             expect(res.body.actions).toEqual([]);
         });
     });
+
+    test('write_memory with missing entry_key is skipped on main path — upsertMemoryEntry not called (#87)', async () => {
+        const rawResponse = 'Noted.<action>{"type":"write_memory","content":"some content","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn();
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hi', user_id: 'discord:owner1' }), res);
+
+        expect(upsertMemoryEntry).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(200);
+        expect(res.body.response).toBe('Noted.');
+    });
+
+    test('write_memory with missing content is skipped on main path — upsertMemoryEntry not called (#87)', async () => {
+        const rawResponse = 'Noted.<action>{"type":"write_memory","entry_key":"some_key","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn();
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hi', user_id: 'discord:owner1' }), res);
+
+        expect(upsertMemoryEntry).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(200);
+        expect(res.body.response).toBe('Noted.');
+    });
+
+    test('heartbeat path: write_memory with missing entry_key is skipped — upsertMemoryEntry not called (#87)', async () => {
+        const rawResponse = 'Done.<action>{"type":"write_memory","content":"some content","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const appendMessage = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn();
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null) }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+        expect(upsertMemoryEntry).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(200);
+        expect(res.body.response).toBe('Done.');
+    });
+
+    test('heartbeat path: write_memory with missing content is skipped — upsertMemoryEntry not called (#87)', async () => {
+        const rawResponse = 'Done.<action>{"type":"write_memory","entry_key":"some_key","tier":1}</action>';
+        const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        const appendMessage = jest.fn().mockResolvedValue();
+        const upsertMemoryEntry = jest.fn();
+        makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry);
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory, appendMessage };
+        });
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null) }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+        expect(upsertMemoryEntry).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(200);
+        expect(res.body.response).toBe('Done.');
+    });
 });

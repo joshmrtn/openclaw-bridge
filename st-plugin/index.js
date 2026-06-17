@@ -476,6 +476,10 @@ async function init(router) {
                 // R11.6: process memory writes synchronously before returning
                 for (const action of stSideActions) {
                     if (action.type === 'write_memory') {
+                        if (!action.entry_key || !action.content) {
+                            console.warn('[openclaw-bridge-plugin] write_memory action missing required fields:', action);
+                            continue;
+                        }
                         try {
                             lorebook.upsertMemoryEntry(character, action);
                             console.info(`[openclaw-bridge-plugin] Memory written: entry_key=${action.entry_key} character=${character}`);
@@ -595,6 +599,10 @@ async function init(router) {
             // R11.6: process lorebook memory writes synchronously before returning to OC
             for (const action of stSideActions) {
                 if (action.type === 'write_memory') {
+                    if (!action.entry_key || !action.content) {
+                        console.warn('[openclaw-bridge-plugin] write_memory action missing required fields:', action);
+                        continue;
+                    }
                     try {
                         lorebook.upsertMemoryEntry(character, action);
                         console.info(`[openclaw-bridge-plugin] Memory written: entry_key=${action.entry_key} character=${character}`);
