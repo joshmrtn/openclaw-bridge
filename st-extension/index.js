@@ -909,7 +909,7 @@ async function generateForCharacter(characterName, message) {
                 debugLog.push(`global setCharacterName failed: ${e.message}`);
             }
         } else {
-            debugLog.push('setCharacterName not available; relying on force_chid/force_name2');
+            debugLog.push('setCharacterName not available; forceChId handles character targeting');
         }
 
         if (typeof generateQuietPrompt === 'function') {
@@ -1040,13 +1040,15 @@ async function generateForCharacter(characterName, message) {
     } finally {
         // Restore previous displayed name
         if (nameOverridden && typeof setCharacterName === 'function') {
-            try {
-                setCharacterName(previousName2);
-                debugLog.push(`restored name2 -> ${previousName2}`);
-                console.info('[openclaw-bridge] Restored original name2 after generation');
-            } catch (e) {
-                console.warn('[openclaw-bridge] Failed to restore name2:', e);
-                debugLog.push(`restore name2 failed: ${e.message}`);
+            if (typeof previousName2 === 'string') {
+                try {
+                    setCharacterName(previousName2);
+                    debugLog.push(`restored name2 -> ${previousName2}`);
+                    console.info('[openclaw-bridge] Restored original name2 after generation');
+                } catch (e) {
+                    console.warn('[openclaw-bridge] Failed to restore name2:', e);
+                    debugLog.push(`restore name2 failed: ${e.message}`);
+                }
             }
         }
     }
