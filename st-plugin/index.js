@@ -38,6 +38,15 @@ async function resolveActions(actions, link, character) {
             } catch (logErr) {
                 console.warn('[openclaw-bridge-plugin] Failed to log send_message error to history:', logErr?.message);
             }
+        } else if (!ch.channel_id || !ch.target) {
+            const errMsg = `[send_message failed]: channel '${ch.name ?? action.channel}' is missing channel_id or target for ${character}.`;
+            console.warn(`[openclaw-bridge-plugin] ${errMsg}`);
+            try {
+                const entry = chatHistory.constructStMessage({ role: 'system', content: errMsg });
+                await chatHistory.appendMessage(character, entry);
+            } catch (logErr) {
+                console.warn('[openclaw-bridge-plugin] Failed to log malformed channel error to history:', logErr?.message);
+            }
         } else {
             const resolvedAction = { type: 'send_message', channel_id: ch.channel_id, target: ch.target, content: action.content };
             if (action.recipient != null) resolvedAction.recipient = action.recipient;
