@@ -130,8 +130,10 @@ var STATE = {
   // AbortController for the active SSE fetch
   sseReconnectTimer: null,
   // reconnect backoff timer for SSE
-  csrfToken: null
-  // explicitly fetched CSRF token for HTTP plugin requests
+  csrfToken: null,
+  // explicitly fetched CSRF token for ST's own CSRF middleware
+  bridgeToken: null
+  // received from plugin via WS welcome; used as Bearer for HTTP calls
 };
 function getStContext() {
   if (globalThis.SillyTavern?.getContext) {
@@ -208,6 +210,9 @@ function buildPluginHeaders({ omitContentType = false } = {}) {
   }
   if (STATE.csrfToken && !headers["x-csrf-token"] && !headers["X-CSRF-Token"]) {
     headers = Object.assign({}, headers, { "X-CSRF-Token": STATE.csrfToken });
+  }
+  if (STATE.bridgeToken && !headers["authorization"] && !headers["Authorization"]) {
+    headers = Object.assign({}, headers, { Authorization: `Bearer ${STATE.bridgeToken}` });
   }
   return headers;
 }
@@ -1319,6 +1324,12 @@ function connect() {
         if (payload.type === "pong") {
           STATE.pongReceived = true;
           console.log("[openclaw-bridge] Pong received");
+          return;
+        }
+        if (payload.type === "welcome") {
+          if (typeof payload.bridgeToken === "string" && payload.bridgeToken) {
+            STATE.bridgeToken = payload.bridgeToken;
+          }
           return;
         }
         if (payload.type === "generate") {

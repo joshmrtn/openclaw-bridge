@@ -47,7 +47,8 @@ const STATE = {
     lastChatUpdatedTs: 0,      // deduplicate chat_updated when multiple connections are active
     sseAbortController: null,  // AbortController for the active SSE fetch
     sseReconnectTimer: null,   // reconnect backoff timer for SSE
-    csrfToken: null,           // explicitly fetched CSRF token for HTTP plugin requests
+    csrfToken: null,           // explicitly fetched CSRF token for ST's own CSRF middleware
+    bridgeToken: null,         // received from plugin via WS welcome; used as Bearer for HTTP calls
 };
 
 function getStContext() {
@@ -170,6 +171,10 @@ function buildPluginHeaders({ omitContentType = false } = {}) {
     // session), supplement with our own explicitly fetched token so HTTP POSTs don't 403.
     if (STATE.csrfToken && !headers['x-csrf-token'] && !headers['X-CSRF-Token']) {
         headers = Object.assign({}, headers, { 'X-CSRF-Token': STATE.csrfToken });
+    }
+    // Authenticate to the bridge plugin using the token received over WebSocket.
+    if (STATE.bridgeToken && !headers['authorization'] && !headers['Authorization']) {
+        headers = Object.assign({}, headers, { Authorization: `Bearer ${STATE.bridgeToken}` });
     }
     return headers;
 }
@@ -1456,6 +1461,13 @@ function connect() {
                 if (payload.type === 'pong') {
                     STATE.pongReceived = true;
                     console.log('[openclaw-bridge] Pong received');
+                    return;
+                }
+
+                if (payload.type === 'welcome') {
+                    if (typeof payload.bridgeToken === 'string' && payload.bridgeToken) {
+                        STATE.bridgeToken = payload.bridgeToken;
+                    }
                     return;
                 }
 

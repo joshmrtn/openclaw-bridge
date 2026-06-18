@@ -86,12 +86,6 @@ function getAuthToken() {
 
 function requireBearerToken(request, response, next) {
     const expectedToken = getAuthToken();
-    const csrfToken = request.get('x-csrf-token');
-
-    if (csrfToken) {
-        next();
-        return;
-    }
 
     if (!expectedToken) {
         response.status(500).json({ error: 'OpenClaw Bridge auth token is not configured' });
@@ -144,6 +138,7 @@ async function init(router) {
         wsBundle = startWebSocketServer({
             port: Number(process.env.OPENCLAW_BRIDGE_WS_PORT || 8765),
             sessionManager,
+            getAuthToken,
         });
         console.info('[openclaw-bridge-plugin] WebSocket server bundle created');
     } else {

@@ -20,7 +20,7 @@ function loadWsModule() {
 
 const WS = loadWsModule();
 
-function startWebSocketServer({ port = 8765, sessionManager }) {
+function startWebSocketServer({ port = 8765, sessionManager, getAuthToken }) {
     const server = new WS.Server({ port, host: '0.0.0.0' });
     console.info(`[openclaw-bridge] WS server listening on 0.0.0.0:${port}`);
     console.info(`[openclaw-bridge] WS server ready to accept connections on ws://localhost:${port} or ws://127.0.0.1:${port}`);
@@ -37,6 +37,10 @@ function startWebSocketServer({ port = 8765, sessionManager }) {
                     isHeadless: parsed.clientType === 'headless',
                     isUi: parsed.clientType === 'ui',
                 });
+                const bridgeToken = typeof getAuthToken === 'function' ? getAuthToken() : '';
+                if (bridgeToken) {
+                    try { socket.send(JSON.stringify({ type: 'welcome', bridgeToken })); } catch (e) {}
+                }
                 return;
             }
             if (parsed?.type === 'debug_log') {

@@ -87,15 +87,14 @@ describe('plugin routes', () => {
         ]);
     });
 
-    test('CSRF headers allow access without bearer token', async () => {
+    test('x-csrf-token header alone does not bypass bearer token auth', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
-        const getConnectedClientCount = jest.fn(() => 0);
         jest.doMock('../ws-server', () => mockWsServer);
         jest.doMock('../session-manager', () => ({
             requestGenerate: jest.fn(),
             registerClient: jest.fn(),
             unregisterClient: jest.fn(),
-            getConnectedClientCount,
+            getConnectedClientCount: jest.fn(() => 0),
             getSseClientCount: jest.fn(() => 0),
             broadcast: jest.fn(),
         }));
@@ -108,17 +107,15 @@ describe('plugin routes', () => {
         const res = makeRes();
         const req = {
             get(header) {
-                if (header.toLowerCase() === 'x-csrf-token') return 'csrf';
+                if (header.toLowerCase() === 'x-csrf-token') return 'any-value';
                 return '';
             },
         };
 
         await callRoute(router, handler, req, res);
 
-        expect(res.statusCode).toBe(200);
-        expect(res.body.status).toBe('ok');
-        expect(res.body.connected_ws_clients).toBe(0);
-        expect(res.body.connected_sse_clients).toBe(0);
+        expect(res.statusCode).toBe(401);
+        expect(res.body.error).toMatch(/Unauthorized/);
     });
 
     test('GET /status reflects current WS and SSE client counts', async () => {
