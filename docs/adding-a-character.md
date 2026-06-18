@@ -23,25 +23,37 @@ cp -r /path/to/openclaw-bridge/skills/character-bridge \
   ~/.openclaw/workspace-{agentname}/skills/
 ```
 
+This skill defines how the agent hands off every inbound message to SillyTavern for generation and acts on any outbound actions ST returns. Without it the agent has no knowledge of the bridge.
+
 ---
 
 ## Step 3 — Configure the agent
 
-Add an entry to `~/.openclaw/openclaw.json` under `agents.list`:
+Add an entry to `~/.openclaw/openclaw.json` under `agents.list`. If you already have a `main` agent (most OC installs do), add the new entry directly below it:
 
 ```json
 {
-  "id": "{agentname}",
-  "name": "{Character Display Name}",
-  "workspace": "~/.openclaw/workspace-{agentname}",
-  "skills": ["character-bridge"],
-  "tools": {
-    "profile": "minimal",
-    "allow": ["read", "write"]
-  },
-  "env": {
-    "OPENCLAW_BRIDGE_URL": "http://localhost:8000",
-    "OPENCLAW_BRIDGE_TOKEN": "{token}"
+  "agents": {
+    "list": [
+      {
+        "id": "main",
+        "...": "your existing main agent config"
+      },
+      {
+        "id": "{agentname}",
+        "name": "{Character Display Name}",
+        "workspace": "~/.openclaw/workspace-{agentname}",
+        "skills": ["character-bridge"],
+        "tools": {
+          "profile": "minimal",
+          "allow": ["read", "write"]
+        },
+        "env": {
+          "OPENCLAW_BRIDGE_URL": "http://localhost:8000",
+          "OPENCLAW_BRIDGE_TOKEN": "{token}"
+        }
+      }
+    ]
   }
 }
 ```
@@ -260,28 +272,32 @@ After this one-time step, memory entries the character writes will be available 
 
 ---
 
-## After changing ST model or API settings
+---
 
-The headless browser caches its session at startup. If you change the LLM, API endpoint, or character settings in the ST UI, trigger a headless reload:
+## Maintenance
+
+### After changing ST model or API settings
+
+The headless browser caches its session at startup. If you change the LLM, API endpoint, or character settings in the ST UI, reload it from the repository root:
 
 ```bash
-TOKEN=$(cat data/openclaw-bridge/bridge-token.txt)
-curl -sS -X POST http://localhost:8000/api/plugins/openclaw-bridge/reload-headless \
-  -H "Authorization: Bearer ${TOKEN}"
+./scripts/reload-headless.sh
 # Expected: {"reloaded":true}
 ```
 
----
+The script reads the bridge token automatically — no need to look it up or `cd` first.
 
-## Removing a character
+### Removing a character
+
+To disable the link temporarily, toggle the **External Presence** panel off in ST's character editor and click **Save link**. The character stops responding on external channels but all config is preserved.
+
+To remove it entirely:
 
 ```bash
 # Unlink from ST plugin
-TOKEN=$(cat data/openclaw-bridge/bridge-token.txt)
-curl -X DELETE http://localhost:8000/api/plugins/openclaw-bridge/characters/{STCharacterName}/link \
-  -H "Authorization: Bearer ${TOKEN}"
+./scripts/link-character.sh --character "{STCharacterName}" --unlink
 
-# Remove OC agent
+# Remove OC agent and workspace
 openclaw agents remove {agentname}
 rm -rf ~/.openclaw/workspace-{agentname}
 ```
