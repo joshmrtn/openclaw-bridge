@@ -24,8 +24,12 @@ npm test -- st-plugin
 # Run unit tests without Playwright startup noise (much faster)
 OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
 
-# Run E2E tests (Playwright — requires ST running)
-npm run test:e2e
+# Run ALL four test tiers (unit + fast + browser + full) — always use this before committing.
+# Mandatory image rebuilds are built in; "stale Docker image" is not possible.
+bash ./scripts/test-all.sh
+
+# Run only the fast + browser tiers (no full-tier OC stack):
+npm run test:e2e:fast && npm run test:e2e:browser
 
 # Wire plugin and extension into local ST checkout, and symlink OC plugin into OpenClaw
 bash ./dev-setup.sh

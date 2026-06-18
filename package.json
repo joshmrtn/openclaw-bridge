@@ -15,7 +15,9 @@
         "docker:full:up": "docker compose -f docker/full/docker-compose.full.yml up --wait sillytavern-full openclaw qa-bus mock-llm fake-ollama",
         "docker:full:down": "docker compose -f docker/full/docker-compose.full.yml down --remove-orphans",
         "docker:full:build-oc": "bash docker/full/build-oc.sh",
-        "docker:full:build-bridge": "docker build -t openclaw-bridge:oc-full -f docker/full/openclaw/Dockerfile ."
+        "docker:full:build-bridge": "docker build -t openclaw-bridge:oc-full -f docker/full/openclaw/Dockerfile .",
+        "test:all": "bash ./scripts/test-all.sh",
+        "test:all:skip-unit": "bash ./scripts/test-all.sh --skip-unit"
     },
     "devDependencies": {
         "@playwright/test": "^1.56.1",
