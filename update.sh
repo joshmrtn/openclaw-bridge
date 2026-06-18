@@ -163,13 +163,13 @@ mkdir -p "${data_dir}"
 
 schema_version_file="${data_dir}/schema-version.txt"
 if [ -f "${schema_version_file}" ]; then
-    current_version=$(cat "${schema_version_file}" | tr -d '[:space:]')
+    current_version=$(tr -d '[:space:]' < "${schema_version_file}")
 else
     current_version=0
 fi
 
 ran_any=false
-for migration in $(ls -1 "${script_dir}/migrations"/[0-9]*.sh 2>/dev/null | sort); do
+for migration in $(find "${script_dir}/migrations" -maxdepth 1 -name '[0-9]*.sh' 2>/dev/null | sort); do
     filename="$(basename "${migration}")"
     # Extract the numeric prefix (e.g. 0001 from 0001_baseline.sh).
     num="${filename%%_*}"

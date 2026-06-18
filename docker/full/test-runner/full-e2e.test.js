@@ -1112,3 +1112,22 @@ describe('setup.sh → uninstall.sh lifecycle (#40)', () => {
     expect(verifyOut).toContain('0 failed');
   }, 300000); // 5 min — one ST restart + npm install inside container
 });
+
+// ── reload-headless endpoint ──────────────────────────────────────────────────
+// Verifies that POST /reload-headless returns {reloaded:true} and that the
+// headless client reconnects. reload-headless.sh is a thin curl wrapper around
+// this endpoint; the endpoint itself is what matters to test end-to-end.
+describe('reload-headless endpoint', () => {
+  test('POST /reload-headless returns {reloaded:true} and headless reconnects', async () => {
+    const r = await stFetch('/reload-headless', { method: 'POST' });
+    expect(r.status).toBe(200);
+    expect(r.body.reloaded).toBe(true);
+
+    // After a reload the headless browser navigates away and back — wait for it
+    // to reconnect before leaving this test (avoids flaking subsequent tests).
+    await waitFor(async () => {
+      const h = await stFetch('/health');
+      return h.status === 200 && h.body.headless?.isRunning === true;
+    }, { timeoutMs: 60000, intervalMs: 2000, label: 'headless to reconnect after reload' });
+  }, 90000);
+});

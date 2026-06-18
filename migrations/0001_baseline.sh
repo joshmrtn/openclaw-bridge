@@ -32,6 +32,6 @@
 # Usage: bash migrations/0001_baseline.sh <data-dir>
 set -euo pipefail
 
-data_dir="${1:?Usage: $0 <data-dir>}"
+_data_dir="${1:?Usage: $0 <data-dir>}"
 
 echo "Migration 0001 (baseline): no changes needed."

@@ -134,13 +134,6 @@ if [ -n "${CHARACTER}" ]; then
     echo "── Character link ─────────────────────────────────────────────────"
     CHARS=$(curl_get "${PLUGIN_BASE}/characters")
 
-    # Use python3 for URL encoding if available, otherwise pass raw (works for most names)
-    if command -v python3 >/dev/null 2>&1; then
-        ENC_CHAR=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "${CHARACTER}" 2>/dev/null || echo "${CHARACTER}")
-    else
-        ENC_CHAR="${CHARACTER}"
-    fi
-
     if json_has "\"name\":\"${CHARACTER}\"" "${CHARS}"; then
         ACTIVE=$(echo "${CHARS}" | grep -A10 "\"name\":\"${CHARACTER}\"" \
             | grep '"active"' | grep -o 'true\|false' | head -1 || echo "unknown")
