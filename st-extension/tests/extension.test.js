@@ -370,3 +370,35 @@ describe('generateForCharacter — name restoration (finally block)', () => {
         );
     });
 });
+
+// ---------------------------------------------------------------------------
+// generateForCharacter — generateQuietPrompt dispatch
+// Pure copy of the generateQuietPrompt branch in generateForCharacter()
+// (~lines 890-909 of src/index.js), parameterised to remove browser globals.
+// ---------------------------------------------------------------------------
+
+async function dispatchGenerateQuietPrompt(generateQuietPrompt, message, chid) {
+    return generateQuietPrompt({
+        quietPrompt: message,
+        forceChId: chid,
+        skipWIAN: false,
+        quietToLoud: true,
+        removeReasoning: false,
+        trimToSentence: false,
+    });
+}
+
+describe('generateForCharacter — generateQuietPrompt dispatch', () => {
+    it('passes forceChId to generateQuietPrompt', async () => {
+        const mock = jest.fn().mockResolvedValue('Ribbit!');
+        await dispatchGenerateQuietPrompt(mock, 'hello', 3);
+        expect(mock).toHaveBeenCalledWith(expect.objectContaining({ forceChId: 3 }));
+    });
+
+    it('propagates the error when generateQuietPrompt throws — does not silently retry without forceChId', async () => {
+        const err = new Error('generateQuietPrompt failed');
+        const mock = jest.fn().mockRejectedValue(err);
+        await expect(dispatchGenerateQuietPrompt(mock, 'hello', 3)).rejects.toThrow('generateQuietPrompt failed');
+        expect(mock).toHaveBeenCalledTimes(1);
+    });
+});

@@ -846,22 +846,15 @@ async function generateForCharacter(characterName, message) {
       debugMethod = "context.generateQuietPrompt";
       console.info("[openclaw-bridge] Using context.generateQuietPrompt()");
       debugLog.push("Using context.generateQuietPrompt()");
-      try {
-        result = await generateQuietPrompt({
-          quietPrompt: message,
-          forceChId: chid,
-          skipWIAN: false,
-          quietToLoud: true,
-          removeReasoning: false,
-          trimToSentence: false
-        });
-        debugLog.push(`generateQuietPrompt returned: ${typeof result} (${result?.length || 0} chars)`);
-      } catch (e) {
-        console.warn("[openclaw-bridge] generateQuietPrompt failed, retrying without force_chid:", e);
-        debugLog.push(`generateQuietPrompt failed: ${e.message}`);
-        result = await generateQuietPrompt({ quietPrompt: message, quietToLoud: true, removeReasoning: false });
-        debugLog.push(`Retry returned: ${typeof result} (${result?.length || 0} chars)`);
-      }
+      result = await generateQuietPrompt({
+        quietPrompt: message,
+        forceChId: chid,
+        skipWIAN: false,
+        quietToLoud: true,
+        removeReasoning: false,
+        trimToSentence: false
+      });
+      debugLog.push(`generateQuietPrompt returned: ${typeof result} (${result?.length || 0} chars)`);
       if (!result && typeof generate === "function") {
         console.warn("[openclaw-bridge] generateQuietPrompt returned empty; falling back to generate()");
         debugLog.push("generateQuietPrompt was empty; falling back to generate()");
