@@ -1789,4 +1789,55 @@ describe('plugin routes', () => {
         expect(res.statusCode).toBe(400);
         expect(res.body.error).toMatch(/entry_key and content are required/);
     });
+
+    test('POST /log-action returns 400 for path traversal in character name', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/log-action');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { character: '../../escape', action_description: 'Posted something' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/invalid character name/i);
+    });
+
+    test('POST /generate returns 400 for path traversal in character name', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+            queueChatUpdated: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            body: { character: '../escape', message: 'Hello' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/invalid character name/i);
+    });
 });

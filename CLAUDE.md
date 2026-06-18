@@ -6,13 +6,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This project bridges OpenClaw (OC) and SillyTavern (ST) so that AI companion characters maintain a single canonical identity across all communication channels. ST is the brain (character cards, lorebooks, memory, LLM pipeline). OC is the body (Discord, Telegram, WhatsApp, autonomous scheduled actions). OC character agents install the `character-bridge` skill, which teaches them to POST incoming messages to the ST plugin rather than responding directly.
 
+## Pre-commit gate — mandatory
+
+**Run `npm run test:all` before every commit. No exceptions.**
+
+This is the only valid way to verify all four test tiers. Do not substitute individual npm scripts, unit-only runs, or unit+fast runs — partial runs bypass the mandatory Docker image rebuild step and can produce false-green results. Never say a task is complete or ready to commit without having run this command successfully.
+
+If disk space is low, free it first: `docker system prune -f --volumes && docker builder prune -f`, then rerun.
+
 ## Commands
 
 ```bash
 # Install dependencies
 npm install
 
-# Run all unit tests
+# Run ALL four test tiers (unit + fast + browser + full) — REQUIRED before every commit.
+# Mandatory image rebuilds are built in; "stale Docker image" is not possible.
+npm run test:all
+
+# Run only unit tests (NOT sufficient as a pre-commit gate)
 npm test
 
 # Run a single test file
@@ -24,9 +36,8 @@ npm test -- st-plugin
 # Run unit tests without Playwright startup noise (much faster)
 OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
 
-# Run ALL four test tiers (unit + fast + browser + full) — always use this before committing.
-# Mandatory image rebuilds are built in; "stale Docker image" is not possible.
-bash ./scripts/test-all.sh
+# Skip unit tier when only E2E has changed (inner loop shortcut only)
+npm run test:all:skip-unit
 
 # Run only the fast + browser tiers (no full-tier OC stack):
 npm run test:e2e:fast && npm run test:e2e:browser
@@ -234,6 +245,8 @@ The `log-action` call (R5.5) after the switch already records the outcome to ST 
 Do not create git commits or push changes unless explicitly asked. The repository maintainer handles all commits and pushes.
 
 All implementation work must happen on a feature branch, not directly on `main`. Branch protection requires both `Unit tests` and `E2E fast tier` CI checks to pass before a PR can be merged. At the start of any new issue or task, create a branch (e.g. `feat/issue-42` or `fix/warnings`) before writing any code.
+
+**Before any commit:** run `npm run test:all` and confirm all four tiers pass. This is the pre-commit gate — see the "Pre-commit gate" section at the top of this file. Never report a task as done without having run this command.
 
 ## Conventions
 
