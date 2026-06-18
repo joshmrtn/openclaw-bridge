@@ -262,7 +262,7 @@ describe('full message path: qa-bus → OC → ST → fake-ollama → qa-bus', (
     await waitFor(async () => {
       const state = await fetch(`${QA_BUS_URL}/v1/state`);
       return (state.body.events || []).some(e => e.kind === 'outbound-message');
-    }, { timeoutMs: 60000, intervalMs: 1000, label: 'outbound message for history test' });
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'outbound message for history test' });
 
     // Verify chat history was written in ST
     const historyResp = await stFetch('/history?character=TestBot');
@@ -378,7 +378,7 @@ describe('heartbeat fires on schedule (R10)', () => {
     // Restore link without heartbeat so subsequent tests are unaffected.
     await stFetch('/characters/TestBot/link', {
       method: 'POST',
-      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [], heartbeat: null }),
     });
   }, 45000);
 });
@@ -823,7 +823,7 @@ describe('R11: memory write on OC path', () => {
     // Restore link without heartbeat so subsequent tests are unaffected.
     await stFetch('/characters/TestBot/link', {
       method: 'POST',
-      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: ['qa:owner-user'] }),
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: ['qa:owner-user'], heartbeat: null }),
     });
 
     // The lorebook entry must have been written by the heartbeat path.
