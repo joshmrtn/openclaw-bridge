@@ -635,6 +635,20 @@ export default definePluginEntry({
 
             const channelId: string = ctx.channelId ?? "";
 
+            // Self-message guard: drop messages where the sender is our own bot account.
+            // Real channel platforms filter this at the SDK level (Discord does not echo
+            // bot messages back to the bot; OC adapters check senderId === botUserId).
+            // This guard is defense-in-depth for platforms or edge cases where that
+            // filtering is absent. Without it, a send_message action could arrive back
+            // as an inbound message and trigger an infinite generation loop.
+            const chanCfgs = (api.config?.channels ?? {}) as Record<string, any>;
+            const chanCfg = chanCfgs[channelId] ?? chanCfgs[channelType] ?? {};
+            const botUserId: string | null = typeof chanCfg.botUserId === "string" ? chanCfg.botUserId : null;
+            if (botUserId && senderId === botUserId) {
+                console.log(`[openclaw-bridge] Self-message from bot account ${senderId} — dropping to prevent loop`);
+                return { handled: true, text: "" };
+            }
+
             const deliverFallback = async (reason: string): Promise<{ handled: true; text: string } | undefined> => {
                 const msg = linkEntry.fallback_message;
                 if (!msg) return undefined;
