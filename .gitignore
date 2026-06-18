@@ -11,6 +11,9 @@ data/
 # Node modules
 node_modules
 
+# OC plugin compiled test output (dist/index.js is committed; tests/ is not)
+oc-plugin/dist/tests/
+
 # SillyTavern submodule
 sillytavern/node_modules/
 sillytavern/data/
