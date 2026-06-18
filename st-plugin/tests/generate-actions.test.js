@@ -517,6 +517,37 @@ describe('/generate action injection and parsing', () => {
         expect(res.body.response).toContain('Got it.');
     });
 
+    test('trust label falls back to [GUEST] when link-state read throws (#122)', async () => {
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Ribbit!', actions: [] });
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+        makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => { throw new Error('disk error'); }),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hello', user_id: 'discord:anyone' }), res);
+
+        expect(requestGenerate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                message: expect.stringContaining('[GUEST]'),
+            }),
+            undefined
+        );
+        expect(requestGenerate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                message: expect.stringContaining('Hello'),
+            }),
+            undefined
+        );
+        expect(res.body.response).toBe('Ribbit!');
+    });
+
     test('heartbeat path: write_memory block routes to lorebook, not to OC actions', async () => {
         const rawResponse = 'Heartbeat done.<action>{"type":"write_memory","entry_key":"hb_memory","content":"Checked in","tier":1}</action>';
         const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
