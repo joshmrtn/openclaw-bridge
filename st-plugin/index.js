@@ -591,8 +591,9 @@ async function init(router) {
                 if (innerErr.statusCode === 503 || isWsUnavailableError(innerErr)) {
                     throw innerErr;
                 }
-                // No link state or error reading it; try without label
-                const promptedBareMessage = actionPrompt ? `${message}\n\n${actionPrompt}` : message;
+                // Link-state unavailable: safe fallback is [GUEST], never bare (trust labels are always injected by code)
+                const guestMessage = `[GUEST]\n${message}`;
+                const promptedBareMessage = actionPrompt ? `${guestMessage}\n\n${actionPrompt}` : guestMessage;
                 try {
                     const genResult = await sessionManager.requestGenerate({ character, message: promptedBareMessage, images, channel, user_id }, timeoutMs);
                     const { actions: parsedFallbackActions, text: fallbackText } = parseActionBlocks(genResult.response);
