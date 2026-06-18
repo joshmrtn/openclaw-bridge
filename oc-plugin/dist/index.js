@@ -20,6 +20,7 @@ const TOKEN_FILE = resolve(OC_BRIDGE_DATA, "bridge-token.txt");
 // OPENCLAW_BRIDGE_URL is intentionally NOT used here — that variable is for
 // the character-bridge skill and may be https or lack the plugin path prefix.
 const ST_BASE = process.env.OPENCLAW_BRIDGE_ST_URL ?? "http://127.0.0.1:8000";
+const HEARTBEAT_TIMEOUT_MS = parseInt(process.env.OPENCLAW_BRIDGE_HEARTBEAT_TIMEOUT_MS ?? "60000", 10);
 function readLinkState() {
     try {
         const raw = readFileSync(LINKS_FILE, "utf8");
@@ -127,17 +128,29 @@ function shouldStripAsteriskMarkup(channelId, linkEntry) {
     const channelType = channelId.split("-")[0];
     return channelType === "telegram";
 }
+// Guards against ReDoS: long lines skip table classification entirely.
+const TABLE_LINE_MAX = 500;
+// Returns true for markdown table separator rows (|---|---| or | :--: |).
+// Uses a length guard and a negated character class instead of a nested quantifier
+// to prevent catastrophic backtracking on adversarial input.
+function isTableSeparatorRow(line) {
+    if (line.length > TABLE_LINE_MAX)
+        return false;
+    const t = line.trim();
+    if (t.length < 3 || t[0] !== "|" || t[t.length - 1] !== "|")
+        return false;
+    return !/[^|:\-\s]/.test(t.slice(1, -1));
+}
 // Strip inline and block-level markdown, preserving semantic content. Collapses extra whitespace.
 export function formatOutboundText(text, channelId, linkEntry) {
     if (!shouldStripAsteriskMarkup(channelId, linkEntry))
         return text;
     const lines = text.split("\n");
     const processed = lines
-        // Remove table separator rows (lines containing only |, -, :, and spaces)
-        .filter(line => !/^\s*\|[-:\s|]+\|\s*$/.test(line))
+        .filter(line => !isTableSeparatorRow(line))
         .map(line => {
         // Table data rows: | foo | bar | → foo | bar
-        if (/^\s*\|/.test(line) && /\|\s*$/.test(line.trim())) {
+        if (line.length <= TABLE_LINE_MAX && /^\s*\|/.test(line) && /\|\s*$/.test(line.trim())) {
             return line.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
                 .split("|").map(c => c.trim()).filter(Boolean).join(" | ");
         }
@@ -288,6 +301,15 @@ async function postJson(url, authToken, body) {
 // ---------------------------------------------------------------------------
 // Heartbeat execution (R10)
 // ---------------------------------------------------------------------------
+export function withTimeout(ms, label, promise) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            console.warn(`[openclaw-bridge] ${label} timed out after ${ms}ms`);
+            reject(new Error(`${label} timed out after ${ms}ms`));
+        }, ms);
+        promise.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+    });
+}
 async function runHeartbeat(character, link, trigger, api) {
     if (runningHeartbeats.has(character))
         return;
@@ -301,13 +323,13 @@ async function runHeartbeat(character, link, trigger, api) {
     const prompt = hb.prompt ?? defaultPrompt;
     console.log(`[openclaw-bridge] Heartbeat trigger=${trigger} character=${character} channel=${channelId}`);
     try {
-        const result = await postJson(`${ST_BASE}/api/plugins/openclaw-bridge/generate`, token, {
+        const result = await withTimeout(HEARTBEAT_TIMEOUT_MS, `heartbeat(${character})`, postJson(`${ST_BASE}/api/plugins/openclaw-bridge/generate`, token, {
             character,
             message: prompt,
             user_id: "heartbeat:system",
             is_heartbeat: true,
             channel: channelId || null,
-        });
+        }));
         if (result.status !== 200) {
             console.warn(`[openclaw-bridge] Heartbeat ST returned ${result.status} for ${character}: ${JSON.stringify(result.body)}`);
             return;
@@ -485,6 +507,19 @@ export default definePluginEntry({
             }
             console.log(`[openclaw-bridge] Intercepting message — account=${accountId} character=${character} userId=${userId ?? "unknown"}`);
             const channelId = ctx.channelId ?? "";
+            // Self-message guard: drop messages where the sender is our own bot account.
+            // Real channel platforms filter this at the SDK level (Discord does not echo
+            // bot messages back to the bot; OC adapters check senderId === botUserId).
+            // This guard is defense-in-depth for platforms or edge cases where that
+            // filtering is absent. Without it, a send_message action could arrive back
+            // as an inbound message and trigger an infinite generation loop.
+            const chanCfgs = (api.config?.channels ?? {});
+            const chanCfg = chanCfgs[channelId] ?? chanCfgs[channelType] ?? {};
+            const botUserId = typeof chanCfg.botUserId === "string" ? chanCfg.botUserId : null;
+            if (botUserId && senderId === botUserId) {
+                console.log(`[openclaw-bridge] Self-message from bot account ${senderId} — dropping to prevent loop`);
+                return { handled: true, text: "" };
+            }
             const deliverFallback = async (reason) => {
                 const msg = linkEntry.fallback_message;
                 if (!msg)

@@ -706,6 +706,151 @@ describe('outbound character actions (R5)', () => {
   }, 120000);
 });
 
+// ── #111: send_message action and loop prevention ────────────────────────────
+// Verifies two properties from every angle:
+//   A) A send_message action produced during generation is actually delivered to
+//      the configured channel in the qa-bus (functional correctness).
+//   B) The system never generates a second response in reaction to an outbound
+//      message (loop safety), whether via OC's platform-level self-message
+//      filtering or the oc-plugin's own self-message guard.
+describe('send_message action and loop prevention (#111)', () => {
+  const CHANNEL_TARGET = 'channel:qa-send-test';
+
+  // senderId must be the raw platform user ID with no platform prefix.
+  // OC prefixes it with the channel type to form userId (e.g. "qa:owner-uid"),
+  // which is then matched against owner_user_ids.  Including the prefix here
+  // would produce a double-prefixed userId that never matches.
+  const OWNER_SENDER_ID = 'owner-uid';
+  const OWNER_USER_ID = 'qa:owner-uid';
+
+  beforeEach(async () => {
+    // Give TestBot a channel entry so send_message actions can resolve.
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({
+        oc_agent_id: 'default',
+        owner_user_ids: [OWNER_USER_ID],
+        channels: [{ name: 'qa', channel_id: 'qa-channel', target: CHANNEL_TARGET }],
+      }),
+    });
+  });
+
+  afterEach(async () => {
+    // Remove channel entry so it doesn't affect subsequent tests.
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [OWNER_USER_ID], channels: null }),
+    });
+  });
+
+  test('send_message action delivers text to the configured channel', async () => {
+    const REPLY_TEXT = 'On it, posting now!';
+    const ACTION_TEXT = 'Channel announcement from TestBot!';
+    // First scenario consumed by the real generation; second would only fire if a loop occurs.
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":"${ACTION_TEXT}"}</action>`,
+    });
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: 'LOOP_DETECTED_DO_NOT_WANT' });
+
+    const convId = `conv-111-send-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: OWNER_SENDER_ID,
+      senderName: 'Owner',
+      text: 'Please post something to the channel.',
+    });
+
+    // Wait for the direct reply to the user (should not contain the action block).
+    const reply = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.find(e => (e.message?.text || '').includes(REPLY_TEXT)) || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'send_message direct reply to user' });
+
+    expect(reply.message.text).not.toContain('<action>');
+    expect(reply.message.text).toContain(REPLY_TEXT);
+
+    // Wait for the channel post from the send_message action.
+    const channelPost = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.find(e => e.message?.conversation?.id === 'qa-send-test') || null;
+    }, { timeoutMs: 30000, intervalMs: 1000, label: 'send_message channel post' });
+
+    expect(channelPost.message.text).toBe(ACTION_TEXT);
+  }, 150000);
+
+  test('send_message action does not trigger a second generation (no loop)', async () => {
+    const REPLY_TEXT = 'Sure, posting to channel.';
+    const ACTION_TEXT = 'Hello from character!';
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":"${ACTION_TEXT}"}</action>`,
+    });
+    // Guard: second scenario fires only if a loop causes a second generation.
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: 'LOOP_DETECTED_DO_NOT_WANT' });
+
+    const convId = `conv-111-noloop-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: OWNER_SENDER_ID,
+      senderName: 'Owner',
+      text: 'Post something please.',
+    });
+
+    // Wait for the reply and the channel post to both arrive.
+    await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      const hasReply = events.some(e => (e.message?.text || '').includes(REPLY_TEXT));
+      const hasAction = events.some(e => e.message?.conversation?.id === 'qa-send-test');
+      return (hasReply && hasAction) || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'send_message reply + channel post' });
+
+    // After both expected messages have arrived, snapshot the count and wait.
+    // A loop would cause additional outbound messages within this window.
+    const snapBefore = (await fetch(`${QA_BUS_URL}/v1/state`)).body.events.filter(
+      e => e.kind === 'outbound-message'
+    ).length;
+    await sleep(8000);
+    const snapAfter = (await fetch(`${QA_BUS_URL}/v1/state`)).body.events.filter(
+      e => e.kind === 'outbound-message'
+    ).length;
+
+    expect(snapAfter).toBe(snapBefore);
+
+    const finalState = await fetch(`${QA_BUS_URL}/v1/state`);
+    const loopDetected = (finalState.body.events || []).some(
+      e => e.kind === 'outbound-message' && (e.message?.text || '').includes('LOOP_DETECTED_DO_NOT_WANT')
+    );
+    expect(loopDetected).toBe(false);
+  }, 150000);
+
+  test('inbound message from bot own account does not trigger generation', async () => {
+    // Queue a marker scenario: appears in an outbound message only if the guard
+    // fails and generation actually runs for the self-message.
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: 'SELF_LOOP_DETECTED_DO_NOT_WANT' });
+
+    // Inject a message from the bot's own account ID (botUserId: "openclaw" in
+    // openclaw.json for the qa-channel).  Real platforms (Discord, Telegram) filter
+    // self-messages at the SDK level; the oc-plugin guard is defense-in-depth.
+    const convId = `conv-111-self-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'openclaw',
+      text: 'loop guard test message',
+    });
+
+    // Allow enough time for a full generation round-trip if one were triggered.
+    await sleep(12000);
+
+    const state = await fetch(`${QA_BUS_URL}/v1/state`);
+    const loopDetected = (state.body.events || []).some(
+      e => e.kind === 'outbound-message' && (e.message?.text || '').includes('SELF_LOOP_DETECTED_DO_NOT_WANT')
+    );
+    expect(loopDetected).toBe(false);
+  }, 30000);
+});
+
 // ── R11: memory write on OC path ─────────────────────────────────────────────
 // Proves the full pipeline: OC message in → fake-ollama returns response with a
 // write_memory <action> block → plugin parses/strips the block and writes the
