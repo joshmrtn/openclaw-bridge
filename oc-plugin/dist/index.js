@@ -1,6 +1,6 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -395,7 +395,15 @@ async function executeCharacterActions(actions, character, token, api, ctx, link
                     break;
                 }
                 case "file_write": {
-                    await writeFile(String(action.path), String(action.content ?? ""), "utf8");
+                    const workspace = resolve(homedir(), ".openclaw", "characters", character, "workspace");
+                    const target = resolve(workspace, String(action.path ?? ""));
+                    if (!target.startsWith(workspace + "/") && target !== workspace) {
+                        console.warn(`[openclaw-bridge] file_write blocked: path escapes workspace (${target})`);
+                        outcome = "blocked";
+                        break;
+                    }
+                    await mkdir(resolve(target, ".."), { recursive: true });
+                    await writeFile(target, String(action.content ?? ""), "utf8");
                     outcome = "written";
                     break;
                 }
