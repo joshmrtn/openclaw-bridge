@@ -251,4 +251,25 @@ describe('chat-history', () => {
         // No exchange_id means no dedup — both writes go through: 2 + 2 + 2 = 6
         expect(msgs.length).toBe(6);
     });
+
+    test('appendMessage rejects path traversal in characterName', async () => {
+        const msg = chatHistory.constructStMessage({ role: 'assistant', content: 'Injected' });
+        await expect(chatHistory.appendMessage('../escape', msg, tmpDir)).rejects.toThrow();
+    });
+
+    test('appendMessage rejects absolute path in characterName', async () => {
+        const msg = chatHistory.constructStMessage({ role: 'assistant', content: 'Injected' });
+        await expect(chatHistory.appendMessage('/etc/passwd', msg, tmpDir)).rejects.toThrow();
+    });
+
+    test('appendExternalChatToHistory rejects path traversal in characterName', async () => {
+        await expect(
+            chatHistory.appendExternalChatToHistory(
+                '../../escape',
+                { message: 'Hey', images: [], user_id: 'discord:1' },
+                'Hi',
+                tmpDir,
+            )
+        ).rejects.toThrow();
+    });
 });

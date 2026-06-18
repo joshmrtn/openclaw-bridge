@@ -16,7 +16,12 @@ function _enqueue(fileKey, fn) {
 }
 
 function _charDirFor(baseDir, characterName) {
-    return path.join(baseDir || DEFAULT_CHATS_DIR, characterName);
+    const base = path.resolve(baseDir || DEFAULT_CHATS_DIR);
+    const resolved = path.resolve(base, characterName);
+    if (resolved !== base && !resolved.startsWith(base + path.sep)) {
+        throw new Error(`Invalid character name: path traversal detected`);
+    }
+    return resolved;
 }
 
 async function listChatFiles(characterName, baseDir = DEFAULT_CHATS_DIR) {

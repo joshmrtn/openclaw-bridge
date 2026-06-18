@@ -124,6 +124,10 @@ function isWsUnavailableError(error) {
     return msg.includes('No connected extension client') || msg.includes('Timed out waiting for generation response');
 }
 
+function isSafeCharacterName(name) {
+    return typeof name === 'string' && name.length > 0 && path.basename(name) === name;
+}
+
 async function ensureCharacterExists(characterName) {
     const chars = await charLoader.listCharacters();
     return chars.some(entry => entry && entry.name === characterName);
@@ -433,6 +437,11 @@ async function init(router) {
             return;
         }
 
+        if (!isSafeCharacterName(character)) {
+            response.status(400).json({ error: 'Invalid character name' });
+            return;
+        }
+
         try {
             const msg = `[Autonomous action on ${channel || 'unknown channel'}]: ${action_description}`;
             const entry = chatHistory.constructStMessage({ role: 'system', content: msg });
@@ -452,6 +461,11 @@ async function init(router) {
 
         if (!character || !message) {
             response.status(400).json({ error: 'character and message are required' });
+            return;
+        }
+
+        if (!isSafeCharacterName(character)) {
+            response.status(400).json({ error: 'Invalid character name' });
             return;
         }
 
