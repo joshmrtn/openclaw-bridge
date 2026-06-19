@@ -582,8 +582,9 @@ async function init(router) {
                     // R5.4: only forward OC outbound actions for owner-initiated requests
                     const rawPendingActions = isOwner ? [...(genResult.actions || []), ...parsedOcActions] : [];
                     pendingActions = rawPendingActions.length > 0 ? await resolveActions(rawPendingActions, links, character) : [];
-                    // R11: ST-side actions (memory writes) are processed by the plugin, not forwarded to OC
-                    stSideActions = [...(genResult.st_side_actions || []), ...parsedStActions];
+                    // R11: ST-side actions (memory writes) are processed by the plugin, not forwarded to OC.
+                    // Only execute for owner-initiated requests — guests must not poison persistent memory (#169).
+                    stSideActions = isOwner ? [...(genResult.st_side_actions || []), ...parsedStActions] : [];
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;
@@ -608,11 +609,8 @@ async function init(router) {
                     const genResult = await sessionManager.requestGenerate({ character, message: promptedBareMessage, images, channel, user_id }, timeoutMs);
                     const { actions: parsedFallbackActions, text: fallbackText } = parseActionBlocks(genResult.response);
                     generatedText = fallbackText;
-                    // No link state: discard OC outbound actions (R5.4); ST-side memory writes still processed
-                    stSideActions = [
-                        ...(genResult.st_side_actions || []),
-                        ...parsedFallbackActions.filter(a => ST_SIDE_TYPES.has(a.type)),
-                    ];
+                    // No link state: discard all actions — OC outbound (R5.4) and memory writes (#169).
+                    // Trust is indeterminate here, so stSideActions stays [].
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;

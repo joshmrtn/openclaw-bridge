@@ -888,12 +888,16 @@ describe('R11: memory write on OC path', () => {
   const MEMORY_CONTENT = 'User told me they enjoy jazz music.';
   const MEMORY_RESPONSE = `I will remember that.<action>{"type":"write_memory","entry_key":"${MEMORY_KEY}","content":"${MEMORY_CONTENT}","tier":1}</action>`;
   const CLEAN_TEXT = 'I will remember that.';
+  // OC prefixes senderId with channelType to form userId (e.g. qa:r11-owner).
+  // owner_user_ids must use the prefixed form; senderId must NOT include the prefix.
+  const OWNER_SENDER_ID = 'r11-owner';
+  const OWNER_USER_ID = `qa:${OWNER_SENDER_ID}`;
 
   beforeEach(async () => {
     await post(`${QA_BUS_URL}/v1/reset`, {});
     await stFetch('/characters/TestBot/link', {
       method: 'POST',
-      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: ['qa:owner-user'] }),
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [OWNER_USER_ID] }),
     });
   });
 
@@ -903,7 +907,7 @@ describe('R11: memory write on OC path', () => {
     const convId = `dm-r11-owner-${Date.now()}`;
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
       conversation: { id: convId, kind: 'direct' },
-      senderId: 'qa:owner-user',
+      senderId: OWNER_SENDER_ID,
       senderName: 'Owner',
       text: 'I really enjoy jazz music, please remember that.',
     });
@@ -934,7 +938,7 @@ describe('R11: memory write on OC path', () => {
     expect(found.tier).toBe(1);
   }, 120000);
 
-  test('write_memory block persists to lorebook even for guest sender (no trust gate)', async () => {
+  test('write_memory block is blocked for guest sender (#169)', async () => {
     const convId = `dm-r11-guest-${Date.now()}`;
     const guestMemoryKey = `oc_guest_mem_${Date.now()}`;
     const guestResponse = `Noted.<action>{"type":"write_memory","entry_key":"${guestMemoryKey}","content":"Guest info noted","tier":2}</action>`;
@@ -942,7 +946,7 @@ describe('R11: memory write on OC path', () => {
 
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
       conversation: { id: convId, kind: 'direct' },
-      senderId: 'qa:guest-user',
+      senderId: 'guest-user',
       senderName: 'Guest',
       text: 'Remember me, I am a guest.',
     });
@@ -953,13 +957,12 @@ describe('R11: memory write on OC path', () => {
       return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
     }, { timeoutMs: 90000, intervalMs: 1000, label: 'R11 guest memory write outbound message' });
 
-    // Memory write must have fired regardless of guest trust level.
+    // Memory write must have been blocked — guest cannot poison persistent memory.
     const memResp = await stFetch('/characters/TestBot/memory');
     expect(memResp.status).toBe(200);
     const { entries } = memResp.body;
     const found = entries.find(e => e.entry_key === guestMemoryKey);
-    expect(found).toBeDefined();
-    expect(found.content).toBe('Guest info noted');
+    expect(found).toBeUndefined();
   }, 120000);
 
   test('heartbeat path: write_memory block persists to lorebook', async () => {
