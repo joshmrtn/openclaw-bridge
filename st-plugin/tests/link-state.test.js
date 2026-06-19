@@ -172,4 +172,46 @@ describe('link-state', () => {
         expect(linkState.getLink('Frog')).toMatchObject({ active: false });
         expect(linkState.getLink('Toad')).toBeNull();
     });
+
+    test('writeState leaves no .tmp file after successful write (#124)', async () => {
+        const linkState = require('../link-state');
+        const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
+
+        await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true });
+
+        expect(fs.existsSync(linksPath + '.tmp')).toBe(false);
+    });
+
+    test('writeState overwrites stale .tmp file left by a previous crash (#124)', async () => {
+        const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
+        fs.mkdirSync(path.dirname(linksPath), { recursive: true });
+        fs.writeFileSync(linksPath + '.tmp', 'stale corrupted data');
+
+        const linkState = require('../link-state');
+        await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true });
+
+        expect(fs.existsSync(linksPath + '.tmp')).toBe(false);
+        expect(linkState.getLink('Frog')).toMatchObject({ oc_agent_id: 'frog' });
+    });
+
+    test('writeState preserves original file when rename fails (#124)', async () => {
+        const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
+        fs.mkdirSync(path.dirname(linksPath), { recursive: true });
+        fs.writeFileSync(linksPath, JSON.stringify({ Frog: { oc_agent_id: 'frog', active: true, owner_user_ids: [] } }, null, 2));
+
+        const origRename = fs.promises.rename;
+        fs.promises.rename = jest.fn().mockRejectedValue(new Error('ENOSPC: no space left on device'));
+
+        const linkState = require('../link-state');
+
+        await expect(
+            linkState.upsertLink('Toad', { oc_agent_id: 'toad', active: true })
+        ).rejects.toThrow('ENOSPC');
+
+        fs.promises.rename = origRename;
+
+        const content = JSON.parse(fs.readFileSync(linksPath, 'utf8'));
+        expect(content).toHaveProperty('Frog');
+        expect(content).not.toHaveProperty('Toad');
+    });
 });
