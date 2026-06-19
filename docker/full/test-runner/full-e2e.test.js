@@ -365,6 +365,72 @@ describe('character isolation', () => {
     expect(r2.body.response).toMatch(/\[persona:Narrator\]/);
     expect(r2.body.response).not.toMatch(/\[persona:TestBot\]/);
   }, 120000);
+
+  test('three concurrent requests for the same character all succeed with correct persona (R7.4)', async () => {
+    // Fire 3 simultaneous /generate calls for TestBot.
+    // withCharacterLock in the extension serialises them so they don't interleave.
+    // fake-ollama echoes [persona:TestBot] for each — all three must carry it.
+    const [r1, r2, r3] = await Promise.all([
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'TestBot', message: 'Request one.', channel: 'qa-channel', user_id: 'qa:user1' }),
+      }),
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'TestBot', message: 'Request two.', channel: 'qa-channel', user_id: 'qa:user2' }),
+      }),
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'TestBot', message: 'Request three.', channel: 'qa-channel', user_id: 'qa:user3' }),
+      }),
+    ]);
+
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(r3.status).toBe(200);
+    expect(r1.body.response).toMatch(/\[persona:TestBot\]/);
+    expect(r2.body.response).toMatch(/\[persona:TestBot\]/);
+    expect(r3.body.response).toMatch(/\[persona:TestBot\]/);
+    expect(r1.body.response).not.toMatch(/\[persona:Narrator\]/);
+    expect(r2.body.response).not.toMatch(/\[persona:Narrator\]/);
+    expect(r3.body.response).not.toMatch(/\[persona:Narrator\]/);
+  }, 180000);
+
+  test('same-character serialization does not starve a concurrent request for a different character (R7.4)', async () => {
+    // Fire 3 TestBot requests and 1 Narrator request simultaneously.
+    // TestBot requests serialise via withCharacterLock; Narrator enters the global
+    // generation lock queue independently and does not wait behind all 3 TestBot
+    // requests. All 4 must complete with the correct persona marker and no bleed.
+    const [r1, r2, r3, rN] = await Promise.all([
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'TestBot', message: 'Request one.', channel: 'qa-channel', user_id: 'qa:user1' }),
+      }),
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'TestBot', message: 'Request two.', channel: 'qa-channel', user_id: 'qa:user2' }),
+      }),
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'TestBot', message: 'Request three.', channel: 'qa-channel', user_id: 'qa:user3' }),
+      }),
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'Narrator', message: 'Say your name.', channel: 'qa-channel', user_id: 'qa:user4' }),
+      }),
+    ]);
+
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(r3.status).toBe(200);
+    expect(rN.status).toBe(200);
+    expect(r1.body.response).toMatch(/\[persona:TestBot\]/);
+    expect(r2.body.response).toMatch(/\[persona:TestBot\]/);
+    expect(r3.body.response).toMatch(/\[persona:TestBot\]/);
+    expect(rN.body.response).toMatch(/\[persona:Narrator\]/);
+    expect(r1.body.response).not.toMatch(/\[persona:Narrator\]/);
+    expect(rN.body.response).not.toMatch(/\[persona:TestBot\]/);
+  }, 240000);
 });
 
 describe('heartbeat fires on schedule (R10)', () => {
