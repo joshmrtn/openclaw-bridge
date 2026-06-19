@@ -402,3 +402,90 @@ describe('generateForCharacter — generateQuietPrompt dispatch', () => {
         expect(mock).toHaveBeenCalledTimes(1);
     });
 });
+
+// Pure copy of withCharacterLock for concurrent-action tests (#125)
+function makeCharacterLockEnv() {
+    const characterLocks = new Map();
+    const pendingActions = new Map();
+    const pendingStSideActions = new Map();
+
+    function withCharacterLock(characterName, task) {
+        const previous = characterLocks.get(characterName) || Promise.resolve();
+        const next = previous.then(task, task);
+        characterLocks.set(characterName, next.catch(() => {}));
+        return next;
+    }
+
+    // Simulates the BUGGY path: set called before lock acquired
+    async function handleBuggy(character, generateFn) {
+        pendingActions.set(character, []);
+        pendingStSideActions.set(character, []);
+        const response = await withCharacterLock(character, () => generateFn(pendingActions, pendingStSideActions, character));
+        return { response, actions: pendingActions.get(character) || [] };
+    }
+
+    // Simulates the FIXED path: set called inside the lock task
+    async function handleFixed(character, generateFn) {
+        const response = await withCharacterLock(character, async () => {
+            pendingActions.set(character, []);
+            pendingStSideActions.set(character, []);
+            return generateFn(pendingActions, pendingStSideActions, character);
+        });
+        return { response, actions: pendingActions.get(character) || [] };
+    }
+
+    return { pendingActions, pendingStSideActions, handleBuggy, handleFixed };
+}
+
+describe('pendingActions reset ordering under concurrent requests (#125)', () => {
+    it('buggy path: request B set() wipes actions queued during A generation', async () => {
+        const { pendingActions, handleBuggy } = makeCharacterLockEnv();
+
+        let resolveA;
+        const genA = (_pm, _s, _c) => new Promise(resolve => { resolveA = () => resolve('response-A'); });
+        const genB = (_pm, _s, _c) => Promise.resolve('response-B');
+
+        const promiseA = handleBuggy('Frog', genA);
+        await Promise.resolve(); // let genA start and set resolveA
+
+        // Tool call fires during A's generation — action lands in A's array
+        pendingActions.get('Frog').push('action-from-A');
+        expect(pendingActions.get('Frog')).toEqual(['action-from-A']);
+
+        // B arrives concurrently — its set() runs synchronously, wiping A's array
+        const promiseB = handleBuggy('Frog', genB);
+        expect(pendingActions.get('Frog')).toEqual([]); // B wiped A's action!
+
+        resolveA();
+        const resultA = await promiseA;
+        await promiseB;
+
+        // A reads back the map after the lock and gets an empty array — action lost
+        expect(resultA.actions).toEqual([]);
+    });
+
+    it('fixed path: request B set() is inside lock so A actions survive (#125)', async () => {
+        const { pendingActions, handleFixed } = makeCharacterLockEnv();
+
+        let resolveA;
+        const genA = (_pm, _s, _c) => new Promise(resolve => { resolveA = () => resolve('response-A'); });
+        const genB = (_pm, _s, _c) => Promise.resolve('response-B');
+
+        const promiseA = handleFixed('Frog', genA);
+        await Promise.resolve(); // let lockTaskA start (runs set() then genA, sets resolveA)
+
+        // Tool call fires during A's generation
+        pendingActions.get('Frog').push('action-from-A');
+
+        // B arrives — its set() is inside the lock so it's deferred until A completes
+        const promiseB = handleFixed('Frog', genB);
+        expect(pendingActions.get('Frog')).toEqual(['action-from-A']); // still A's array
+
+        resolveA();
+        const resultA = await promiseA;
+        await promiseB;
+
+        // A's action survived
+        expect(resultA.actions).toEqual(['action-from-A']);
+    });
+});

@@ -1051,12 +1051,13 @@ async function handleGenerateRequest(payload) {
     const { requestId, character, message } = payload;
     console.info('[openclaw-bridge] handleGenerateRequest received:', { requestId, character, messagePreview: message?.substring(0, 50) });
 
-    STATE.pendingActions.set(character, []);
-    STATE.pendingStSideActions.set(character, []);
-
     try {
         console.info('[openclaw-bridge] Starting generation with character lock');
-        const response = await withCharacterLock(character, () => generateForCharacter(character, message));
+        const response = await withCharacterLock(character, () => {
+            STATE.pendingActions.set(character, []);
+            STATE.pendingStSideActions.set(character, []);
+            return generateForCharacter(character, message);
+        });
         const actions = STATE.pendingActions.get(character) || [];
         const stSideActions = STATE.pendingStSideActions.get(character) || [];
         console.info('[openclaw-bridge] Generation completed:', { requestId, responseLength: response?.length, actionsCount: actions.length, stSideActionsCount: stSideActions.length, responsePreview: response?.substring(0, 100) });
@@ -1129,13 +1130,15 @@ function startHttpPollingFallback() {
             console.info('[openclaw-bridge] Polled HTTP message:', msg.type, msg.requestId);
             if (msg.type === 'generate') {
                 const payload = msg.payload || {};
-                STATE.pendingActions.set(payload.character, []);
-                STATE.pendingStSideActions.set(payload.character, []);
                 let responseText;
                 let actions = [];
                 let stSideActions = [];
                 try {
-                    responseText = await withCharacterLock(payload.character, () => generateForCharacter(payload.character, payload.message));
+                    responseText = await withCharacterLock(payload.character, () => {
+                        STATE.pendingActions.set(payload.character, []);
+                        STATE.pendingStSideActions.set(payload.character, []);
+                        return generateForCharacter(payload.character, payload.message);
+                    });
                     actions = STATE.pendingActions.get(payload.character) || [];
                     stSideActions = STATE.pendingStSideActions.get(payload.character) || [];
                 } finally {
