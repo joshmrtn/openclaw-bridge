@@ -16,18 +16,47 @@ function getLinksPath() {
     return path.join(__dirname, '..', 'data', 'openclaw-bridge', 'character-links.json');
 }
 
+async function _nextCorruptPath(filePath) {
+    const base = filePath + '.corrupt';
+    try {
+        await fs.promises.access(base);
+    } catch (_) {
+        return base;
+    }
+    for (let n = 2; ; n++) {
+        const candidate = `${base}.${n}`;
+        try {
+            await fs.promises.access(candidate);
+        } catch (_) {
+            return candidate;
+        }
+    }
+}
+
 async function readState() {
     const filePath = getLinksPath();
+    let raw;
     try {
-        const raw = await fs.promises.readFile(filePath, 'utf8');
-        const parsed = JSON.parse(raw || '{}');
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            return {};
-        }
-        return parsed;
-    } catch (_) {
-        return {};
+        raw = await fs.promises.readFile(filePath, 'utf8');
+    } catch (err) {
+        if (err.code === 'ENOENT') return {};
+        throw err;
     }
+    if (!raw || !raw.trim()) return {};
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    } catch (_) {
+        const corruptPath = await _nextCorruptPath(filePath);
+        try { await fs.promises.writeFile(corruptPath, raw, 'utf8'); } catch (_2) {}
+        throw new Error(`character-links.json is corrupt (backed up to ${corruptPath}); refusing to overwrite to prevent data loss`);
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        const corruptPath = await _nextCorruptPath(filePath);
+        try { await fs.promises.writeFile(corruptPath, raw, 'utf8'); } catch (_2) {}
+        throw new Error(`character-links.json has invalid structure (expected object); backed up to ${corruptPath}`);
+    }
+    return parsed;
 }
 
 async function writeState(state) {

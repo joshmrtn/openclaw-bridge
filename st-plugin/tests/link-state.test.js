@@ -194,6 +194,77 @@ describe('link-state', () => {
         expect(linkState.getLink('Frog')).toMatchObject({ oc_agent_id: 'frog' });
     });
 
+    test('corrupt file: upsertLink throws and does not overwrite (#170)', async () => {
+        const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
+        fs.mkdirSync(path.dirname(linksPath), { recursive: true });
+        fs.writeFileSync(linksPath, '{"Frog": {"oc_ag');
+
+        const linkState = require('../link-state');
+
+        await expect(
+            linkState.upsertLink('Toad', { oc_agent_id: 'toad', active: true })
+        ).rejects.toThrow();
+
+        expect(fs.readFileSync(linksPath, 'utf8')).toBe('{"Frog": {"oc_ag');
+    });
+
+    test('corrupt file: upsertLink backs up corrupt bytes to .corrupt (#170)', async () => {
+        const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
+        fs.mkdirSync(path.dirname(linksPath), { recursive: true });
+        fs.writeFileSync(linksPath, 'not-json-at-all');
+
+        const linkState = require('../link-state');
+
+        await expect(
+            linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true })
+        ).rejects.toThrow();
+
+        expect(fs.existsSync(linksPath + '.corrupt')).toBe(true);
+        expect(fs.readFileSync(linksPath + '.corrupt', 'utf8')).toBe('not-json-at-all');
+    });
+
+    test('corrupt file: backup uses .corrupt.2 when .corrupt already exists (#170)', async () => {
+        const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
+        fs.mkdirSync(path.dirname(linksPath), { recursive: true });
+        fs.writeFileSync(linksPath + '.corrupt', 'previous-corruption');
+        fs.writeFileSync(linksPath, 'new-corruption');
+
+        const linkState = require('../link-state');
+
+        await expect(
+            linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true })
+        ).rejects.toThrow();
+
+        expect(fs.readFileSync(linksPath + '.corrupt', 'utf8')).toBe('previous-corruption');
+        expect(fs.existsSync(linksPath + '.corrupt.2')).toBe(true);
+        expect(fs.readFileSync(linksPath + '.corrupt.2', 'utf8')).toBe('new-corruption');
+    });
+
+    test('corrupt file: removeLink throws and does not overwrite (#170)', async () => {
+        const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
+        fs.mkdirSync(path.dirname(linksPath), { recursive: true });
+        fs.writeFileSync(linksPath, 'corrupted{{{');
+
+        const linkState = require('../link-state');
+
+        await expect(
+            linkState.removeLink('Frog')
+        ).rejects.toThrow();
+
+        expect(fs.readFileSync(linksPath, 'utf8')).toBe('corrupted{{{');
+    });
+
+    test('empty file is treated as empty state, not corruption (#170)', async () => {
+        const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
+        fs.mkdirSync(path.dirname(linksPath), { recursive: true });
+        fs.writeFileSync(linksPath, '');
+
+        const linkState = require('../link-state');
+
+        const written = await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true });
+        expect(written).toMatchObject({ oc_agent_id: 'frog' });
+    });
+
     test('writeState preserves original file when rename fails (#124)', async () => {
         const linksPath = process.env.OPENCLAW_BRIDGE_LINKS_PATH;
         fs.mkdirSync(path.dirname(linksPath), { recursive: true });
