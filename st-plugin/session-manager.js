@@ -77,6 +77,14 @@ function unregisterClient(client) {
         });
     }
     clients.delete(client);
+
+    for (const [id, pending] of pendingRequests.entries()) {
+        if (pending.socket === client) {
+            pendingRequests.delete(id);
+            clearTimeout(pending.timer);
+            pending.reject(new Error('WebSocket client disconnected during generation'));
+        }
+    }
 }
 
 function getConnectedClientCount() {
@@ -236,7 +244,7 @@ function requestGenerate(payload, timeoutMs = 900000) { // 15 minutes for local 
                 reject(new Error(`Timed out waiting for generation response (${requestId})`));
             }, timeoutMs);
 
-            pendingRequests.set(requestId, { resolve, reject, timer });
+            pendingRequests.set(requestId, { resolve, reject, timer, socket: client });
 
             try {
                 sendJson(client, {

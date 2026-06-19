@@ -20,12 +20,28 @@ function loadWsModule() {
 
 const WS = loadWsModule();
 
-function startWebSocketServer({ port = 8765, sessionManager, getAuthToken }) {
+function runHeartbeatTick(serverClients, sessionManager) {
+    for (const socket of serverClients) {
+        if (!socket.isAlive) {
+            console.warn('[openclaw-bridge] Terminating zombie WS socket (no pong received)');
+            sessionManager.unregisterClient(socket);
+            socket.terminate();
+            continue;
+        }
+        socket.isAlive = false;
+        socket.ping();
+    }
+}
+
+function startWebSocketServer({ port = 8765, sessionManager, getAuthToken, heartbeatIntervalMs = 30000 }) {
     const server = new WS.Server({ port, host: '0.0.0.0' });
     console.info(`[openclaw-bridge] WS server listening on 0.0.0.0:${port}`);
     console.info(`[openclaw-bridge] WS server ready to accept connections on ws://localhost:${port} or ws://127.0.0.1:${port}`);
 
     server.on('connection', socket => {
+        socket.isAlive = true;
+        socket.on('pong', () => { socket.isAlive = true; });
+
         const remote = (socket._socket && socket._socket.remoteAddress) ? socket._socket.remoteAddress : 'unknown';
         console.info('[openclaw-bridge] ✅ WS client connected from', remote);
 
@@ -78,6 +94,12 @@ function startWebSocketServer({ port = 8765, sessionManager, getAuthToken }) {
         console.info('[openclaw-bridge] WebSocket upgrade request from:', request.headers['user-agent'], 'remote:', request.socket?.remoteAddress);
     });
 
+    const heartbeatTimer = setInterval(
+        () => runHeartbeatTick(server.clients, sessionManager),
+        heartbeatIntervalMs
+    );
+    server.on('close', () => clearInterval(heartbeatTimer));
+
     return {
         server,
         close: () => new Promise(resolve => server.close(resolve)),
@@ -86,4 +108,5 @@ function startWebSocketServer({ port = 8765, sessionManager, getAuthToken }) {
 
 module.exports = {
     startWebSocketServer,
+    runHeartbeatTick,
 };
