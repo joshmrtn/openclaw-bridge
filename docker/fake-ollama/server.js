@@ -19,6 +19,9 @@ const PORT = parseInt(process.env.PORT || '11434', 10);
 const MODEL = 'fake-model';
 
 let defaultResponse = process.env.DEFAULT_RESPONSE || 'This is a fake LLM response for testing.';
+// When set, fake-ollama scans incoming prompts for these character names and
+// prepends [persona:NAME] to the response, enabling bleed-detection assertions.
+const echoMarkers = (process.env.ECHO_CHARACTER_MARKERS || '').split(',').filter(Boolean);
 const scenarioQueue = [];
 
 function readBody(req) {
@@ -28,6 +31,22 @@ function readBody(req) {
         req.on('end', () => resolve(data));
         req.on('error', reject);
     });
+}
+
+function detectPersonaMarker(body, isChat) {
+    if (echoMarkers.length === 0) return null;
+    // Collect all text from the request to search for known character names
+    let text = '';
+    if (isChat) {
+        const systemMsg = (body.messages || []).find(m => m.role === 'system');
+        text = systemMsg?.content || '';
+    } else {
+        text = (body.system || '') + ' ' + (body.prompt || '');
+    }
+    for (const name of echoMarkers) {
+        if (text.includes(name)) return name;
+    }
+    return null;
 }
 
 function json(res, status, data) {
@@ -103,8 +122,10 @@ const server = http.createServer(async (req, res) => {
             const body = await readBody(req);
             const parsed = JSON.parse(body);
             const stream = parsed.stream !== false;
-            const text = scenarioQueue.length > 0 ? scenarioQueue.shift() : defaultResponse;
-            console.log(`[fake-ollama] ${isChat ? 'chat' : 'generate'} → "${text.slice(0, 60)}"`);
+            const base = scenarioQueue.length > 0 ? scenarioQueue.shift() : defaultResponse;
+            const marker = detectPersonaMarker(parsed, isChat);
+            const text = marker ? `[persona:${marker}] ${base}` : base;
+            console.log(`[fake-ollama] ${isChat ? 'chat' : 'generate'} marker=${marker || 'none'} → "${text.slice(0, 80)}"`);
             return stream ? streamText(res, text, isChat) : nonStreamText(res, text, isChat);
         } catch (err) {
             return json(res, 400, { error: err.message });

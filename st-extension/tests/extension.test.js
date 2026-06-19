@@ -169,8 +169,22 @@ describe('withCharacterLock', () => {
 // Pure copy — parameterised on `state` so tests can inject an isolated lock
 // promise without the full extension STATE object.
 // ---------------------------------------------------------------------------
-function withGenerationLock(state, task) {
-    const next = state.generationLock.then(task, task);
+function withGenerationLock(state, task, timeoutMs) {
+    let wrappedTask = task;
+    if (timeoutMs) {
+        wrappedTask = (...args) => {
+            let timeoutHandle;
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutHandle = setTimeout(
+                    () => reject(new Error(`[openclaw-bridge] generateForCharacter timed out after ${timeoutMs}ms`)),
+                    timeoutMs
+                );
+            });
+            return Promise.race([task(...args), timeoutPromise])
+                .finally(() => clearTimeout(timeoutHandle));
+        };
+    }
+    const next = state.generationLock.then(wrappedTask, wrappedTask);
     state.generationLock = next.catch((err) => {
         console.error('[openclaw-bridge] Generation lock task threw:', err);
     });
@@ -231,6 +245,36 @@ describe('withGenerationLock', () => {
         await Promise.all([first, second]);
 
         expect(order).toEqual(['first-start', 'first-end', 'second-start']);
+    });
+
+    it('rejects a hung task when timeoutMs fires and releases the lock for the next waiter', async () => {
+        const state = { generationLock: Promise.resolve() };
+        const order = [];
+
+        // Task that never settles — simulates a hung Generate() call
+        const hung = withGenerationLock(
+            state,
+            () => new Promise(() => {}), // never resolves
+            50 // 50ms timeout
+        );
+
+        // Second task queued behind the hung one
+        const next = withGenerationLock(state, async () => { order.push('ran'); return 'ok'; });
+
+        await expect(hung).rejects.toThrow(/timed out/);
+        await expect(next).resolves.toBe('ok');
+        expect(order).toEqual(['ran']);
+    }, 5000);
+
+    it('does not fire timeout when task completes before the deadline', async () => {
+        const state = { generationLock: Promise.resolve() };
+        const result = await withGenerationLock(
+            state,
+            async () => 'fast',
+            500 // 500ms timeout — task finishes long before this
+        );
+        expect(result).toBe('fast');
+        expect(errorSpy).not.toHaveBeenCalled();
     });
 });
 

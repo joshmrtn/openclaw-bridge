@@ -342,8 +342,11 @@ describe('character isolation', () => {
   test('concurrent requests for different characters both succeed with no persona bleed (R7)', async () => {
     // Fire both requests simultaneously. The global generation lock in the extension
     // serialises them, so name2 for TestBot cannot contaminate Narrator's prompt or
-    // vice-versa. Both should return non-empty responses and the character field in
-    // each response must match what was requested.
+    // vice-versa.
+    //
+    // fake-ollama is configured with ECHO_CHARACTER_MARKERS=TestBot,Narrator: it
+    // inspects the incoming system prompt and prepends [persona:NAME] to its
+    // response. If bleed occurred, the wrong character's marker would appear.
     const [r1, r2] = await Promise.all([
       stFetch('/generate', {
         method: 'POST',
@@ -357,8 +360,10 @@ describe('character isolation', () => {
 
     expect(r1.status).toBe(200);
     expect(r2.status).toBe(200);
-    expect(r1.body.response).toBeTruthy();
-    expect(r2.body.response).toBeTruthy();
+    expect(r1.body.response).toMatch(/\[persona:TestBot\]/);
+    expect(r1.body.response).not.toMatch(/\[persona:Narrator\]/);
+    expect(r2.body.response).toMatch(/\[persona:Narrator\]/);
+    expect(r2.body.response).not.toMatch(/\[persona:TestBot\]/);
   }, 120000);
 });
 

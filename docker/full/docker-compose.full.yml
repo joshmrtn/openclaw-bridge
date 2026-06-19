@@ -112,7 +112,8 @@ services:
       context: ../fake-ollama
     environment:
       - PORT=11434
-      - DEFAULT_RESPONSE=This is a fake LLM response from TestBot for E2E testing.
+      - DEFAULT_RESPONSE=This is a fake LLM response for E2E testing.
+      - ECHO_CHARACTER_MARKERS=TestBot,Narrator
     ports:
       - "11437:11434"    # Different host port to avoid conflict with fast-tier
     healthcheck:
