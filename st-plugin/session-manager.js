@@ -221,7 +221,7 @@ function requestGenerate(payload, timeoutMs = 900000) { // 15 minutes for local 
                     pendingRequests.set(requestId, { resolve, reject, timer });
 
                     // Enqueue a generate message for HTTP pollers/extensions
-                    httpOutboundQueue.push({ type: 'generate', requestId, payload });
+                    httpOutboundQueue.push({ type: 'generate', requestId, payload, timeout_ms: timeoutMs });
                     console.info('[openclaw-bridge] No WS client; enqueued generation for HTTP pollers', { requestId });
                     return;
                 }
@@ -243,6 +243,7 @@ function requestGenerate(payload, timeoutMs = 900000) { // 15 minutes for local 
                     type: 'generate',
                     requestId,
                     ...payload,
+                    timeout_ms: timeoutMs,
                 });
             } catch (err) {
                 // The socket closed between getClient() and send (zombie race condition).

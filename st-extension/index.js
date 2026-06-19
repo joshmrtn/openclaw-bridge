@@ -610,8 +610,21 @@ function withCharacterLock(characterName, task) {
   }));
   return next;
 }
-function withGenerationLock(task) {
-  const next = STATE.generationLock.then(task, task);
+function withGenerationLock(task, timeoutMs) {
+  let wrappedTask = task;
+  if (timeoutMs) {
+    wrappedTask = (...args) => {
+      let timeoutHandle;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error(`[openclaw-bridge] generateForCharacter timed out after ${timeoutMs}ms`)),
+          timeoutMs
+        );
+      });
+      return Promise.race([task(...args), timeoutPromise]).finally(() => clearTimeout(timeoutHandle));
+    };
+  }
+  const next = STATE.generationLock.then(wrappedTask, wrappedTask);
   STATE.generationLock = next.catch((err) => {
     console.error("[openclaw-bridge] Generation lock task threw:", err);
   });
@@ -690,7 +703,8 @@ function registerBridgeTools() {
   ];
   console.info("[openclaw-bridge] Registered bridge function tools:", allRegistered);
 }
-async function generateForCharacter(characterName, message) {
+async function generateForCharacter(characterName, message, pluginTimeoutMs) {
+  const timeoutMs = pluginTimeoutMs ? Math.max(pluginTimeoutMs - 3e4, 1e4) : 84e4;
   return withGenerationLock(async () => {
     const context = getStContext();
     let { generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = context;
@@ -991,17 +1005,17 @@ async function generateForCharacter(characterName, message) {
     const normalized = stripInstructTemplate(normalizeGenerationResult(result));
     console.info("[openclaw-bridge] Final normalized result:", { length: normalized?.length, preview: normalized?.substring(0, 100) });
     return normalized;
-  });
+  }, timeoutMs);
 }
 async function handleGenerateRequest(payload) {
-  const { requestId, character, message } = payload;
+  const { requestId, character, message, timeout_ms } = payload;
   console.info("[openclaw-bridge] handleGenerateRequest received:", { requestId, character, messagePreview: message?.substring(0, 50) });
   try {
     console.info("[openclaw-bridge] Starting generation with character lock");
     const response = await withCharacterLock(character, () => {
       STATE.pendingActions.set(character, []);
       STATE.pendingStSideActions.set(character, []);
-      return generateForCharacter(character, message);
+      return generateForCharacter(character, message, timeout_ms);
     });
     const actions = STATE.pendingActions.get(character) || [];
     const stSideActions = STATE.pendingStSideActions.get(character) || [];
@@ -1078,7 +1092,7 @@ function startHttpPollingFallback() {
           responseText = await withCharacterLock(payload.character, () => {
             STATE.pendingActions.set(payload.character, []);
             STATE.pendingStSideActions.set(payload.character, []);
-            return generateForCharacter(payload.character, payload.message);
+            return generateForCharacter(payload.character, payload.message, msg.timeout_ms);
           });
           actions = STATE.pendingActions.get(payload.character) || [];
           stSideActions = STATE.pendingStSideActions.get(payload.character) || [];
