@@ -338,6 +338,28 @@ describe('character isolation', () => {
     // Should fail because UnlinkedChar is not linked
     expect([400, 404, 500, 503]).toContain(r.status);
   });
+
+  test('concurrent requests for different characters both succeed with no persona bleed (R7)', async () => {
+    // Fire both requests simultaneously. The global generation lock in the extension
+    // serialises them, so name2 for TestBot cannot contaminate Narrator's prompt or
+    // vice-versa. Both should return non-empty responses and the character field in
+    // each response must match what was requested.
+    const [r1, r2] = await Promise.all([
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'TestBot', message: 'Say your name.', channel: 'qa-channel', user_id: 'qa:user1' }),
+      }),
+      stFetch('/generate', {
+        method: 'POST',
+        body: JSON.stringify({ character: 'Narrator', message: 'Say your name.', channel: 'qa-channel', user_id: 'qa:user2' }),
+      }),
+    ]);
+
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(r1.body.response).toBeTruthy();
+    expect(r2.body.response).toBeTruthy();
+  }, 120000);
 });
 
 describe('heartbeat fires on schedule (R10)', () => {

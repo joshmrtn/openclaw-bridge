@@ -98,6 +98,7 @@ var STATE = {
   reconnectTimer: null,
   pending: /* @__PURE__ */ new Map(),
   characterLocks: /* @__PURE__ */ new Map(),
+  generationLock: Promise.resolve(),
   pendingActions: /* @__PURE__ */ new Map(),
   // characterName → action[] during active generation
   pendingStSideActions: /* @__PURE__ */ new Map(),
@@ -609,6 +610,13 @@ function withCharacterLock(characterName, task) {
   }));
   return next;
 }
+function withGenerationLock(task) {
+  const next = STATE.generationLock.then(task, task);
+  STATE.generationLock = next.catch((err) => {
+    console.error("[openclaw-bridge] Generation lock task threw:", err);
+  });
+  return next;
+}
 function queueCharacterAction(actionType, params) {
   const ctx = getStContext();
   const charIdx = typeof ctx.characterId === "number" ? ctx.characterId : -1;
@@ -683,305 +691,307 @@ function registerBridgeTools() {
   console.info("[openclaw-bridge] Registered bridge function tools:", allRegistered);
 }
 async function generateForCharacter(characterName, message) {
-  const context = getStContext();
-  let { generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = context;
-  console.info("[openclaw-bridge] generateForCharacter called with:", { characterName, messageLength: message?.length });
-  console.info("[openclaw-bridge] Context functions available:", {
-    hasGenerate: typeof generate === "function",
-    hasGenerateQuietPrompt: typeof generateQuietPrompt === "function",
-    hasSendGenerationRequest: typeof sendGenerationRequest === "function",
-    hasSelectCharacterById: typeof selectCharacterById === "function",
-    hasContext: !!context,
-    contextKeys: context ? Object.keys(context).slice(0, 20) : "NO CONTEXT"
-  });
-  const chid = await (async () => {
-    const deadline = Date.now() + 3e4;
-    let firstSeen = false;
-    while (Date.now() < deadline) {
-      const chars = getCharacters();
-      if (chars.length > 0) {
-        if (!firstSeen) {
-          firstSeen = true;
-          console.info(
-            "[openclaw-bridge] character list loaded, count:",
-            chars.length,
-            "first:",
-            JSON.stringify({ name: chars[0]?.name, avatar: chars[0]?.avatar })
-          );
-        }
-        const idx = chars.findIndex((c) => c?.name === characterName);
-        if (idx !== -1) return idx;
-      }
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    return -1;
-  })();
-  if (chid === -1) {
-    const available = getCharacters().map((c) => c?.name).filter(Boolean);
-    throw new Error(`Character not found: ${characterName}. Available: ${JSON.stringify(available)}`);
-  }
-  const previousChid = getCurrentCharacterIndex(context);
-  const needsCharacterSwitch = previousChid !== chid;
-  const isHeadless = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE === "headless";
-  sendSocketMessage({
-    type: "debug_log",
-    level: "info",
-    event: "char_switch_decision",
-    characterName,
-    chid,
-    previousChid,
-    needsCharacterSwitch,
-    isHeadless,
-    hasSelectCharacterById: typeof selectCharacterById === "function",
-    hasExecuteSlash: typeof context?.executeSlashCommandsWithOptions === "function"
-  });
-  if (isHeadless) {
-    if (needsCharacterSwitch) {
-      console.info("[openclaw-bridge] Headless: switching active character before generation", { from: previousChid, to: chid, characterName });
-    } else {
-      console.info("[openclaw-bridge] Headless: reloading chat from disk before generation", { chid, characterName });
-    }
-    if (typeof selectCharacterById === "function") {
-      try {
-        await selectCharacterById(chid);
-      } catch (switchErr) {
-        sendSocketMessage({
-          type: "debug_log",
-          level: "error",
-          event: "char_switch_error",
-          method: "selectCharacterById",
-          error: switchErr?.message
-        });
-      }
-    }
-    await new Promise((r) => setTimeout(r, 300));
-    const postSwitchCtx = getStContext();
-    const postSwitchChid = Number(postSwitchCtx?.characterId);
-    const postSwitchName2 = postSwitchCtx?.name2;
-    sendSocketMessage({
-      type: "debug_log",
-      level: "info",
-      event: "char_switch_after_primary",
-      postSwitchChid,
-      postSwitchName2,
-      targetChid: chid,
-      targetName: characterName,
-      switchOk: postSwitchChid === chid
+  return withGenerationLock(async () => {
+    const context = getStContext();
+    let { generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = context;
+    console.info("[openclaw-bridge] generateForCharacter called with:", { characterName, messageLength: message?.length });
+    console.info("[openclaw-bridge] Context functions available:", {
+      hasGenerate: typeof generate === "function",
+      hasGenerateQuietPrompt: typeof generateQuietPrompt === "function",
+      hasSendGenerationRequest: typeof sendGenerationRequest === "function",
+      hasSelectCharacterById: typeof selectCharacterById === "function",
+      hasContext: !!context,
+      contextKeys: context ? Object.keys(context).slice(0, 20) : "NO CONTEXT"
     });
-    if (postSwitchChid !== chid && typeof context?.executeSlashCommandsWithOptions === "function") {
-      console.info("[openclaw-bridge] Headless: primary switch failed, trying /go command");
-      try {
-        await context.executeSlashCommandsWithOptions(`/go ${characterName}`);
+    const chid = await (async () => {
+      const deadline = Date.now() + 3e4;
+      let firstSeen = false;
+      while (Date.now() < deadline) {
+        const chars = getCharacters();
+        if (chars.length > 0) {
+          if (!firstSeen) {
+            firstSeen = true;
+            console.info(
+              "[openclaw-bridge] character list loaded, count:",
+              chars.length,
+              "first:",
+              JSON.stringify({ name: chars[0]?.name, avatar: chars[0]?.avatar })
+            );
+          }
+          const idx = chars.findIndex((c) => c?.name === characterName);
+          if (idx !== -1) return idx;
+        }
         await new Promise((r) => setTimeout(r, 500));
-        const fallbackCtx = getStContext();
-        sendSocketMessage({
-          type: "debug_log",
-          level: "info",
-          event: "char_switch_after_fallback",
-          characterId: Number(fallbackCtx?.characterId),
-          name2: fallbackCtx?.name2,
-          targetChid: chid
-        });
-      } catch (fallbackErr) {
-        sendSocketMessage({
-          type: "debug_log",
-          level: "error",
-          event: "char_switch_fallback_error",
-          error: fallbackErr?.message
-        });
       }
+      return -1;
+    })();
+    if (chid === -1) {
+      const available = getCharacters().map((c) => c?.name).filter(Boolean);
+      throw new Error(`Character not found: ${characterName}. Available: ${JSON.stringify(available)}`);
     }
-  } else if (needsCharacterSwitch) {
+    const previousChid = getCurrentCharacterIndex(context);
+    const needsCharacterSwitch = previousChid !== chid;
+    const isHeadless = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE === "headless";
     sendSocketMessage({
       type: "debug_log",
       level: "info",
-      event: "char_switch_skipped",
-      reason: "not headless",
-      chid,
+      event: "char_switch_decision",
       characterName,
-      previousChid
+      chid,
+      previousChid,
+      needsCharacterSwitch,
+      isHeadless,
+      hasSelectCharacterById: typeof selectCharacterById === "function",
+      hasExecuteSlash: typeof context?.executeSlashCommandsWithOptions === "function"
     });
-  }
-  let result;
-  const preGenCtx = getStContext();
-  sendSocketMessage({
-    type: "debug_log",
-    level: "info",
-    event: "pre_generation_state",
-    characterId: Number(preGenCtx?.characterId),
-    name2: preGenCtx?.name2,
-    chatId: preGenCtx?.chatId,
-    targetChid: chid,
-    targetName: characterName
-  });
-  console.info("[openclaw-bridge] Attempting generation with message:", { characterName, messagePreview: message?.substring(0, 100) });
-  let debugMethod = null;
-  let debugLog = [];
-  const previousName2 = typeof name2 !== "undefined" ? name2 : void 0;
-  let nameOverridden = false;
-  try {
-    if (typeof setCharacterName === "function") {
-      try {
-        setCharacterName(characterName);
-        nameOverridden = true;
-        debugLog.push(`setCharacterName -> ${characterName}`);
-        console.info("[openclaw-bridge] Temporarily set name2 for generation to:", characterName);
-      } catch (e) {
-        console.warn("[openclaw-bridge] setCharacterName failed:", e);
-        debugLog.push(`setCharacterName failed: ${e.message}`);
+    if (isHeadless) {
+      if (needsCharacterSwitch) {
+        console.info("[openclaw-bridge] Headless: switching active character before generation", { from: previousChid, to: chid, characterName });
+      } else {
+        console.info("[openclaw-bridge] Headless: reloading chat from disk before generation", { chid, characterName });
       }
-    } else if (typeof globalThis.setCharacterName === "function") {
-      try {
-        globalThis.setCharacterName(characterName);
-        nameOverridden = true;
-        debugLog.push(`global setCharacterName -> ${characterName}`);
-      } catch (e) {
-        console.warn("[openclaw-bridge] global setCharacterName failed:", e);
-        debugLog.push(`global setCharacterName failed: ${e.message}`);
-      }
-    } else {
-      debugLog.push("setCharacterName not available; forceChId handles character targeting");
-    }
-    if (typeof generateQuietPrompt === "function") {
-      debugMethod = "context.generateQuietPrompt";
-      console.info("[openclaw-bridge] Using context.generateQuietPrompt()");
-      debugLog.push("Using context.generateQuietPrompt()");
-      result = await generateQuietPrompt({
-        quietPrompt: message,
-        forceChId: chid,
-        skipWIAN: false,
-        quietToLoud: true,
-        removeReasoning: false,
-        trimToSentence: false
-      });
-      debugLog.push(`generateQuietPrompt returned: ${typeof result} (${result?.length || 0} chars)`);
-      if (!result && typeof generate === "function") {
-        console.warn("[openclaw-bridge] generateQuietPrompt returned empty; falling back to generate()");
-        debugLog.push("generateQuietPrompt was empty; falling back to generate()");
-        result = await generate("quiet", {
-          quiet_prompt: message,
-          force_chid: chid,
-          force_name2: true,
-          skipWIAN: false,
-          quietToLoud: true
-        });
-        debugLog.push(`generate() fallback returned: ${typeof result} (${result?.length || 0} chars)`);
-      }
-    } else if (typeof generate === "function") {
-      debugMethod = "context.generate";
-      console.info("[openclaw-bridge] Using context.generate()");
-      debugLog.push("Using context.generate()");
-      try {
-        console.info("[openclaw-bridge] Calling generate with params:", { quiet_prompt: message.substring(0, 50), force_chid: chid, force_name2: true, quietToLoud: true });
-        result = await generate("quiet", {
-          quiet_prompt: message,
-          force_chid: chid,
-          force_name2: true,
-          skipWIAN: false,
-          quietToLoud: true
-        });
-        console.info("[openclaw-bridge] generate() returned:", { type: typeof result, length: result?.length, preview: typeof result === "string" ? result.substring(0, 100) : result });
-        debugLog.push(`generate() returned ${typeof result}: ${result?.substring?.(0, 100) || JSON.stringify(result)}`);
-      } catch (genErr) {
-        console.error("[openclaw-bridge] generate() threw error:", genErr);
-        debugLog.push(`generate() ERROR: ${genErr.message}`);
-        throw genErr;
-      }
-    } else if (typeof context?.Generate === "function") {
-      debugMethod = "context.Generate";
-      console.info("[openclaw-bridge] Using context.Generate()");
-      debugLog.push("Using context.Generate()");
-      result = await context.Generate("quiet", {
-        quiet_prompt: message,
-        force_chid: chid,
-        force_name2: true,
-        skipWIAN: false,
-        quietToLoud: true
-      });
-      debugLog.push(`context.Generate returned: ${typeof result} (${result?.length || 0} chars)`);
-    } else if (typeof Generate === "function") {
-      debugMethod = "global.Generate";
-      console.info("[openclaw-bridge] Using global Generate()");
-      debugLog.push("Using global Generate()");
-      result = await Generate("quiet", {
-        quiet_prompt: message,
-        force_chid: chid,
-        force_name2: true,
-        skipWIAN: false,
-        quietToLoud: true
-      });
-      debugLog.push(`Generate returned: ${typeof result} (${result?.length || 0} chars)`);
-    } else if (typeof sendGenerationRequest === "function") {
-      debugMethod = "context.sendGenerationRequest";
-      console.info("[openclaw-bridge] Using context.sendGenerationRequest()");
-      debugLog.push("Using context.sendGenerationRequest()");
-      result = await sendGenerationRequest("quiet", {
-        prompt: message,
-        force_chid: chid,
-        quiet_prompt: message,
-        stream: false
-      }, { removeReasoning: false, trimToSentence: false, quietToLoud: true });
-      if (result && typeof result === "object" && "text" in result && typeof result.text === "string") {
-        result = result.text;
-      }
-      debugLog.push(`sendGenerationRequest returned: ${typeof result} (${result?.length || 0} chars)`);
-    } else {
-      debugLog.push("No Generate API found; polling briefly for availability");
-      const pollDeadline = Date.now() + 2e3;
-      let foundApi = false;
-      while (Date.now() < pollDeadline) {
-        const ctx = getStContext();
-        if (ctx && (typeof ctx.generate === "function" || typeof ctx.generateQuietPrompt === "function" || typeof ctx.sendGenerationRequest === "function" || typeof ctx.Generate === "function")) {
-          foundApi = true;
-          debugLog.push("Generate API became available during poll");
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      if (!foundApi) {
-        debugLog.push("ERROR: No Generate API available in the SillyTavern context after polling");
-        throw new Error("No Generate API available in the SillyTavern context");
-      }
-      try {
-        const refreshed = getStContext();
-        ({ generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = refreshed || {});
-        debugLog.push("Refreshed context function references after poll");
-      } catch (e) {
-        debugLog.push("Failed to refresh context functions after poll: " + (e?.message || String(e)));
-      }
-    }
-  } finally {
-    if (nameOverridden && typeof setCharacterName === "function") {
-      if (typeof previousName2 === "string") {
+      if (typeof selectCharacterById === "function") {
         try {
-          setCharacterName(previousName2);
-          debugLog.push(`restored name2 -> ${previousName2}`);
-          console.info("[openclaw-bridge] Restored original name2 after generation");
+          await selectCharacterById(chid);
+        } catch (switchErr) {
+          sendSocketMessage({
+            type: "debug_log",
+            level: "error",
+            event: "char_switch_error",
+            method: "selectCharacterById",
+            error: switchErr?.message
+          });
+        }
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      const postSwitchCtx = getStContext();
+      const postSwitchChid = Number(postSwitchCtx?.characterId);
+      const postSwitchName2 = postSwitchCtx?.name2;
+      sendSocketMessage({
+        type: "debug_log",
+        level: "info",
+        event: "char_switch_after_primary",
+        postSwitchChid,
+        postSwitchName2,
+        targetChid: chid,
+        targetName: characterName,
+        switchOk: postSwitchChid === chid
+      });
+      if (postSwitchChid !== chid && typeof context?.executeSlashCommandsWithOptions === "function") {
+        console.info("[openclaw-bridge] Headless: primary switch failed, trying /go command");
+        try {
+          await context.executeSlashCommandsWithOptions(`/go ${characterName}`);
+          await new Promise((r) => setTimeout(r, 500));
+          const fallbackCtx = getStContext();
+          sendSocketMessage({
+            type: "debug_log",
+            level: "info",
+            event: "char_switch_after_fallback",
+            characterId: Number(fallbackCtx?.characterId),
+            name2: fallbackCtx?.name2,
+            targetChid: chid
+          });
+        } catch (fallbackErr) {
+          sendSocketMessage({
+            type: "debug_log",
+            level: "error",
+            event: "char_switch_fallback_error",
+            error: fallbackErr?.message
+          });
+        }
+      }
+    } else if (needsCharacterSwitch) {
+      sendSocketMessage({
+        type: "debug_log",
+        level: "info",
+        event: "char_switch_skipped",
+        reason: "not headless",
+        chid,
+        characterName,
+        previousChid
+      });
+    }
+    let result;
+    const preGenCtx = getStContext();
+    sendSocketMessage({
+      type: "debug_log",
+      level: "info",
+      event: "pre_generation_state",
+      characterId: Number(preGenCtx?.characterId),
+      name2: preGenCtx?.name2,
+      chatId: preGenCtx?.chatId,
+      targetChid: chid,
+      targetName: characterName
+    });
+    console.info("[openclaw-bridge] Attempting generation with message:", { characterName, messagePreview: message?.substring(0, 100) });
+    let debugMethod = null;
+    let debugLog = [];
+    const previousName2 = typeof name2 !== "undefined" ? name2 : void 0;
+    let nameOverridden = false;
+    try {
+      if (typeof setCharacterName === "function") {
+        try {
+          setCharacterName(characterName);
+          nameOverridden = true;
+          debugLog.push(`setCharacterName -> ${characterName}`);
+          console.info("[openclaw-bridge] Temporarily set name2 for generation to:", characterName);
         } catch (e) {
-          console.warn("[openclaw-bridge] Failed to restore name2:", e);
-          debugLog.push(`restore name2 failed: ${e.message}`);
+          console.warn("[openclaw-bridge] setCharacterName failed:", e);
+          debugLog.push(`setCharacterName failed: ${e.message}`);
+        }
+      } else if (typeof globalThis.setCharacterName === "function") {
+        try {
+          globalThis.setCharacterName(characterName);
+          nameOverridden = true;
+          debugLog.push(`global setCharacterName -> ${characterName}`);
+        } catch (e) {
+          console.warn("[openclaw-bridge] global setCharacterName failed:", e);
+          debugLog.push(`global setCharacterName failed: ${e.message}`);
+        }
+      } else {
+        debugLog.push("setCharacterName not available; forceChId handles character targeting");
+      }
+      if (typeof generateQuietPrompt === "function") {
+        debugMethod = "context.generateQuietPrompt";
+        console.info("[openclaw-bridge] Using context.generateQuietPrompt()");
+        debugLog.push("Using context.generateQuietPrompt()");
+        result = await generateQuietPrompt({
+          quietPrompt: message,
+          forceChId: chid,
+          skipWIAN: false,
+          quietToLoud: true,
+          removeReasoning: false,
+          trimToSentence: false
+        });
+        debugLog.push(`generateQuietPrompt returned: ${typeof result} (${result?.length || 0} chars)`);
+        if (!result && typeof generate === "function") {
+          console.warn("[openclaw-bridge] generateQuietPrompt returned empty; falling back to generate()");
+          debugLog.push("generateQuietPrompt was empty; falling back to generate()");
+          result = await generate("quiet", {
+            quiet_prompt: message,
+            force_chid: chid,
+            force_name2: true,
+            skipWIAN: false,
+            quietToLoud: true
+          });
+          debugLog.push(`generate() fallback returned: ${typeof result} (${result?.length || 0} chars)`);
+        }
+      } else if (typeof generate === "function") {
+        debugMethod = "context.generate";
+        console.info("[openclaw-bridge] Using context.generate()");
+        debugLog.push("Using context.generate()");
+        try {
+          console.info("[openclaw-bridge] Calling generate with params:", { quiet_prompt: message.substring(0, 50), force_chid: chid, force_name2: true, quietToLoud: true });
+          result = await generate("quiet", {
+            quiet_prompt: message,
+            force_chid: chid,
+            force_name2: true,
+            skipWIAN: false,
+            quietToLoud: true
+          });
+          console.info("[openclaw-bridge] generate() returned:", { type: typeof result, length: result?.length, preview: typeof result === "string" ? result.substring(0, 100) : result });
+          debugLog.push(`generate() returned ${typeof result}: ${result?.substring?.(0, 100) || JSON.stringify(result)}`);
+        } catch (genErr) {
+          console.error("[openclaw-bridge] generate() threw error:", genErr);
+          debugLog.push(`generate() ERROR: ${genErr.message}`);
+          throw genErr;
+        }
+      } else if (typeof context?.Generate === "function") {
+        debugMethod = "context.Generate";
+        console.info("[openclaw-bridge] Using context.Generate()");
+        debugLog.push("Using context.Generate()");
+        result = await context.Generate("quiet", {
+          quiet_prompt: message,
+          force_chid: chid,
+          force_name2: true,
+          skipWIAN: false,
+          quietToLoud: true
+        });
+        debugLog.push(`context.Generate returned: ${typeof result} (${result?.length || 0} chars)`);
+      } else if (typeof Generate === "function") {
+        debugMethod = "global.Generate";
+        console.info("[openclaw-bridge] Using global Generate()");
+        debugLog.push("Using global Generate()");
+        result = await Generate("quiet", {
+          quiet_prompt: message,
+          force_chid: chid,
+          force_name2: true,
+          skipWIAN: false,
+          quietToLoud: true
+        });
+        debugLog.push(`Generate returned: ${typeof result} (${result?.length || 0} chars)`);
+      } else if (typeof sendGenerationRequest === "function") {
+        debugMethod = "context.sendGenerationRequest";
+        console.info("[openclaw-bridge] Using context.sendGenerationRequest()");
+        debugLog.push("Using context.sendGenerationRequest()");
+        result = await sendGenerationRequest("quiet", {
+          prompt: message,
+          force_chid: chid,
+          quiet_prompt: message,
+          stream: false
+        }, { removeReasoning: false, trimToSentence: false, quietToLoud: true });
+        if (result && typeof result === "object" && "text" in result && typeof result.text === "string") {
+          result = result.text;
+        }
+        debugLog.push(`sendGenerationRequest returned: ${typeof result} (${result?.length || 0} chars)`);
+      } else {
+        debugLog.push("No Generate API found; polling briefly for availability");
+        const pollDeadline = Date.now() + 2e3;
+        let foundApi = false;
+        while (Date.now() < pollDeadline) {
+          const ctx = getStContext();
+          if (ctx && (typeof ctx.generate === "function" || typeof ctx.generateQuietPrompt === "function" || typeof ctx.sendGenerationRequest === "function" || typeof ctx.Generate === "function")) {
+            foundApi = true;
+            debugLog.push("Generate API became available during poll");
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        if (!foundApi) {
+          debugLog.push("ERROR: No Generate API available in the SillyTavern context after polling");
+          throw new Error("No Generate API available in the SillyTavern context");
+        }
+        try {
+          const refreshed = getStContext();
+          ({ generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = refreshed || {});
+          debugLog.push("Refreshed context function references after poll");
+        } catch (e) {
+          debugLog.push("Failed to refresh context functions after poll: " + (e?.message || String(e)));
+        }
+      }
+    } finally {
+      if (nameOverridden && typeof setCharacterName === "function") {
+        if (typeof previousName2 === "string") {
+          try {
+            setCharacterName(previousName2);
+            debugLog.push(`restored name2 -> ${previousName2}`);
+            console.info("[openclaw-bridge] Restored original name2 after generation");
+          } catch (e) {
+            console.warn("[openclaw-bridge] Failed to restore name2:", e);
+            debugLog.push(`restore name2 failed: ${e.message}`);
+          }
         }
       }
     }
-  }
-  sendSocketMessage({
-    type: "debug_log",
-    level: "info",
-    event: "generation_debug",
-    method: debugMethod,
-    logs: debugLog,
-    resultType: typeof result,
-    resultLength: result?.length || 0
+    sendSocketMessage({
+      type: "debug_log",
+      level: "info",
+      event: "generation_debug",
+      method: debugMethod,
+      logs: debugLog,
+      resultType: typeof result,
+      resultLength: result?.length || 0
+    });
+    try {
+      sendSocketMessage({ type: "debug_log", level: "info", event: "generation_method", method: debugMethod, rawType: typeof result, preview: typeof result === "string" ? result.substring(0, 200) : void 0 });
+    } catch (e) {
+      console.warn("[openclaw-bridge] Failed to send debug_log over socket", e);
+    }
+    console.info("[openclaw-bridge] Generation result (raw):", { type: typeof result, length: result?.length, preview: typeof result === "string" ? result.substring(0, 100) : result });
+    const normalized = stripInstructTemplate(normalizeGenerationResult(result));
+    console.info("[openclaw-bridge] Final normalized result:", { length: normalized?.length, preview: normalized?.substring(0, 100) });
+    return normalized;
   });
-  try {
-    sendSocketMessage({ type: "debug_log", level: "info", event: "generation_method", method: debugMethod, rawType: typeof result, preview: typeof result === "string" ? result.substring(0, 200) : void 0 });
-  } catch (e) {
-    console.warn("[openclaw-bridge] Failed to send debug_log over socket", e);
-  }
-  console.info("[openclaw-bridge] Generation result (raw):", { type: typeof result, length: result?.length, preview: typeof result === "string" ? result.substring(0, 100) : result });
-  const normalized = stripInstructTemplate(normalizeGenerationResult(result));
-  console.info("[openclaw-bridge] Final normalized result:", { length: normalized?.length, preview: normalized?.substring(0, 100) });
-  return normalized;
 }
 async function handleGenerateRequest(payload) {
   const { requestId, character, message } = payload;

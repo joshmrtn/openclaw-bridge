@@ -74,8 +74,8 @@ if [[ -d "${oc_extension_target}" || -L "${oc_extension_target}" ]]; then
         if [[ "${current_target}" == "${oc_plugin_source}" ]]; then
             printf '%s\n' "OC extension symlink already points to ${oc_plugin_source}"
         else
-            printf '%s\n' "Refusing to replace existing OC extension symlink ${oc_extension_target} -> ${current_target}" >&2
-            exit 1
+            printf '%s\n' "Warning: OC extension symlink already exists pointing elsewhere: ${oc_extension_target} -> ${current_target}" >&2
+            printf '%s\n' "Skipping OC extension symlink — update it manually if needed." >&2
         fi
     else
         # Installed copy — replace with a symlink so changes are picked up live.
