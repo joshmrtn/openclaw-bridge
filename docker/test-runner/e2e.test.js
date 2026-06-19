@@ -404,7 +404,8 @@ describe('heartbeat path (R10)', () => {
 
 describe('write_memory (R11)', () => {
     beforeEach(async () => {
-        await linkCharacter('TestBot', 'testbot-agent', []);
+        // Owner user_id required — write_memory is blocked for guests by design (#169).
+        await linkCharacter('TestBot', 'testbot-agent', ['discord:memory-owner']);
     });
 
     afterEach(async () => {
@@ -425,7 +426,7 @@ describe('write_memory (R11)', () => {
             },
         });
 
-        const genRes = await generate('TestBot', 'Remember this about me.', 'discord:guest-001');
+        const genRes = await generate('TestBot', 'Remember this about me.', 'discord:memory-owner');
         expect(genRes.ok).toBe(true);
 
         const memRes = await stFetch('/characters/TestBot/memory');

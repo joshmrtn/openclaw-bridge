@@ -445,7 +445,7 @@ describe('/generate action injection and parsing', () => {
         expect(res.body.response).toContain('I will remember that.');
     });
 
-    test('write_memory block routes to lorebook even for guest sender (no trust gate)', async () => {
+    test('write_memory block is blocked for guest sender (#169)', async () => {
         const rawResponse = 'Noted.<action>{"type":"write_memory","entry_key":"guest_info","content":"Guest: asks about weather","tier":2}</action>';
         const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
         const appendExternalChatToHistory = jest.fn().mockResolvedValue();
@@ -463,7 +463,7 @@ describe('/generate action injection and parsing', () => {
         const res = makeRes();
         await callRoute(router, handler, makeReq({ character: 'Frog', message: "What's the weather?", user_id: 'discord:guest99' }), res);
 
-        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', expect.objectContaining({ type: 'write_memory', entry_key: 'guest_info' }));
+        expect(upsertMemoryEntry).not.toHaveBeenCalled();
         expect(res.body.actions).toEqual([]);
         expect(res.body.response).not.toContain('<action>');
     });
@@ -492,7 +492,7 @@ describe('/generate action injection and parsing', () => {
         expect(res.body.response).not.toContain('<action>');
     });
 
-    test('write_memory routes to lorebook even when no link state exists (no trust gate)', async () => {
+    test('write_memory is blocked when no link state exists (trust indeterminate) (#169)', async () => {
         const rawResponse = 'Got it.<action>{"type":"write_memory","entry_key":"core_facts","content":"User: unknown","tier":1}</action>';
         const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
         const appendExternalChatToHistory = jest.fn().mockResolvedValue();
@@ -511,7 +511,7 @@ describe('/generate action injection and parsing', () => {
         const res = makeRes();
         await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hello', user_id: 'discord:anyone' }), res);
 
-        expect(upsertMemoryEntry).toHaveBeenCalledWith('Frog', expect.objectContaining({ type: 'write_memory', entry_key: 'core_facts' }));
+        expect(upsertMemoryEntry).not.toHaveBeenCalled();
         expect(res.body.actions).toEqual([]);
         expect(res.body.response).not.toContain('<action>');
         expect(res.body.response).toContain('Got it.');
