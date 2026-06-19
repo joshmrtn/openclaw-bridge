@@ -165,6 +165,76 @@ describe('withCharacterLock', () => {
 });
 
 // ---------------------------------------------------------------------------
+// withGenerationLock
+// Pure copy — parameterised on `state` so tests can inject an isolated lock
+// promise without the full extension STATE object.
+// ---------------------------------------------------------------------------
+function withGenerationLock(state, task) {
+    const next = state.generationLock.then(task, task);
+    state.generationLock = next.catch((err) => {
+        console.error('[openclaw-bridge] Generation lock task threw:', err);
+    });
+    return next;
+}
+
+describe('withGenerationLock', () => {
+    let errorSpy;
+    beforeEach(() => { errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {}); });
+    afterEach(() => { errorSpy.mockRestore(); });
+
+    it('resolves the return value when the task succeeds', async () => {
+        const state = { generationLock: Promise.resolve() };
+        const result = await withGenerationLock(state, async () => 'hello');
+        expect(result).toBe('hello');
+        expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('logs an error when the task throws', async () => {
+        const state = { generationLock: Promise.resolve() };
+        const err = new Error('gen failed');
+        await expect(withGenerationLock(state, async () => { throw err; })).rejects.toThrow('gen failed');
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Generation lock'), err);
+    });
+
+    it('keeps the lock chain usable after a failed task', async () => {
+        const state = { generationLock: Promise.resolve() };
+        const results = [];
+        const first = withGenerationLock(state, async () => { throw new Error('boom'); });
+        const second = withGenerationLock(state, async () => { results.push('second'); });
+        await Promise.allSettled([first, second]);
+        expect(results).toEqual(['second']);
+    });
+
+    it('serialises concurrent calls from different characters — second does not start until first resolves', async () => {
+        const state = { generationLock: Promise.resolve() };
+        const order = [];
+
+        let resolveFirst;
+        const firstGate = new Promise(res => { resolveFirst = res; });
+
+        // First call: enters immediately, blocks on firstGate
+        const first = withGenerationLock(state, async () => {
+            order.push('first-start');
+            await firstGate;
+            order.push('first-end');
+            return 'frog';
+        });
+
+        // Second call: queued behind first
+        const second = withGenerationLock(state, async () => {
+            order.push('second-start');
+            return 'toad';
+        });
+
+        // Let first complete, then await both
+        resolveFirst();
+        await Promise.all([first, second]);
+
+        expect(order).toEqual(['first-start', 'first-end', 'second-start']);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // sendSocketMessage
 // Pure copy — avoids importing browser globals.
 // Parameterised on `state` so tests can inject a mock socket.

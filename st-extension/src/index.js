@@ -27,6 +27,7 @@ const STATE = {
     reconnectTimer: null,
     pending: new Map(),
     characterLocks: new Map(),
+    generationLock: Promise.resolve(),
     pendingActions: new Map(),     // characterName → action[] during active generation
     pendingStSideActions: new Map(), // characterName → st_side action[] (lorebook writes, etc.)
     notificationRoot: null,
@@ -658,6 +659,14 @@ function withCharacterLock(characterName, task) {
     return next;
 }
 
+function withGenerationLock(task) {
+    const next = STATE.generationLock.then(task, task);
+    STATE.generationLock = next.catch((err) => {
+        console.error('[openclaw-bridge] Generation lock task threw:', err);
+    });
+    return next;
+}
+
 function queueCharacterAction(actionType, params) {
     const ctx = getStContext();
     const charIdx = typeof ctx.characterId === 'number' ? ctx.characterId : -1;
@@ -745,6 +754,7 @@ function registerBridgeTools() {
 }
 
 async function generateForCharacter(characterName, message) {
+    return withGenerationLock(async () => {
     const context = getStContext();
     let { generate, generateQuietPrompt, sendGenerationRequest, selectCharacterById } = context;
 
@@ -1045,6 +1055,7 @@ async function generateForCharacter(characterName, message) {
     const normalized = stripInstructTemplate(normalizeGenerationResult(result));
     console.info('[openclaw-bridge] Final normalized result:', { length: normalized?.length, preview: normalized?.substring(0, 100) });
     return normalized;
+    }); // end withGenerationLock
 }
 
 async function handleGenerateRequest(payload) {
