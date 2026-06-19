@@ -32,8 +32,10 @@ async function readState() {
 
 async function writeState(state) {
     const filePath = getLinksPath();
+    const tmpPath = filePath + '.tmp';
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.promises.writeFile(filePath, JSON.stringify(state, null, 2), 'utf8');
+    await fs.promises.writeFile(tmpPath, JSON.stringify(state, null, 2), 'utf8');
+    await fs.promises.rename(tmpPath, filePath);
 }
 
 function getLink(characterName) {
