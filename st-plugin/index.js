@@ -17,6 +17,14 @@ const lorebook = require('./lorebook');
 const { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks } = require('./action-tools');
 const ST_SIDE_TYPES = new Set(ST_SIDE_TOOLS.map(t => t.type));
 
+// Removes bracket-delimited trust tokens from user-supplied text so attacker content
+// cannot spoof the code-injected labels that follow.
+function sanitizeTrustTokens(message) {
+    return typeof message === 'string'
+        ? message.replace(/\[(OWNER|GUEST|HEARTBEAT)\]/g, '($1)')
+        : message;
+}
+
 // Validate and resolve send_message actions against the character's configured channels.
 // Unknown channel names are dropped and written to chat history so the operator can see them.
 async function resolveActions(actions, link, character) {
@@ -473,9 +481,10 @@ async function init(router) {
         if (isHeartbeat) {
             try {
                 const heartbeatActionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS]);
+                const safeHbMessage = sanitizeTrustTokens(message);
                 const heartbeatMessage = heartbeatActionPrompt
-                    ? `[HEARTBEAT]\n${message}\n\n${heartbeatActionPrompt}`
-                    : `[HEARTBEAT]\n${message}`;
+                    ? `[HEARTBEAT]\n${safeHbMessage}\n\n${heartbeatActionPrompt}`
+                    : `[HEARTBEAT]\n${safeHbMessage}`;
                 const genResult = await sessionManager.requestGenerate({
                     character,
                     message: heartbeatMessage,
@@ -547,6 +556,7 @@ async function init(router) {
             let stSideActions = [];
 
             const actionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS]);
+            const sanitizedMessage = sanitizeTrustTokens(message);
 
             // Try to label message with owner/guest if link exists
             try {
@@ -554,7 +564,7 @@ async function init(router) {
                 const ownerIds = links?.owner_user_ids ?? [];
                 const isOwner = !!(user_id && ownerIds.includes(user_id));
                 const trustLabel = isOwner ? '[OWNER]' : '[GUEST]';
-                const labeledMessage = `${trustLabel}\n${message}`;
+                const labeledMessage = `${trustLabel}\n${sanitizedMessage}`;
                 const promptedMessage = actionPrompt ? `${labeledMessage}\n\n${actionPrompt}` : labeledMessage;
 
                 try {
@@ -592,7 +602,7 @@ async function init(router) {
                     throw innerErr;
                 }
                 // Link-state unavailable: safe fallback is [GUEST], never bare (trust labels are always injected by code)
-                const guestMessage = `[GUEST]\n${message}`;
+                const guestMessage = `[GUEST]\n${sanitizedMessage}`;
                 const promptedBareMessage = actionPrompt ? `${guestMessage}\n\n${actionPrompt}` : guestMessage;
                 try {
                     const genResult = await sessionManager.requestGenerate({ character, message: promptedBareMessage, images, channel, user_id }, timeoutMs);
