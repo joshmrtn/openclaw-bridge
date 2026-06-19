@@ -11,6 +11,13 @@
  *   POST /api/generate  → generate (streaming NDJSON)
  *   POST /api/chat      → chat (streaming NDJSON)
  *   POST /scenario      → { response } set next scripted response
+ *   POST /error-once    → next generate/chat request returns HTTP 500
+ *   GET  /pending-count → { count } of requests currently held by a delay scenario
+ *   POST /reset         → clear scenario queue and all control flags
+ *
+ * Special sentinel values for scenario responses:
+ *   __INVALID_NDJSON__       → write garbled bytes (not valid JSON)
+ *   __DELAY_MS:N__           → delay N milliseconds, then return defaultResponse
  */
 
 const http = require('http');
@@ -23,6 +30,10 @@ let defaultResponse = process.env.DEFAULT_RESPONSE || 'This is a fake LLM respon
 // prepends [persona:NAME] to the response, enabling bleed-detection assertions.
 const echoMarkers = (process.env.ECHO_CHARACTER_MARKERS || '').split(',').filter(Boolean);
 const scenarioQueue = [];
+
+// Control flags for failure-path testing (all reset by POST /reset)
+let nextErrorOnce = false;
+let pendingDelayCount = 0;
 
 function readBody(req) {
     return new Promise((resolve, reject) => {
@@ -99,8 +110,19 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { version: '0.1.0' });
     }
 
+    if (method === 'GET' && path === '/pending-count') {
+        return json(res, 200, { count: pendingDelayCount });
+    }
+
     if (method === 'POST' && path === '/reset') {
         scenarioQueue.length = 0;
+        nextErrorOnce = false;
+        // pendingDelayCount is live state; requests still in-flight at reset will decrement it naturally
+        return json(res, 200, { ok: true });
+    }
+
+    if (method === 'POST' && path === '/error-once') {
+        nextErrorOnce = true;
         return json(res, 200, { ok: true });
     }
 
@@ -118,11 +140,47 @@ const server = http.createServer(async (req, res) => {
 
     if (method === 'POST' && (path === '/api/generate' || path === '/api/chat')) {
         const isChat = path === '/api/chat';
+
+        // error-once: return 500 before doing anything else
+        if (nextErrorOnce) {
+            nextErrorOnce = false;
+            console.log('[fake-ollama] error-once triggered — returning 500');
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'injected error for testing' }));
+        }
+
         try {
             const body = await readBody(req);
             const parsed = JSON.parse(body);
             const stream = parsed.stream !== false;
             const base = scenarioQueue.length > 0 ? scenarioQueue.shift() : defaultResponse;
+
+            // __INVALID_NDJSON__: return garbled bytes that cannot be parsed as NDJSON
+            if (base === '__INVALID_NDJSON__') {
+                console.log('[fake-ollama] invalid-ndjson scenario triggered');
+                res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Transfer-Encoding': 'chunked' });
+                res.write('}{not valid json at all\n');
+                res.write('more garbage }}}}{\n');
+                return res.end();
+            }
+
+            // __DELAY_MS:N__: hold the request for N ms then respond with defaultResponse
+            const delayMatch = typeof base === 'string' && base.match(/^__DELAY_MS:(\d+)__$/);
+            if (delayMatch) {
+                const delayMs = parseInt(delayMatch[1], 10);
+                console.log(`[fake-ollama] delay scenario: holding for ${delayMs}ms`);
+                pendingDelayCount++;
+                try {
+                    await new Promise(r => setTimeout(r, delayMs));
+                } finally {
+                    pendingDelayCount--;
+                }
+                const marker = detectPersonaMarker(parsed, isChat);
+                const text = marker ? `[persona:${marker}] ${defaultResponse}` : defaultResponse;
+                console.log(`[fake-ollama] delay complete → "${text.slice(0, 80)}"`);
+                return stream ? streamText(res, text, isChat) : nonStreamText(res, text, isChat);
+            }
+
             const marker = detectPersonaMarker(parsed, isChat);
             const text = marker ? `[persona:${marker}] ${base}` : base;
             console.log(`[fake-ollama] ${isChat ? 'chat' : 'generate'} marker=${marker || 'none'} → "${text.slice(0, 80)}"`);

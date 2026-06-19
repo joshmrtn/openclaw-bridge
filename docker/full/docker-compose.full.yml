@@ -50,7 +50,7 @@ services:
       # Shared volume so OC's heartbeat loop reads the same link state as ST.
       - OPENCLAW_BRIDGE_LINKS_PATH=/shared/character-links.json
       # Give the headless browser time to start (Playwright launch is slow in Docker).
-      - OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS=60000
+      - OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS=1000
       - OPENCLAW_BRIDGE_ST_URL=http://localhost:8000
       # Point headless-service.js at the Alpine system Chromium (see Dockerfile).
       - CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser

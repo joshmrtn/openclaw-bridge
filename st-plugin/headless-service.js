@@ -36,6 +36,31 @@ function checkPlaywrightAvailable() {
     }
 }
 
+// Click the Ollama/textgen Connect button and wait for online_status to leave
+// 'no_connection'. Required after both initial page load and page.reload() because
+// ST's Generate() returns Promise.resolve() (empty) while online_status is unset.
+async function _triggerBackendConnection(page) {
+    try {
+        await page.evaluate(() => {
+            document.querySelector('#api_button_textgenerationwebui')?.click();
+        });
+        await page.waitForFunction(
+            () => {
+                const text = document.querySelector('.online_status_text')?.textContent?.trim();
+                return text && text !== '' && text !== 'no_connection';
+            },
+            { timeout: 10000 },
+        );
+        const status = await page.evaluate(
+            () => document.querySelector('.online_status_text')?.textContent?.trim(),
+        );
+        console.info('[openclaw-bridge-headless] Backend connected, online_status:', status);
+    } catch (err) {
+        console.warn('[openclaw-bridge-headless] Backend connection check failed:', err.message,
+            '— generation will fail until backend is reachable');
+    }
+}
+
 // R8.4: auto-reconnect after ST restarts. Called when the page crashes or closes
 // unexpectedly. Retries start() in a loop until ST comes back or stop() is called.
 async function _reconnect(options) {
@@ -181,30 +206,11 @@ async function start(options = {}) {
             );
 
             if (extensionConnected) {
-                // Trigger the backend connection check.
                 // ST's online_status starts as 'no_connection' and Generate() returns undefined
-                // until getStatusTextgen() runs successfully. In interactive use the user clicks
-                // the Connect button; headless mode never shows the UI so we click it here.
+                // until getStatusTextgen() runs. In interactive use the user clicks Connect;
+                // headless mode never shows the UI so we click it programmatically.
                 console.info('[openclaw-bridge-headless] Triggering backend connection check...');
-                try {
-                    await STATE.page.evaluate(() => {
-                        document.querySelector('#api_button_textgenerationwebui')?.click();
-                    });
-                    await STATE.page.waitForFunction(
-                        () => {
-                            const text = document.querySelector('.online_status_text')?.textContent?.trim();
-                            return text && text !== '' && text !== 'no_connection';
-                        },
-                        { timeout: 10000 },
-                    );
-                    const status = await STATE.page.evaluate(
-                        () => document.querySelector('.online_status_text')?.textContent?.trim(),
-                    );
-                    console.info('[openclaw-bridge-headless] Backend connected, online_status:', status);
-                } catch (err) {
-                    console.warn('[openclaw-bridge-headless] Backend connection check failed:', err.message,
-                        '— generation will fail until backend is reachable');
-                }
+                await _triggerBackendConnection(STATE.page);
 
                 STATE.isRunning = true;
                 STATE.lastError = null;
@@ -344,6 +350,10 @@ async function reloadPage() {
         { timeoutMs: 30000 }
     );
     if (extensionConnected) {
+        // After reload online_status resets to 'no_connection' — trigger the same
+        // API button click that start() uses so Generate() can resolve force_chid.
+        console.info('[openclaw-bridge-headless] Triggering backend connection check after reload...');
+        await _triggerBackendConnection(STATE.page);
         STATE.isRunning = true;
         console.info('[openclaw-bridge-headless] ✅ Page reloaded and extension reconnected');
     }
