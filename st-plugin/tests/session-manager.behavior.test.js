@@ -221,4 +221,50 @@ describe('session-manager behavior', () => {
 
         sessionManager.unregisterClient(fakeClient);
     });
+
+    test('unregisterClient rejects in-flight WS request immediately, not after timeout', async () => {
+        const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
+        sessionManager.registerClient(fakeClient, { isHeadless: true });
+
+        // Long timeout — if the disconnect path works, it should reject well before this fires.
+        const promise = sessionManager.requestGenerate({ character: 'Ghost' }, 5000);
+        expect(fakeClient.send).toHaveBeenCalled();
+
+        // Simulate disconnect before the extension responds
+        sessionManager.unregisterClient(fakeClient);
+
+        await expect(promise).rejects.toThrow('WebSocket client disconnected during generation');
+    });
+
+    test('unregisterClient does not affect HTTP polling requests', async () => {
+        const prevMs = process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS;
+        process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS = '0';
+        try {
+            // No WS client — falls to HTTP queue
+            const promise = sessionManager.requestGenerate({ character: 'Frog' }, 2000);
+
+            // Unregistering an unrelated socket should not reject the queued request
+            const unrelated = { readyState: WS_OPEN, send: jest.fn() };
+            sessionManager.unregisterClient(unrelated);
+
+            // Queue should still have the generate message
+            const msg = sessionManager.popHttpOutboundMessage('headless');
+            expect(msg).not.toBeNull();
+            expect(msg.type).toBe('generate');
+
+            // Resolve it cleanly
+            sessionManager.handleHttpResponse({ requestId: msg.requestId, response: 'Ribbit!', actions: [], st_side_actions: [] });
+            await expect(promise).resolves.toMatchObject({ response: 'Ribbit!' });
+        } finally {
+            if (prevMs !== undefined) process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS = prevMs;
+            else delete process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS;
+        }
+    });
+
+    test('unregisterClient is a no-op when no pending requests exist', () => {
+        const fakeClient = { readyState: WS_OPEN, send: jest.fn() };
+        sessionManager.registerClient(fakeClient, { isHeadless: true });
+        // Should not throw even with no pending requests
+        expect(() => sessionManager.unregisterClient(fakeClient)).not.toThrow();
+    });
 });
