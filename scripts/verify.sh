@@ -134,19 +134,30 @@ if [ -n "${CHARACTER}" ]; then
     echo "── Character link ─────────────────────────────────────────────────"
     CHARS=$(curl_get "${PLUGIN_BASE}/characters")
 
-    if json_has "\"name\":\"${CHARACTER}\"" "${CHARS}"; then
-        ACTIVE=$(echo "${CHARS}" | grep -A10 "\"name\":\"${CHARACTER}\"" \
-            | grep '"active"' | grep -o 'true\|false' | head -1 || echo "unknown")
-        if [ "${ACTIVE}" = "true" ]; then
-            ok "Character '${CHARACTER}' linked and active"
-        else
+    LINK_STATE=$(echo "${CHARS}" | python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+chars = data.get('characters', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+target = sys.argv[1]
+for ch in chars:
+    if ch.get('name') == target:
+        lnk = ch.get('link')
+        if lnk and isinstance(lnk, dict) and lnk.get('oc_agent_id'):
+            print('active' if lnk.get('active') else 'inactive')
+            sys.exit(0)
+print('not_linked')
+" "${CHARACTER}" 2>/dev/null || echo "not_linked")
+
+    case "${LINK_STATE}" in
+        active)
+            ok "Character '${CHARACTER}' linked and active" ;;
+        inactive)
             warn "Character '${CHARACTER}' linked but not active"
-            info "Set active:true via ./scripts/link-character.sh or the /characters/:name/link endpoint"
-        fi
-    else
-        fail "Character '${CHARACTER}' is not linked"
-        info "Run: ./scripts/link-character.sh --character \"${CHARACTER}\" --agent <agentname>"
-    fi
+            info "Set active:true via ./scripts/link-character.sh or the /characters/:name/link endpoint" ;;
+        *)
+            fail "Character '${CHARACTER}' is not linked"
+            info "Run: ./scripts/link-character.sh --character \"${CHARACTER}\" --agent <agentname>" ;;
+    esac
 
     # ── 4. Test generate (optional) ───────────────────────────────────────────
     if [ "${SEND_TEST}" -eq 1 ]; then

@@ -30,6 +30,8 @@ done
 
 TMPLOG=$(mktemp /tmp/test-all-XXXXXX.log)
 trap 'rm -f "$TMPLOG"' EXIT
+LOGFILE=/tmp/test-all.log
+: > "$LOGFILE"
 
 # Guard: Docker image rebuilds need headroom; fail early with a clear message.
 avail_kb=$(df -k / | awk 'NR==2 {print $4}')
@@ -73,7 +75,8 @@ run_tier() {
   local tier="$1"
   local rc
   shift
-  "$@" > "$TMPLOG" 2>&1 && rc=0 || rc=$?
+  "$@" 2>&1 | tee -a "$LOGFILE" > "$TMPLOG"
+  rc=${PIPESTATUS[0]}
   # Strip ANSI codes: Jest uses --colors; Playwright also emits them.
   sed -i $'s/\033\\[[0-9;]*[A-Za-z]//g' "$TMPLOG"
   if [ "$rc" -eq 0 ]; then
@@ -87,6 +90,9 @@ run_tier() {
     echo "  ✗ $tier FAILED"
     echo ""
     show_failures "$TMPLOG" || true
+    echo ""
+    echo "  Full log: $LOGFILE"
+    echo "  Hint: grep -E 'FAIL|^●' $LOGFILE"
     exit 1
   fi
 }
@@ -95,11 +101,14 @@ run_tier() {
 run_build() {
   local label="$1"
   shift
-  if ! "$@" >> "$TMPLOG" 2>&1; then
+  "$@" 2>&1 | tee -a "$LOGFILE" >> "$TMPLOG"
+  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     echo "  ✗ $label FAILED"
     echo ""
     echo "--- Build output (last 80 lines) ---"
     tail -80 "$TMPLOG" || true
+    echo ""
+    echo "  Full log: $LOGFILE"
     exit 1
   fi
 }
