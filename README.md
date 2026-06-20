@@ -31,6 +31,8 @@ handles the channel layer but never owns the character.
 
 ## Quick start
 
+**Prerequisites:** bash, Node.js 22+, python3
+
 ```bash
 git clone https://github.com/joshmrtn/openclaw-bridge.git
 cd openclaw-bridge

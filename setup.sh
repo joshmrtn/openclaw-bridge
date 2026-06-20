@@ -54,6 +54,13 @@ else
     echo "Warning: node not found in PATH. Install Node.js 22+ before proceeding."
 fi
 
+if command -v python3 >/dev/null 2>&1; then
+    echo "python3 $(python3 --version 2>&1 | awk '{print $2}') OK"
+else
+    echo "Error: python3 not found in PATH. Install python3 before proceeding." >&2
+    exit 1
+fi
+
 if command -v openclaw >/dev/null 2>&1; then
     echo "openclaw CLI found: $(openclaw --version 2>/dev/null || echo '(version unknown)')"
 else
