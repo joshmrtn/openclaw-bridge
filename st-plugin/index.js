@@ -151,6 +151,9 @@ async function init(router) {
             port: Number(process.env.OPENCLAW_BRIDGE_WS_PORT || 8765),
             sessionManager,
             getAuthToken,
+            ...(process.env.OPENCLAW_BRIDGE_WS_HEARTBEAT_MS
+                ? { heartbeatIntervalMs: Number(process.env.OPENCLAW_BRIDGE_WS_HEARTBEAT_MS) }
+                : {}),
         });
         console.info('[openclaw-bridge-plugin] WebSocket server bundle created');
     } else {

@@ -14,6 +14,8 @@ This is the only valid way to verify all four test tiers. Do not substitute indi
 
 If disk space is low, free it first: `docker system prune -f --volumes && docker builder prune -f`, then rerun.
 
+**Running the suite:** Pipe output to a temp file so failures are captured: `npm run test:all 2>&1 | tee /tmp/test-output.txt`. Run in the background if needed. The suite takes 15–30 minutes — do NOT poll the output file every few seconds. Check at most once every 5 minutes, or wait for the background task completion notification.
+
 ## Commands
 
 ```bash

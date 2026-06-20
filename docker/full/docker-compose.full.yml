@@ -54,6 +54,8 @@ services:
       - OPENCLAW_BRIDGE_ST_URL=http://localhost:8000
       # Point headless-service.js at the Alpine system Chromium (see Dockerfile).
       - CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+      # Short ping interval for WS liveness regression test (default is 30 s).
+      - OPENCLAW_BRIDGE_WS_HEARTBEAT_MS=3000
     volumes:
       - character-links:/shared
     ports:
