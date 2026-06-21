@@ -241,4 +241,30 @@ describe('parseActionBlocks', () => {
         const result = parseActionBlocks(input);
         expect(result.actions).toEqual([{ type: 'file_write', path: 'out.txt', content: 'hello' }]);
     });
+
+    test('block at very start of text is parsed and stripped; trailing text preserved (#195)', () => {
+        const input = '<action>{"type":"discord_post","channel_id":"c","content":"Hi"}</action> Response text here.';
+        const result = parseActionBlocks(input);
+        expect(result.actions).toEqual([{ type: 'discord_post', channel_id: 'c', content: 'Hi' }]);
+        expect(result.text).toBe('Response text here.');
+        expect(result.text).not.toContain('<action>');
+    });
+
+    test('block at very end of text is parsed and stripped; leading text preserved (#195)', () => {
+        const input = 'Response text here. <action>{"type":"discord_post","channel_id":"c","content":"Hi"}</action>';
+        const result = parseActionBlocks(input);
+        expect(result.actions).toEqual([{ type: 'discord_post', channel_id: 'c', content: 'Hi' }]);
+        expect(result.text).toBe('Response text here.');
+        expect(result.text).not.toContain('<action>');
+    });
+
+    test('block with unicode and special characters in content is parsed correctly (#195)', () => {
+        const content = 'Héllo wörld 🐸 — "quoted" & <escaped>';
+        const input = `<action>{"type":"send_message","channel":"qa","content":${JSON.stringify(content)}}</action>`;
+        const result = parseActionBlocks(input);
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].content).toBe(content);
+        expect(result.text).toBe('');
+        expect(result.text).not.toContain('<action>');
+    });
 });

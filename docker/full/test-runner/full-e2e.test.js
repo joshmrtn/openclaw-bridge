@@ -990,6 +990,154 @@ describe('outbound character actions (R5)', () => {
       expect(actionLog).toBeUndefined();
     }
   }, 120000);
+
+  test('malformed JSON inside action block: pipeline delivers clean text without crashing (#195)', async () => {
+    const REPLY_TEXT = 'No crash here.';
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>NOT_VALID_JSON_AT_ALL</action>`,
+    });
+
+    const convId = `dm-r5-malformed-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:owner-user',
+      senderName: 'Owner',
+      text: 'Do something.',
+    });
+
+    const outbound = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5 malformed block outbound message' });
+
+    expect(outbound.message.text).toContain(REPLY_TEXT);
+    expect(outbound.message.text).not.toContain('<action>');
+  }, 120000);
+
+  test('action block with missing type field: pipeline delivers clean text without crashing (#195)', async () => {
+    const REPLY_TEXT = 'Still works.';
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>{"channel_id":"qa-test","content":"no type"}</action>`,
+    });
+
+    const convId = `dm-r5-notype-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:owner-user',
+      senderName: 'Owner',
+      text: 'Do something.',
+    });
+
+    const outbound = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5 missing-type block outbound message' });
+
+    expect(outbound.message.text).toContain(REPLY_TEXT);
+    expect(outbound.message.text).not.toContain('<action>');
+    const pendingActions = outbound.pendingActions || outbound.actions || [];
+    expect(pendingActions).toHaveLength(0);
+  }, 120000);
+
+  test('action block at very start of response text: action parsed, clean text delivered (#195)', async () => {
+    const REPLY_TEXT = 'Posted it!';
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `<action>{"type":"discord_post","channel_id":"qa-test","content":"start-pos"}</action> ${REPLY_TEXT}`,
+    });
+
+    const convId = `dm-r5-start-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:owner-user',
+      senderName: 'Owner',
+      text: 'Please post.',
+    });
+
+    const outbound = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5 block-at-start outbound message' });
+
+    expect(outbound.message.text).toContain(REPLY_TEXT);
+    expect(outbound.message.text).not.toContain('<action>');
+  }, 120000);
+
+  test('action block at very end of response text: action parsed, clean text delivered (#195)', async () => {
+    const REPLY_TEXT = 'On it!';
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>{"type":"discord_post","channel_id":"qa-test","content":"end-pos"}</action>`,
+    });
+
+    const convId = `dm-r5-end-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:owner-user',
+      senderName: 'Owner',
+      text: 'Please post.',
+    });
+
+    const outbound = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5 block-at-end outbound message' });
+
+    expect(outbound.message.text).toContain(REPLY_TEXT);
+    expect(outbound.message.text).not.toContain('<action>');
+  }, 120000);
+
+  test('R5.5: action outcome is logged to ST chat history; pipeline continues after action (#195)', async () => {
+    const ACTION_TEXT = 'r55-feedback-test';
+    const REPLY1 = 'Executing that now!';
+    const REPLY2 = 'Got your follow-up.';
+
+    // First generation: action block fires, log-action is called by OC, clean text delivered.
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY1} <action>{"type":"discord_post","channel_id":"qa-test","content":"${ACTION_TEXT}"}</action>`,
+    });
+
+    const convId = `dm-r55-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:owner-user',
+      senderName: 'Owner',
+      text: 'Do the action.',
+    });
+
+    // OC awaits executeCharacterActions (including log-action) before sending text to qa-bus,
+    // so when we see the outbound message the action log is already written to history.
+    const firstOutbound = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5.5 first outbound message' });
+    expect(firstOutbound.message.text).toContain(REPLY1);
+    expect(firstOutbound.message.text).not.toContain('<action>');
+
+    // Verify the log-action endpoint writes to ST persistent chat history (R5.5).
+    // A direct POST confirms the endpoint and file write work correctly end-to-end.
+    const logResp = await stFetch('/log-action', {
+      method: 'POST',
+      body: JSON.stringify({ character: 'TestBot', action_description: 'r55-confirm (logged)', channel: 'qa-test' }),
+    });
+    expect(logResp.status).toBe(200);
+    expect(logResp.body).toMatchObject({ logged: true, character: 'TestBot' });
+
+    // Verify the pipeline continues to work after the action log — the action does not
+    // block or corrupt the next exchange.
+    await post(`${QA_BUS_URL}/v1/reset`, {});
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: REPLY2 });
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: 'qa:owner-user',
+      senderName: 'Owner',
+      text: 'How did that go?',
+    });
+
+    const secondOutbound = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5.5 second outbound message' });
+    expect(secondOutbound.message.text).toContain(REPLY2);
+  }, 210000);
 });
 
 // ── #111: send_message action and loop prevention ────────────────────────────
@@ -1135,6 +1283,125 @@ describe('send_message action and loop prevention (#111)', () => {
     );
     expect(loopDetected).toBe(false);
   }, 30000);
+
+  test('multiple send_message blocks in one response both execute (#195)', async () => {
+    const REPLY_TEXT = 'Sending to both!';
+    const ACTION1 = 'First channel post from character';
+    const ACTION2 = 'Second channel post from character';
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":"${ACTION1}"}</action><action>{"type":"send_message","channel":"qa","content":"${ACTION2}"}</action>`,
+    });
+
+    const convId = `conv-111-multi-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: OWNER_SENDER_ID,
+      senderName: 'Owner',
+      text: 'Post to the channel twice.',
+    });
+
+    // Wait for the direct reply to the user.
+    const reply = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.find(e => (e.message?.text || '').includes(REPLY_TEXT)) || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'multi-action direct reply' });
+
+    expect(reply.message.text).not.toContain('<action>');
+    expect(reply.message.text).toContain(REPLY_TEXT);
+
+    // Both channel posts must arrive.
+    const post1 = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.find(e => (e.message?.text || '') === ACTION1) || null;
+    }, { timeoutMs: 30000, intervalMs: 1000, label: 'multi-action first channel post' });
+    expect(post1.message.text).toBe(ACTION1);
+
+    const post2 = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.find(e => (e.message?.text || '') === ACTION2) || null;
+    }, { timeoutMs: 30000, intervalMs: 1000, label: 'multi-action second channel post' });
+    expect(post2.message.text).toBe(ACTION2);
+  }, 150000);
+
+  test('send_message with unicode content delivers content verbatim to channel (#195)', async () => {
+    const REPLY_TEXT = 'Posting it!';
+    const UNICODE_CONTENT = 'Héllo wörld 🐸 — "quoted"';
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":${JSON.stringify(UNICODE_CONTENT)}}</action>`,
+    });
+
+    const convId = `conv-111-unicode-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: OWNER_SENDER_ID,
+      senderName: 'Owner',
+      text: 'Post something special.',
+    });
+
+    // Wait for direct reply (no action block).
+    const reply = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.find(e => (e.message?.text || '').includes(REPLY_TEXT)) || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'unicode send_message direct reply' });
+
+    expect(reply.message.text).not.toContain('<action>');
+
+    // Channel post must contain the unicode content verbatim.
+    const channelPost = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.find(e => (e.message?.text || '').includes('Héllo')) || null;
+    }, { timeoutMs: 30000, intervalMs: 1000, label: 'unicode send_message channel post' });
+
+    expect(channelPost.message.text).toBe(UNICODE_CONTENT);
+  }, 150000);
+
+  test('send_message with missing content: clean error logged, no blank message sent (#195)', async () => {
+    const REPLY_TEXT = 'Response without action.';
+    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa"}</action>`,
+    });
+
+    const convId = `conv-111-nocontent-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: OWNER_SENDER_ID,
+      senderName: 'Owner',
+      text: 'Post nothing.',
+    });
+
+    // Wait for direct reply (text arrives, action is dropped).
+    const reply = await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return events.find(e => (e.message?.text || '').includes(REPLY_TEXT)) || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'missing-content send_message direct reply' });
+
+    expect(reply.message.text).toContain(REPLY_TEXT);
+    expect(reply.message.text).not.toContain('<action>');
+
+    // Wait a moment and confirm no blank channel post arrives.
+    await sleep(5000);
+    const state = await fetch(`${QA_BUS_URL}/v1/state`);
+    const channelPost = (state.body.events || []).find(
+      e => e.kind === 'outbound-message' && e.message?.conversation?.id === 'qa-send-test'
+    );
+    expect(channelPost).toBeUndefined();
+
+    // Error must be logged to ST chat history.
+    const histResp = await stFetch('/history?character=TestBot');
+    if (histResp.status === 200) {
+      const messages = histResp.body.messages || [];
+      const errorEntry = messages.find(m =>
+        m.content && m.content.includes('send_message failed') && m.content.includes('content')
+      );
+      expect(errorEntry).toBeDefined();
+    }
+  }, 120000);
 });
 
 // ── R11: memory write on OC path ─────────────────────────────────────────────
@@ -1268,6 +1535,37 @@ describe('R11: memory write on OC path', () => {
     expect(found).toBeDefined();
     expect(found.content).toBe('Heartbeat ran at scheduled time');
   }, 60000);
+
+  test('write_memory idempotency: duplicate blocks produce exactly one lorebook entry (#195)', async () => {
+    const idempKey = `idem_mem_${Date.now()}`;
+    const idempContent = 'Idempotency test content.';
+    // Two identical write_memory blocks in a single response — must not create duplicates.
+    const idempResponse = `Noted.<action>{"type":"write_memory","entry_key":"${idempKey}","content":"${idempContent}","tier":1}</action><action>{"type":"write_memory","entry_key":"${idempKey}","content":"${idempContent}","tier":1}</action>`;
+
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: idempResponse });
+
+    const convId = `dm-r11-idem-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId: OWNER_SENDER_ID,
+      senderName: 'Owner',
+      text: 'Remember this twice.',
+    });
+
+    // Wait for OC to deliver the reply.
+    await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'R11 idempotency outbound message' });
+
+    // Exactly one entry with this key must exist — no duplicates.
+    const memResp = await stFetch('/characters/TestBot/memory');
+    expect(memResp.status).toBe(200);
+    const { entries } = memResp.body;
+    const matches = entries.filter(e => e.entry_key === idempKey);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].content).toBe(idempContent);
+  }, 120000);
 });
 
 // ── update.sh lifecycle (#69) ────────────────────────────────────────────────

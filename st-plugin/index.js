@@ -55,6 +55,15 @@ async function resolveActions(actions, link, character) {
             } catch (logErr) {
                 console.warn('[openclaw-bridge-plugin] Failed to log malformed channel error to history:', logErr?.message);
             }
+        } else if (!action.content) {
+            const errMsg = `[send_message failed]: 'content' is required but was missing or empty for ${character}.`;
+            console.warn(`[openclaw-bridge-plugin] ${errMsg}`);
+            try {
+                const entry = chatHistory.constructStMessage({ role: 'system', content: errMsg });
+                await chatHistory.appendMessage(character, entry);
+            } catch (logErr) {
+                console.warn('[openclaw-bridge-plugin] Failed to log missing content error to history:', logErr?.message);
+            }
         } else {
             const resolvedAction = { type: 'send_message', channel_id: ch.channel_id, target: ch.target, content: action.content };
             if (action.recipient != null) resolvedAction.recipient = action.recipient;
@@ -456,7 +465,7 @@ async function init(router) {
 
         try {
             const msg = `[Autonomous action on ${channel || 'unknown channel'}]: ${action_description}`;
-            const entry = chatHistory.constructStMessage({ role: 'system', content: msg });
+            const entry = chatHistory.constructStMessage({ role: 'assistant', name: character, content: msg });
             await chatHistory.appendMessage(character, entry);
             return response.json({ logged: true, character });
         } catch (err) {
@@ -524,12 +533,12 @@ async function init(router) {
                     // R10.6: log heartbeat response as autonomous action entry
                     try {
                         const msg = `[Heartbeat on ${channel || 'unknown channel'}]: ${generatedText}`;
-                        const entry = chatHistory.constructStMessage({ role: 'system', content: msg });
+                        const entry = chatHistory.constructStMessage({ role: 'assistant', name: character, content: msg });
                         await chatHistory.appendMessage(character, entry);
                         for (const action of actions) {
                             try {
                                 const actionMsg = `[Character action queued]: ${action.type}${action.content ? ` — "${action.content}"` : ''}`;
-                                const aEntry = chatHistory.constructStMessage({ role: 'system', content: actionMsg });
+                                const aEntry = chatHistory.constructStMessage({ role: 'assistant', name: character, content: actionMsg });
                                 await chatHistory.appendMessage(character, aEntry);
                             } catch (actionLogErr) {
                                 console.warn('[openclaw-bridge-plugin] Failed to log heartbeat action to history:', actionLogErr?.message);
@@ -650,7 +659,7 @@ async function init(router) {
                 for (const action of pendingActions) {
                     try {
                         const actionMsg = `[Character action queued]: ${action.type}${action.content ? ` — "${action.content}"` : ''}`;
-                        const entry = chatHistory.constructStMessage({ role: 'system', content: actionMsg });
+                        const entry = chatHistory.constructStMessage({ role: 'assistant', name: character, content: actionMsg });
                         await chatHistory.appendMessage(character, entry);
                     } catch (actionLogErr) {
                         console.warn('[openclaw-bridge-plugin] Failed to log action to history:', actionLogErr?.message);
