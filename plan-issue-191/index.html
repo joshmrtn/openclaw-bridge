@@ -1,0 +1,1794 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bridge OpenClaw and SillyTavern so AI companion characters maintain a single identity across all communication channels.">
+      
+      
+      
+        <link rel="canonical" href="https://joshmrtn.github.io/openclaw-bridge/plan-issue-191/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Plan: Issue #191 — Full-tier E2E: Trust & Security Correctness - openclaw-bridge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#plan-issue-191-full-tier-e2e-trust-security-correctness" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="openclaw-bridge" class="md-header__button md-logo" aria-label="openclaw-bridge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            openclaw-bridge
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Plan: Issue #191 — Full-tier E2E: Trust &amp; Security Correctness
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="red"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="red"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/joshmrtn/openclaw-bridge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    joshmrtn/openclaw-bridge
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="openclaw-bridge" class="md-nav__button md-logo" aria-label="openclaw-bridge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    openclaw-bridge
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/joshmrtn/openclaw-bridge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    joshmrtn/openclaw-bridge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding-a-character/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a character
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../oc-security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker-e2e/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker E2E testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#background" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Background
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-design-decisions-resolved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open design decisions resolved
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-file-locations-confirmed-by-reading-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key file locations (confirmed by reading source)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-e2e-test-file-infrastructure-to-reuse-do-not-re-derive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full-e2e test file: infrastructure to reuse (do not re-derive)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-1-fake-ollama-prompt-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1 — Fake-ollama prompt capture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 1 — Fake-ollama prompt capture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#change-dockerfake-ollamaserverjs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Change: docker/fake-ollama/server.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-2-trust-label-injection-tests-gap-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2 — Trust label injection tests (Gap 1)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 2 — Trust label injection tests (Gap 1)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#background-how-trust-labels-flow-through-the-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Background: how trust labels flow through the stack
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-describe-block-in-full-e2etestjs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New describe block in full-e2e.test.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-3-bearer-token-validation-tests-gap-2-96-overlap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3 — Bearer token validation tests (Gap 2, #96 overlap)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 3 — Bearer token validation tests (Gap 2, #96 overlap)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#background-what-the-current-auth-code-does-confirmed-by-reading-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Background: what the current auth code does (confirmed by reading source)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-describe-block-in-full-e2etestjs_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New describe block in full-e2e.test.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-notes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-4-csrf-enforcement-tests-gap-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4 — CSRF enforcement tests (Gap 4)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 4 — CSRF enforcement tests (Gap 4)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#background_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Background
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-describe-block-in-full-e2etestjs_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New describe block in full-e2e.test.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-notes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-5-character-name-case-sensitivity-test-gap-5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 5 — Character name case sensitivity test (Gap 5)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 5 — Character name case sensitivity test (Gap 5)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#background_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Background
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-describe-block-in-full-e2etestjs_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New describe block in full-e2e.test.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-notes_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-6-ws-authentication-fix-tests-gap-3-171" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 6 — WS authentication fix + tests (Gap 3, #171)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phase 6 — WS authentication fix + tests (Gap 3, #171)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#6a-st-pluginws-serverjs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6a — st-plugin/ws-server.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6b-st-pluginheadless-servicejs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6b — st-plugin/headless-service.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6c-st-pluginindexjs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6c — st-plugin/index.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6d-st-extensionsrcindexjs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6d — st-extension/src/index.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6e-dockerfulldocker-composefullyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6e — docker/full/docker-compose.full.yml
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6f-update-existing-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6f — Update existing test
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6g-promote-st_ws_url-to-top-level-constant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6g — Promote ST_WS_URL to top-level constant
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6h-new-describe-block-in-full-e2etestjs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6h — New describe block in full-e2e.test.js
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-notes-for-phase-6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation notes for Phase 6
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phase-7-full-test-run-pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 7 — Full test run + PR
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#risk-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Risk log
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#session-resumption-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session resumption checklist
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session resumption checklist">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/joshmrtn/openclaw-bridge/edit/main/docs/plan-issue-191.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="plan-issue-191-full-tier-e2e-trust-security-correctness">Plan: Issue #191 — Full-tier E2E: Trust &amp; Security Correctness<a class="headerlink" href="#plan-issue-191-full-tier-e2e-trust-security-correctness" title="Permanent link">&para;</a></h1>
+<p>Branch: <code>feat/issue-191-trust-security-e2e</code>
+Related: #171 (WS unauthenticated), #96 (CSRF bypass coverage)
+This PR partially addresses #96 and fully closes #191 and #171.
+This PR should land BEFORE #195 (which is blocked by this one per #190 ordering).</p>
+<hr />
+<h2 id="background">Background<a class="headerlink" href="#background" title="Permanent link">&para;</a></h2>
+<p>Issue #191 lists 5 coverage gaps to close with full-tier E2E tests. Gap 3 (WS
+without auth) is blocked on issue #171, which requires a real code fix (not just
+tests). Issue #96 (auth middleware CSRF bypass test coverage) overlaps with the
+bearer token tests written in Phase 3.</p>
+<p>The plan is broken into independent phases, each with a gate condition that can
+be verified before moving to the next. Phases 1–5 are test-only; Phase 6 is a
+combined code fix + test.</p>
+<hr />
+<h2 id="open-design-decisions-resolved">Open design decisions resolved<a class="headerlink" href="#open-design-decisions-resolved" title="Permanent link">&para;</a></h2>
+<p><strong>#171 "proper fix" approach</strong>: require the Bearer token in the <code>register</code>
+message for <strong>headless clients only</strong> (not UI clients). Rationale:</p>
+<ul>
+<li>Headless clients are the high-risk role: <code>session-manager.getClient()</code>
+  prefers them for generation, so an attacker registering as headless can
+  intercept prompts and forge responses.</li>
+<li>UI clients (browser extension) have no token at first connect (it arrives in
+  the <code>welcome</code> response), so mandating it for UI would break them.</li>
+<li>An attacker sending <code>clientType: 'ui'</code> to bypass the headless check gets the
+  lower-priority UI role — they can participate in HTTP polling fallback but
+  never win the <code>getClient()</code> preference race over the real headless client.</li>
+</ul>
+<p><strong>Bind address</strong>: default <code>127.0.0.1</code>, configurable via new env var
+<code>OPENCLAW_BRIDGE_WS_HOST</code>. Docker full-tier compose sets it to <code>0.0.0.0</code> so
+the test-runner container can reach port 8765. In production (non-Docker), the
+default <code>127.0.0.1</code> limits exposure to localhost.</p>
+<p><strong>Token bootstrap for headless clients</strong>: <code>headless-service.js</code> already uses
+<code>addInitScript</code> to inject <code>OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless'</code> (line 152).
+We add a second injection: <code>OPENCLAW_BRIDGE_BRIDGE_TOKEN = bridgeToken</code>. The
+extension reads <code>globalThis.OPENCLAW_BRIDGE_BRIDGE_TOKEN</code> in its register send
+and includes it as the <code>token</code> field. UI clients never have this global set, so
+their register message has no <code>token</code> field, and the server skips the check for
+<code>clientType: 'ui'</code>.</p>
+<p><strong>getAuthToken in headless-service</strong>: <code>headless-service.js</code> does NOT currently
+import <code>getAuthToken</code>. The cleanest approach: add a <code>bridgeToken</code> field to the
+<code>start(options)</code> call signature, and have <code>index.js</code> pass <code>getAuthToken()</code> when
+it calls <code>headlessService.start(...)</code>.</p>
+<hr />
+<h2 id="key-file-locations-confirmed-by-reading-source">Key file locations (confirmed by reading source)<a class="headerlink" href="#key-file-locations-confirmed-by-reading-source" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>docker/fake-ollama/server.js               Phase 1: add /last-prompt endpoint
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>docker/full/test-runner/full-e2e.test.js   Phases 2–6: all new describe blocks go here
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>docker/full/docker-compose.full.yml        Phase 6: add OPENCLAW_BRIDGE_WS_HOST=0.0.0.0
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>st-plugin/ws-server.js                     Phase 6: bind addr default + headless token check
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>st-plugin/headless-service.js              Phase 6: inject bridge token via addInitScript
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>st-plugin/index.js                         Phase 6: pass bridgeToken to headlessService.start()
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>st-extension/src/index.js                  Phase 6: include token in register message
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>st-extension/index.js                      Phase 6: committed bundle, rebuilt with npm run build:extension
+</code></pre></div>
+<hr />
+<h2 id="full-e2e-test-file-infrastructure-to-reuse-do-not-re-derive">Full-e2e test file: infrastructure to reuse (do not re-derive)<a class="headerlink" href="#full-e2e-test-file-infrastructure-to-reuse-do-not-re-derive" title="Permanent link">&para;</a></h2>
+<p>Top-level constants already in <code>docker/full/test-runner/full-e2e.test.js</code>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">ST_URL</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">ST_URL</span><span class="w">        </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;http://sillytavern-full:8000&#39;</span><span class="p">;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">QA_BUS_URL</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">QA_BUS_URL</span><span class="w">    </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;http://qa-bus:15000&#39;</span><span class="p">;</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">BRIDGE_TOKEN</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">BRIDGE_TOKEN</span><span class="w">  </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;e2e-test-token&#39;</span><span class="p">;</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">FAKE_OLLAMA_URL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">FAKE_OLLAMA_URL</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;http://fake-ollama:11434&#39;</span><span class="p">;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="kd">const</span><span class="w"> </span><span class="nx">SILLYTAVERN_CONTAINER</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">SILLYTAVERN_CONTAINER</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;sillytavern-full&#39;</span><span class="p">;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1">// ST_WS_URL is NOT yet a top-level constant. It is defined inline inside</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1">// the &#39;multiple headless clients&#39; describe block. Phase 6 promotes it to</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1">// a top-level constant and removes the inline definitions.</span>
+</code></pre></div></p>
+<p>Module-level auth state (set in beforeAll):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kd">let</span><span class="w"> </span><span class="nx">stCsrfToken</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">;</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kd">let</span><span class="w"> </span><span class="nx">stCsrfCookie</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">;</span>
+</code></pre></div></p>
+<p>Key helpers:
+- <code>stFetch(path, opts)</code> — prepends <code>/api/plugins/openclaw-bridge</code>, adds Bearer
+  auth + CSRF headers automatically. Use for happy-path calls.
+- <code>fetch(url, opts)</code> — raw HTTP, NO auth headers added. Use to test 401/403 rejection.
+- <code>post(url, body, headers)</code> — raw POST convenience wrapper.
+- <code>waitFor(fn, opts)</code>, <code>sleep(ms)</code> — timing helpers.</p>
+<p><code>beforeEach</code> already calls <code>POST /reset</code> on both qa-bus and fake-ollama. This
+clears the scenario queue. The Phase 1 <code>/last-prompt</code> reset also happens here
+(Phase 1 adds it to the fake-ollama <code>/reset</code> handler).</p>
+<hr />
+<h2 id="phase-1-fake-ollama-prompt-capture">Phase 1 — Fake-ollama prompt capture<a class="headerlink" href="#phase-1-fake-ollama-prompt-capture" title="Permanent link">&para;</a></h2>
+<p><strong>Goal</strong>: expose what the LLM actually received so trust label tests (Phase 2)
+can inspect the raw prompt body.</p>
+<h3 id="change-dockerfake-ollamaserverjs">Change: <code>docker/fake-ollama/server.js</code><a class="headerlink" href="#change-dockerfake-ollamaserverjs" title="Permanent link">&para;</a></h3>
+<p>Current module-level state (lines 32–36):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">scenarioQueue</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[];</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kd">let</span><span class="w"> </span><span class="nx">nextErrorOnce</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kd">let</span><span class="w"> </span><span class="nx">pendingDelayCount</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span>
+</code></pre></div></p>
+<p><strong>Add two new state variables immediately after those lines:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kd">let</span><span class="w"> </span><span class="nx">lastPromptRaw</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kd">let</span><span class="w"> </span><span class="nx">lastPromptEndpoint</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+</code></pre></div></p>
+<p>In the <code>POST /api/generate</code> and <code>POST /api/chat</code> handler (starts around line
+141), immediately after the line <code>const parsed = JSON.parse(body);</code>, add:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nx">lastPromptRaw</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">body</span><span class="p">;</span><span class="w">           </span><span class="c1">// raw string from readBody(); not re-stringified</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nx">lastPromptEndpoint</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">path</span><span class="p">;</span><span class="w">      </span><span class="c1">// &#39;/api/generate&#39; or &#39;/api/chat&#39;</span>
+</code></pre></div></p>
+<p>In the <code>POST /reset</code> handler (around line 117), after <code>scenarioQueue.length = 0</code>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nx">lastPromptRaw</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nx">lastPromptEndpoint</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+</code></pre></div></p>
+<p>Add a new GET endpoint <strong>before the final <code>res.writeHead(404)</code> fallthrough</strong>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">method</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;GET&#39;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">path</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;/last-prompt&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">lastPromptRaw</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nx">json</span><span class="p">(</span><span class="nx">res</span><span class="p">,</span><span class="w"> </span><span class="mf">404</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">error</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;no prompt received yet&#39;</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">json</span><span class="p">(</span><span class="nx">res</span><span class="p">,</span><span class="w"> </span><span class="mf">200</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">raw</span><span class="o">:</span><span class="w"> </span><span class="nx">lastPromptRaw</span><span class="p">,</span><span class="w"> </span><span class="nx">endpoint</span><span class="o">:</span><span class="w"> </span><span class="nx">lastPromptEndpoint</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">}</span>
+</code></pre></div></p>
+<p>The <code>raw</code> field is the raw request body string. The <code>fetch()</code> helper in the
+test file already parses JSON response bodies automatically, so tests do:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">FAKE_OLLAMA_URL</span><span class="si">}</span><span class="sb">/last-prompt`</span><span class="p">);</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">raw</span><span class="p">).</span><span class="nx">toMatch</span><span class="p">(</span><span class="sr">/\[OWNER\]/</span><span class="p">);</span>
+</code></pre></div></p>
+<p><strong>Gate</strong>: fake-ollama changes are isolated to one file. No other files change in
+this phase. Verify: run unit tests (<code>npm test</code>) to confirm nothing is broken,
+then begin Phase 2.</p>
+<hr />
+<h2 id="phase-2-trust-label-injection-tests-gap-1">Phase 2 — Trust label injection tests (Gap 1)<a class="headerlink" href="#phase-2-trust-label-injection-tests-gap-1" title="Permanent link">&para;</a></h2>
+<p><strong>Goal</strong>: prove that <code>[OWNER]</code> / <code>[GUEST]</code> is injected into the prompt the LLM
+sees, not just that a response arrives.</p>
+<h3 id="background-how-trust-labels-flow-through-the-stack">Background: how trust labels flow through the stack<a class="headerlink" href="#background-how-trust-labels-flow-through-the-stack" title="Permanent link">&para;</a></h3>
+<p>Trust labels are injected in <code>st-plugin/index.js</code> at ~lines 566–571:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">links</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">linkState</span><span class="p">.</span><span class="nx">getLink</span><span class="p">(</span><span class="nx">character</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">{};</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">ownerIds</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">links</span><span class="o">?</span><span class="p">.</span><span class="nx">owner_user_ids</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[];</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">isOwner</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">!!</span><span class="p">(</span><span class="nx">user_id</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">ownerIds</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="nx">user_id</span><span class="p">));</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">trustLabel</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">isOwner</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s1">&#39;[OWNER]&#39;</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;[GUEST]&#39;</span><span class="p">;</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="kd">const</span><span class="w"> </span><span class="nx">labeledMessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="sb">`</span><span class="si">${</span><span class="nx">trustLabel</span><span class="si">}</span><span class="sb">\n</span><span class="si">${</span><span class="nx">sanitizedMessage</span><span class="si">}</span><span class="sb">`</span><span class="p">;</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="kd">const</span><span class="w"> </span><span class="nx">promptedMessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">actionPrompt</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="sb">`</span><span class="si">${</span><span class="nx">labeledMessage</span><span class="si">}</span><span class="sb">\n\n</span><span class="si">${</span><span class="nx">actionPrompt</span><span class="si">}</span><span class="sb">`</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="nx">labeledMessage</span><span class="p">;</span>
+</code></pre></div></p>
+<p><code>promptedMessage</code> is sent to the extension via WebSocket, which calls
+<code>Generate('quiet', { quiet_prompt: promptedMessage })</code>. ST builds the full Ollama
+request and includes this text in the <code>messages</code> array or <code>prompt</code> field.
+<code>[OWNER]</code>/<code>[GUEST]</code> will therefore appear in the raw body that fake-ollama
+receives.</p>
+<p>The fallback path (~line 608) also always injects <code>[GUEST]</code> (never bare):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">guestMessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="sb">`[GUEST]\n</span><span class="si">${</span><span class="nx">sanitizedMessage</span><span class="si">}</span><span class="sb">`</span><span class="p">;</span>
+</code></pre></div></p>
+<p>Heartbeat path uses <code>[HEARTBEAT]</code> (not <code>[OWNER]</code>/<code>[GUEST]</code>).</p>
+<h3 id="new-describe-block-in-full-e2etestjs">New describe block in <code>full-e2e.test.js</code><a class="headerlink" href="#new-describe-block-in-full-e2etestjs" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;trust label injection (#191)&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">TRUST_OWNER</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;qa:trust-owner-191&#39;</span><span class="p">;</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nx">beforeEach</span><span class="p">(</span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/characters/TestBot/link&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">oc_agent_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;default&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">owner_user_ids</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">TRUST_OWNER</span><span class="p">]</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;[OWNER] is prepended to message in LLM-received prompt for owner user_id&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/generate&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">        </span><span class="nx">character</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;TestBot&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="w">        </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Trust label owner test&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="w">        </span><span class="nx">channel</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;qa-channel&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="w">        </span><span class="nx">user_id</span><span class="o">:</span><span class="w"> </span><span class="nx">TRUST_OWNER</span><span class="p">,</span>
+<a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a><span class="w">      </span><span class="p">}),</span>
+<a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a>
+<a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">prompt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">FAKE_OLLAMA_URL</span><span class="si">}</span><span class="sb">/last-prompt`</span><span class="p">);</span>
+<a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">prompt</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<a id="__codelineno-11-25" name="__codelineno-11-25" href="#__codelineno-11-25"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">prompt</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">raw</span><span class="p">).</span><span class="nx">toMatch</span><span class="p">(</span><span class="sr">/\[OWNER\]/</span><span class="p">);</span>
+<a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">prompt</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">raw</span><span class="p">).</span><span class="nx">not</span><span class="p">.</span><span class="nx">toMatch</span><span class="p">(</span><span class="sr">/\[GUEST\]/</span><span class="p">);</span>
+<a id="__codelineno-11-27" name="__codelineno-11-27" href="#__codelineno-11-27"></a><span class="w">  </span><span class="p">},</span><span class="w"> </span><span class="mf">60000</span><span class="p">);</span>
+<a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a>
+<a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;[GUEST] is prepended to message in LLM-received prompt for non-owner user_id&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-30" name="__codelineno-11-30" href="#__codelineno-11-30"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/generate&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-31" name="__codelineno-11-31" href="#__codelineno-11-31"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-32" name="__codelineno-11-32" href="#__codelineno-11-32"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span>
+<a id="__codelineno-11-33" name="__codelineno-11-33" href="#__codelineno-11-33"></a><span class="w">        </span><span class="nx">character</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;TestBot&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-34" name="__codelineno-11-34" href="#__codelineno-11-34"></a><span class="w">        </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Trust label guest test&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-35" name="__codelineno-11-35" href="#__codelineno-11-35"></a><span class="w">        </span><span class="nx">channel</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;qa-channel&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-36" name="__codelineno-11-36" href="#__codelineno-11-36"></a><span class="w">        </span><span class="nx">user_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;qa:trust-guest-191&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-37" name="__codelineno-11-37" href="#__codelineno-11-37"></a><span class="w">      </span><span class="p">}),</span>
+<a id="__codelineno-11-38" name="__codelineno-11-38" href="#__codelineno-11-38"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-11-39" name="__codelineno-11-39" href="#__codelineno-11-39"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<a id="__codelineno-11-40" name="__codelineno-11-40" href="#__codelineno-11-40"></a>
+<a id="__codelineno-11-41" name="__codelineno-11-41" href="#__codelineno-11-41"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">prompt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">FAKE_OLLAMA_URL</span><span class="si">}</span><span class="sb">/last-prompt`</span><span class="p">);</span>
+<a id="__codelineno-11-42" name="__codelineno-11-42" href="#__codelineno-11-42"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">prompt</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<a id="__codelineno-11-43" name="__codelineno-11-43" href="#__codelineno-11-43"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">prompt</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">raw</span><span class="p">).</span><span class="nx">toMatch</span><span class="p">(</span><span class="sr">/\[GUEST\]/</span><span class="p">);</span>
+<a id="__codelineno-11-44" name="__codelineno-11-44" href="#__codelineno-11-44"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">prompt</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">raw</span><span class="p">).</span><span class="nx">not</span><span class="p">.</span><span class="nx">toMatch</span><span class="p">(</span><span class="sr">/\[OWNER\]/</span><span class="p">);</span>
+<a id="__codelineno-11-45" name="__codelineno-11-45" href="#__codelineno-11-45"></a><span class="w">  </span><span class="p">},</span><span class="w"> </span><span class="mf">60000</span><span class="p">);</span>
+<a id="__codelineno-11-46" name="__codelineno-11-46" href="#__codelineno-11-46"></a>
+<a id="__codelineno-11-47" name="__codelineno-11-47" href="#__codelineno-11-47"></a><span class="w">  </span><span class="nx">afterEach</span><span class="p">(</span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-48" name="__codelineno-11-48" href="#__codelineno-11-48"></a><span class="w">    </span><span class="c1">// Restore clean link state so subsequent describe blocks don&#39;t inherit</span>
+<a id="__codelineno-11-49" name="__codelineno-11-49" href="#__codelineno-11-49"></a><span class="w">    </span><span class="c1">// owner_user_ids: [TRUST_OWNER] and get unexpected [OWNER] labels.</span>
+<a id="__codelineno-11-50" name="__codelineno-11-50" href="#__codelineno-11-50"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/characters/TestBot/link&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-51" name="__codelineno-11-51" href="#__codelineno-11-51"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-52" name="__codelineno-11-52" href="#__codelineno-11-52"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">oc_agent_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;default&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">owner_user_ids</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-11-53" name="__codelineno-11-53" href="#__codelineno-11-53"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-11-54" name="__codelineno-11-54" href="#__codelineno-11-54"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-11-55" name="__codelineno-11-55" href="#__codelineno-11-55"></a><span class="p">});</span>
+</code></pre></div>
+<h3 id="implementation-notes">Implementation notes<a class="headerlink" href="#implementation-notes" title="Permanent link">&para;</a></h3>
+<p><strong>Regex against raw JSON string</strong>: <code>toMatch(/\[OWNER\]/)</code> runs against the
+unparsed JSON body string. Square brackets are not JSON-escaped, so <code>[OWNER]</code>
+appears literally in the string regardless of whether ST sent to fake-ollama via
+<code>/api/generate</code> (prompt field) or <code>/api/chat</code> (messages array). No need to parse
+<code>r.body.raw</code> as JSON in the test — the string match covers both Ollama API formats.</p>
+<p><strong>If <code>/last-prompt</code> returns 404</strong>: it means the generate call never reached
+fake-ollama (extension not connected, or generate returned an error before
+dispatching). The <code>expect(r.status).toBe(200)</code> check before the prompt fetch
+will catch this case first and give a clearer failure message.</p>
+<p><strong>Placement</strong>: append this describe block at the end of the file (after the
+existing <code>cold-start with no character-links.json</code> describe block), consistent
+with how all other describe blocks are ordered.</p>
+<p><strong>Gate</strong>: both tests pass, confirming trust labels reach the LLM. Run unit tests
+(<code>npm test</code>) to confirm no regressions before moving to Phase 3.</p>
+<hr />
+<h2 id="phase-3-bearer-token-validation-tests-gap-2-96-overlap">Phase 3 — Bearer token validation tests (Gap 2, #96 overlap)<a class="headerlink" href="#phase-3-bearer-token-validation-tests-gap-2-96-overlap" title="Permanent link">&para;</a></h2>
+<p><strong>Goal</strong>: confirm that missing or wrong Bearer token returns 401. Also document
+that the CSRF bypass described in #96 is NOT present in current code (a
+CSRF-only request also returns 401, not 200). This partially addresses #96.</p>
+<h3 id="background-what-the-current-auth-code-does-confirmed-by-reading-source">Background: what the current auth code does (confirmed by reading source)<a class="headerlink" href="#background-what-the-current-auth-code-does-confirmed-by-reading-source" title="Permanent link">&para;</a></h3>
+<p><code>requireBearerToken</code> in <code>st-plugin/index.js</code> (lines 95–112) — <strong>no CSRF bypass
+in current code</strong>. It only checks <code>Authorization: Bearer &lt;token&gt;</code>. Issue #96
+described a bypass branch (<code>if (csrfToken) { next(); return; }</code>) that is NOT
+present. Our tests confirm its absence.</p>
+<p>CSRF middleware ordering: ST's CSRF middleware fires at the Express app level
+BEFORE the plugin's <code>requireBearerToken</code> middleware. For POST requests this means:</p>
+<table>
+<thead>
+<tr>
+<th>CSRF valid?</th>
+<th>Bearer valid?</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No</td>
+<td>No</td>
+<td>403 (CSRF fires first)</td>
+</tr>
+<tr>
+<td>No</td>
+<td>Yes</td>
+<td>403 (CSRF fires first)</td>
+</tr>
+<tr>
+<td>Yes</td>
+<td>No</td>
+<td>401 (passes CSRF, fails Bearer)</td>
+</tr>
+<tr>
+<td>Yes</td>
+<td>Wrong</td>
+<td>401 (passes CSRF, fails Bearer)</td>
+</tr>
+<tr>
+<td>Yes</td>
+<td>Yes</td>
+<td>200</td>
+</tr>
+</tbody>
+</table>
+<p>For GET requests: CSRF is not enforced on read-only methods. GET with just Bearer → 200.</p>
+<h3 id="new-describe-block-in-full-e2etestjs_1">New describe block in <code>full-e2e.test.js</code><a class="headerlink" href="#new-describe-block-in-full-e2etestjs_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;bearer token validation (#191, #96)&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;missing Authorization header returns 401&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">ST_URL</span><span class="si">}</span><span class="sb">/api/plugins/openclaw-bridge/status`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;GET&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">      </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s1">&#39;content-type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">401</span><span class="p">);</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;wrong bearer token returns 401&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">ST_URL</span><span class="si">}</span><span class="sb">/api/plugins/openclaw-bridge/status`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;GET&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">      </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">        </span><span class="s1">&#39;content-type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="w">        </span><span class="nx">Authorization</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Bearer definitely-wrong-token&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a><span class="w">      </span><span class="p">},</span>
+<a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">401</span><span class="p">);</span>
+<a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a>
+<a id="__codelineno-12-21" name="__codelineno-12-21" href="#__codelineno-12-21"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;x-csrf-token header alone does not bypass Bearer auth (#96)&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-22" name="__codelineno-12-22" href="#__codelineno-12-22"></a><span class="w">    </span><span class="c1">// Confirms the bypass described in #96 is NOT present in current code.</span>
+<a id="__codelineno-12-23" name="__codelineno-12-23" href="#__codelineno-12-23"></a><span class="w">    </span><span class="c1">// Valid CSRF token + session cookie but no Bearer → should be 401, not 200.</span>
+<a id="__codelineno-12-24" name="__codelineno-12-24" href="#__codelineno-12-24"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">ST_URL</span><span class="si">}</span><span class="sb">/api/plugins/openclaw-bridge/characters/TestBot/link`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-25" name="__codelineno-12-25" href="#__codelineno-12-25"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-26" name="__codelineno-12-26" href="#__codelineno-12-26"></a><span class="w">      </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-27" name="__codelineno-12-27" href="#__codelineno-12-27"></a><span class="w">        </span><span class="s1">&#39;content-type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-28" name="__codelineno-12-28" href="#__codelineno-12-28"></a><span class="w">        </span><span class="s1">&#39;x-csrf-token&#39;</span><span class="o">:</span><span class="w"> </span><span class="nx">stCsrfToken</span><span class="p">,</span>
+<a id="__codelineno-12-29" name="__codelineno-12-29" href="#__codelineno-12-29"></a><span class="w">        </span><span class="nx">Cookie</span><span class="o">:</span><span class="w"> </span><span class="nx">stCsrfCookie</span><span class="p">,</span>
+<a id="__codelineno-12-30" name="__codelineno-12-30" href="#__codelineno-12-30"></a><span class="w">        </span><span class="c1">// Intentionally no Authorization header</span>
+<a id="__codelineno-12-31" name="__codelineno-12-31" href="#__codelineno-12-31"></a><span class="w">      </span><span class="p">},</span>
+<a id="__codelineno-12-32" name="__codelineno-12-32" href="#__codelineno-12-32"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">oc_agent_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;default&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">owner_user_ids</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-12-33" name="__codelineno-12-33" href="#__codelineno-12-33"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-12-34" name="__codelineno-12-34" href="#__codelineno-12-34"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">401</span><span class="p">);</span>
+<a id="__codelineno-12-35" name="__codelineno-12-35" href="#__codelineno-12-35"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-12-36" name="__codelineno-12-36" href="#__codelineno-12-36"></a>
+<a id="__codelineno-12-37" name="__codelineno-12-37" href="#__codelineno-12-37"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;x-csrf-token + invalid Bearer still returns 401 (#96)&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-38" name="__codelineno-12-38" href="#__codelineno-12-38"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">ST_URL</span><span class="si">}</span><span class="sb">/api/plugins/openclaw-bridge/characters/TestBot/link`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-39" name="__codelineno-12-39" href="#__codelineno-12-39"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-40" name="__codelineno-12-40" href="#__codelineno-12-40"></a><span class="w">      </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-41" name="__codelineno-12-41" href="#__codelineno-12-41"></a><span class="w">        </span><span class="s1">&#39;content-type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-42" name="__codelineno-12-42" href="#__codelineno-12-42"></a><span class="w">        </span><span class="s1">&#39;x-csrf-token&#39;</span><span class="o">:</span><span class="w"> </span><span class="nx">stCsrfToken</span><span class="p">,</span>
+<a id="__codelineno-12-43" name="__codelineno-12-43" href="#__codelineno-12-43"></a><span class="w">        </span><span class="nx">Cookie</span><span class="o">:</span><span class="w"> </span><span class="nx">stCsrfCookie</span><span class="p">,</span>
+<a id="__codelineno-12-44" name="__codelineno-12-44" href="#__codelineno-12-44"></a><span class="w">        </span><span class="nx">Authorization</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Bearer wrong-token&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-45" name="__codelineno-12-45" href="#__codelineno-12-45"></a><span class="w">      </span><span class="p">},</span>
+<a id="__codelineno-12-46" name="__codelineno-12-46" href="#__codelineno-12-46"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">oc_agent_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;default&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">owner_user_ids</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-12-47" name="__codelineno-12-47" href="#__codelineno-12-47"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-12-48" name="__codelineno-12-48" href="#__codelineno-12-48"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">401</span><span class="p">);</span>
+<a id="__codelineno-12-49" name="__codelineno-12-49" href="#__codelineno-12-49"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-12-50" name="__codelineno-12-50" href="#__codelineno-12-50"></a><span class="p">});</span>
+</code></pre></div>
+<h3 id="implementation-notes_1">Implementation notes<a class="headerlink" href="#implementation-notes_1" title="Permanent link">&para;</a></h3>
+<p><strong>Placement</strong>: insert immediately after the Phase 2 (<code>trust label injection</code>)
+describe block, before <code>cold-start with no character-links.json</code> — consistent
+with where Phase 2 actually landed in the file.</p>
+<p><strong>No afterEach needed</strong>: every test in this block makes a request that is
+rejected before any state is mutated (401 is returned before the route handler
+runs). No link state or other server state is modified.</p>
+<p><strong>URL format</strong>: use the full absolute URL <code>${ST_URL}/api/plugins/openclaw-bridge/...</code>
+with the raw <code>fetch()</code> helper. Do NOT use <code>stFetch()</code> — it adds auth headers
+automatically and would defeat the purpose of these tests.</p>
+<p><strong>stCsrfToken / stCsrfCookie availability</strong>: these module-level <code>let</code> vars are
+set by <code>fetchStCsrfState()</code> in <code>beforeAll</code> and are available throughout the
+entire test run. They are strings (not null), so they can be passed directly
+into request headers.</p>
+<p><strong>Why the CSRF bypass tests return 401 (not 403)</strong>: sending a valid
+<code>x-csrf-token</code> + valid <code>Cookie</code> but no <code>Authorization</code> header means the CSRF
+middleware passes (it sees a valid token+session pair) and control reaches
+<code>requireBearerToken</code>, which then returns 401. The 401 (not 200, not 403) is the
+specific signal that proves the bypass branch is absent — if the bypass were
+present, it would have returned 200.</p>
+<p><strong>Gate</strong>: all four tests pass. Run <code>npm test</code> before Phase 4.</p>
+<hr />
+<h2 id="phase-4-csrf-enforcement-tests-gap-4">Phase 4 — CSRF enforcement tests (Gap 4)<a class="headerlink" href="#phase-4-csrf-enforcement-tests-gap-4" title="Permanent link">&para;</a></h2>
+<p><strong>Goal</strong>: confirm that POST requests without a valid CSRF token are rejected at
+403, even when the Bearer auth is correct.</p>
+<h3 id="background_1">Background<a class="headerlink" href="#background_1" title="Permanent link">&para;</a></h3>
+<p>ST has <code>disableCsrfProtection: false</code> in <code>docker/full/sillytavern/config.yaml</code>.
+The <code>stCsrfToken</code> and <code>stCsrfCookie</code> module-level vars in the test file are set
+by <code>fetchStCsrfState()</code> in <code>beforeAll</code>. <code>stFetch()</code> always includes them. The
+raw <code>fetch()</code> helper does NOT include them — use <code>fetch()</code> for these tests.</p>
+<h3 id="new-describe-block-in-full-e2etestjs_2">New describe block in <code>full-e2e.test.js</code><a class="headerlink" href="#new-describe-block-in-full-e2etestjs_2" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;CSRF enforcement (#191)&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;POST without CSRF headers is rejected with 403&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="c1">// Valid Bearer, but no x-csrf-token and no session cookie.</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="c1">// ST&#39;s CSRF middleware fires before Bearer auth and returns 403.</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">ST_URL</span><span class="si">}</span><span class="sb">/api/plugins/openclaw-bridge/characters/TestBot/link`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">      </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">        </span><span class="s1">&#39;content-type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="p">,</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">        </span><span class="nx">Authorization</span><span class="o">:</span><span class="w"> </span><span class="sb">`Bearer </span><span class="si">${</span><span class="nx">BRIDGE_TOKEN</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="w">      </span><span class="p">},</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">oc_agent_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;default&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">owner_user_ids</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">403</span><span class="p">);</span>
+<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a>
+<a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;POST with wrong x-csrf-token value is rejected with 403&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="w">    </span><span class="c1">// Valid Bearer + valid session cookie, but wrong token value → still 403.</span>
+<a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">ST_URL</span><span class="si">}</span><span class="sb">/api/plugins/openclaw-bridge/characters/TestBot/link`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a><span class="w">      </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a><span class="w">        </span><span class="s1">&#39;content-type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="p">,</span>
+<a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a><span class="w">        </span><span class="nx">Authorization</span><span class="o">:</span><span class="w"> </span><span class="sb">`Bearer </span><span class="si">${</span><span class="nx">BRIDGE_TOKEN</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span>
+<a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a><span class="w">        </span><span class="s1">&#39;x-csrf-token&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;definitely-wrong-csrf-value&#39;</span><span class="p">,</span>
+<a id="__codelineno-13-24" name="__codelineno-13-24" href="#__codelineno-13-24"></a><span class="w">        </span><span class="nx">Cookie</span><span class="o">:</span><span class="w"> </span><span class="nx">stCsrfCookie</span><span class="p">,</span>
+<a id="__codelineno-13-25" name="__codelineno-13-25" href="#__codelineno-13-25"></a><span class="w">      </span><span class="p">},</span>
+<a id="__codelineno-13-26" name="__codelineno-13-26" href="#__codelineno-13-26"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">oc_agent_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;default&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">owner_user_ids</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-13-27" name="__codelineno-13-27" href="#__codelineno-13-27"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-13-28" name="__codelineno-13-28" href="#__codelineno-13-28"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">403</span><span class="p">);</span>
+<a id="__codelineno-13-29" name="__codelineno-13-29" href="#__codelineno-13-29"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-13-30" name="__codelineno-13-30" href="#__codelineno-13-30"></a>
+<a id="__codelineno-13-31" name="__codelineno-13-31" href="#__codelineno-13-31"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;GET requests do not require CSRF token&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-32" name="__codelineno-13-32" href="#__codelineno-13-32"></a><span class="w">    </span><span class="c1">// Control: CSRF is not enforced on read-only methods.</span>
+<a id="__codelineno-13-33" name="__codelineno-13-33" href="#__codelineno-13-33"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">ST_URL</span><span class="si">}</span><span class="sb">/api/plugins/openclaw-bridge/status`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-34" name="__codelineno-13-34" href="#__codelineno-13-34"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;GET&#39;</span><span class="p">,</span>
+<a id="__codelineno-13-35" name="__codelineno-13-35" href="#__codelineno-13-35"></a><span class="w">      </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-13-36" name="__codelineno-13-36" href="#__codelineno-13-36"></a><span class="w">        </span><span class="s1">&#39;content-type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="p">,</span>
+<a id="__codelineno-13-37" name="__codelineno-13-37" href="#__codelineno-13-37"></a><span class="w">        </span><span class="nx">Authorization</span><span class="o">:</span><span class="w"> </span><span class="sb">`Bearer </span><span class="si">${</span><span class="nx">BRIDGE_TOKEN</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span>
+<a id="__codelineno-13-38" name="__codelineno-13-38" href="#__codelineno-13-38"></a><span class="w">      </span><span class="p">},</span>
+<a id="__codelineno-13-39" name="__codelineno-13-39" href="#__codelineno-13-39"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-13-40" name="__codelineno-13-40" href="#__codelineno-13-40"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<a id="__codelineno-13-41" name="__codelineno-13-41" href="#__codelineno-13-41"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-13-42" name="__codelineno-13-42" href="#__codelineno-13-42"></a><span class="p">});</span>
+</code></pre></div>
+<h3 id="implementation-notes_2">Implementation notes<a class="headerlink" href="#implementation-notes_2" title="Permanent link">&para;</a></h3>
+<p><strong>Placement</strong>: insert immediately after the Phase 3 (<code>bearer token validation</code>)
+describe block, continuing the sequence before <code>cold-start with no
+character-links.json</code>.</p>
+<p><strong>No afterEach needed</strong>: all three tests make requests that are rejected at 403
+before the route handler runs — no link state or other server state is modified.</p>
+<p><strong>Why the "wrong x-csrf-token" test sends the valid cookie</strong>: including
+<code>Cookie: stCsrfCookie</code> along with the wrong token header specifically exercises
+the token-validation logic (session recognised, token mismatched → 403). Without
+the cookie, the 403 could come from a missing session rather than a bad token
+value — a subtly different code path.</p>
+<p><strong>URL format</strong>: use raw <code>fetch()</code> with the full <code>${ST_URL}/api/plugins/openclaw-bridge/...</code>
+URL and an explicit <code>Authorization: Bearer ${BRIDGE_TOKEN}</code> header. Do NOT use
+<code>stFetch()</code> — it adds CSRF headers automatically.</p>
+<p><strong>Gate</strong>: all three tests pass. Run <code>npm test</code> before Phase 5.</p>
+<hr />
+<h2 id="phase-5-character-name-case-sensitivity-test-gap-5">Phase 5 — Character name case sensitivity test (Gap 5)<a class="headerlink" href="#phase-5-character-name-case-sensitivity-test-gap-5" title="Permanent link">&para;</a></h2>
+<p><strong>Goal</strong>: confirm that wrong-case character names return a clean error rather
+than silently matching a different character or producing garbage output.</p>
+<h3 id="background_2">Background<a class="headerlink" href="#background_2" title="Permanent link">&para;</a></h3>
+<p><code>isSafeCharacterName</code> at <code>st-plugin/index.js:135</code> passes <code>'testbot'</code> (it's a
+valid non-empty string with no path separators). The name then flows into
+<code>linkState.getLink('testbot')</code> which finds nothing (links are stored by exact
+case). The fallback guest path calls into the extension, which does
+<code>context.characters.findIndex(c =&gt; c.name === 'testbot')</code> — returns -1 since
+the character is stored as <code>'TestBot'</code> — and sends back a <code>generate_error</code>. The
+plugin converts this to a 5xx response. The test asserts a 4xx/5xx with a
+string <code>error</code> field.</p>
+<h3 id="new-describe-block-in-full-e2etestjs_3">New describe block in <code>full-e2e.test.js</code><a class="headerlink" href="#new-describe-block-in-full-e2etestjs_3" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;character name case sensitivity (#191)&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;&quot;testbot&quot; (wrong case) returns clean error rather than matching &quot;TestBot&quot;&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/generate&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">        </span><span class="nx">character</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;testbot&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">        </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;case sensitivity test&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">        </span><span class="nx">channel</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;qa-channel&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">        </span><span class="nx">user_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;qa:user&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">      </span><span class="p">}),</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">    </span><span class="nx">expect</span><span class="p">([</span><span class="mf">400</span><span class="p">,</span><span class="w"> </span><span class="mf">404</span><span class="p">,</span><span class="w"> </span><span class="mf">500</span><span class="p">,</span><span class="w"> </span><span class="mf">503</span><span class="p">]).</span><span class="nx">toContain</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">);</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="ow">typeof</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">error</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="s1">&#39;string&#39;</span><span class="p">);</span>
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a><span class="w">  </span><span class="p">},</span><span class="w"> </span><span class="mf">30000</span><span class="p">);</span>
+<a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a>
+<a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;&quot;TestBot&quot; (correct case) succeeds&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/characters/TestBot/link&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">oc_agent_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;default&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">owner_user_ids</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-14-21" name="__codelineno-14-21" href="#__codelineno-14-21"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/generate&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-22" name="__codelineno-14-22" href="#__codelineno-14-22"></a><span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-23" name="__codelineno-14-23" href="#__codelineno-14-23"></a><span class="w">      </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span>
+<a id="__codelineno-14-24" name="__codelineno-14-24" href="#__codelineno-14-24"></a><span class="w">        </span><span class="nx">character</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;TestBot&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-25" name="__codelineno-14-25" href="#__codelineno-14-25"></a><span class="w">        </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;case sensitivity correct case test&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-26" name="__codelineno-14-26" href="#__codelineno-14-26"></a><span class="w">        </span><span class="nx">channel</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;qa-channel&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-27" name="__codelineno-14-27" href="#__codelineno-14-27"></a><span class="w">        </span><span class="nx">user_id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;qa:user&#39;</span><span class="p">,</span>
+<a id="__codelineno-14-28" name="__codelineno-14-28" href="#__codelineno-14-28"></a><span class="w">      </span><span class="p">}),</span>
+<a id="__codelineno-14-29" name="__codelineno-14-29" href="#__codelineno-14-29"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-14-30" name="__codelineno-14-30" href="#__codelineno-14-30"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<a id="__codelineno-14-31" name="__codelineno-14-31" href="#__codelineno-14-31"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">response</span><span class="p">).</span><span class="nx">toBeTruthy</span><span class="p">();</span>
+<a id="__codelineno-14-32" name="__codelineno-14-32" href="#__codelineno-14-32"></a><span class="w">  </span><span class="p">},</span><span class="w"> </span><span class="mf">60000</span><span class="p">);</span>
+<a id="__codelineno-14-33" name="__codelineno-14-33" href="#__codelineno-14-33"></a><span class="p">});</span>
+</code></pre></div>
+<h3 id="implementation-notes_3">Implementation notes<a class="headerlink" href="#implementation-notes_3" title="Permanent link">&para;</a></h3>
+<p><strong>Placement</strong>: insert immediately after the Phase 4 (<code>CSRF enforcement</code>)
+describe block, continuing the sequence before <code>cold-start with no
+character-links.json</code>.</p>
+<p><strong>No afterEach needed</strong>: the wrong-case test is rejected before any state
+changes (quick error from the extension's <code>findIndex</code> returning -1, no LLM
+call). The correct-case test calls <code>stFetch('/characters/TestBot/link', ...)</code> to
+re-link TestBot with <code>owner_user_ids: []</code> — this is already clean state, nothing
+to restore.</p>
+<p><strong>30s timeout for the error case is intentional</strong>: the wrong-case path still
+goes through the full WS round-trip to the extension before returning the error.
+It's fast (no LLM call), but 30s leaves room for slow Docker startup conditions.</p>
+<p><strong><code>r.body.error</code> type check</strong>: the test's <code>fetch()</code> helper auto-parses JSON
+responses. The plugin always returns <code>{ error: string }</code> for failures, so
+<code>r.body.error</code> will be a string. If the response were non-JSON (unexpected), the
+helper returns the raw string as <code>r.body</code>, and <code>typeof r.body.error</code> would be
+<code>'undefined'</code> — a clear failure signal rather than a false pass.</p>
+<p><strong>Gate</strong>: both tests pass. Run <code>npm test</code> before Phase 6.</p>
+<hr />
+<h2 id="phase-6-ws-authentication-fix-tests-gap-3-171">Phase 6 — WS authentication fix + tests (Gap 3, #171)<a class="headerlink" href="#phase-6-ws-authentication-fix-tests-gap-3-171" title="Permanent link">&para;</a></h2>
+<p>This phase requires code changes across five files plus a bundle rebuild. It
+is deliberately last because it touches the most infrastructure.</p>
+<h3 id="6a-st-pluginws-serverjs">6a — <code>st-plugin/ws-server.js</code><a class="headerlink" href="#6a-st-pluginws-serverjs" title="Permanent link">&para;</a></h3>
+<p><strong>Change 1 — bind address</strong> (line 37):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1">// BEFORE:</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WS</span><span class="p">.</span><span class="nx">Server</span><span class="p">({</span><span class="w"> </span><span class="nx">port</span><span class="p">,</span><span class="w"> </span><span class="nx">host</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;0.0.0.0&#39;</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1">// AFTER:</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="kd">const</span><span class="w"> </span><span class="nx">wsHost</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">OPENCLAW_BRIDGE_WS_HOST</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;127.0.0.1&#39;</span><span class="p">;</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="kd">const</span><span class="w"> </span><span class="nx">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WS</span><span class="p">.</span><span class="nx">Server</span><span class="p">({</span><span class="w"> </span><span class="nx">port</span><span class="p">,</span><span class="w"> </span><span class="nx">host</span><span class="o">:</span><span class="w"> </span><span class="nx">wsHost</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+Also update the two <code>console.info</code> log lines immediately below (lines 38–39 in
+the current source) to print <code>wsHost</code> instead of the hardcoded <code>'0.0.0.0'</code>
+and <code>'localhost'</code> strings.</p>
+<p><strong>Change 2 — headless token check</strong> (~line 51, inside the <code>message</code> handler,
+inside the <code>if (parsed?.type === 'register')</code> branch, BEFORE the
+<code>sessionManager.registerClient(...)</code> call):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">parsed</span><span class="p">.</span><span class="nx">clientType</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;headless&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">expectedToken</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">typeof</span><span class="w"> </span><span class="nx">getAuthToken</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;function&#39;</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="nx">getAuthToken</span><span class="p">()</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">;</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">expectedToken</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">parsed</span><span class="p">.</span><span class="nx">token</span><span class="w"> </span><span class="o">!==</span><span class="w"> </span><span class="nx">expectedToken</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">        </span><span class="nx">console</span><span class="p">.</span><span class="nx">warn</span><span class="p">(</span><span class="s1">&#39;[openclaw-bridge] WS headless register rejected: missing or invalid token from&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">remote</span><span class="p">);</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">socket</span><span class="p">.</span><span class="nx">close</span><span class="p">(</span><span class="mf">4401</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Unauthorized&#39;</span><span class="p">);</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">        </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="p">}</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="c1">// existing: sessionManager.registerClient(socket, { ... })</span>
+</code></pre></div></p>
+<p><code>getAuthToken</code> is already passed into <code>startWebSocketServer</code> as a parameter and
+is available in the closure. No new imports needed.</p>
+<p><strong>close code 4401</strong>: the <code>ws</code> library supports application-defined close codes
+in the 4000–4999 range. <code>socket.close(4401, 'Unauthorized')</code> sends code 4401 to
+the client. In Node 22's built-in <code>WebSocket</code>, the close event exposes this as
+<code>e.code</code>. If a test sees <code>e.code === 1006</code> (abnormal closure) instead of 4401,
+it means the TCP connection dropped before the close frame arrived — check that
+the <code>socket.close()</code> call in the server isn't being silently swallowed by the
+<code>try/catch</code>.</p>
+<h3 id="6b-st-pluginheadless-servicejs">6b — <code>st-plugin/headless-service.js</code><a class="headerlink" href="#6b-st-pluginheadless-servicejs" title="Permanent link">&para;</a></h3>
+<p><strong>Change 1 — accept bridgeToken option</strong>: in the <code>start(options)</code> destructuring
+at ~line 120, add <code>bridgeToken = ''</code>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kd">const</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">    </span><span class="nx">stUrl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;http://127.0.0.1:8000&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">    </span><span class="nx">timeoutMs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">30000</span><span class="p">,</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">    </span><span class="nx">onError</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">    </span><span class="nx">bridgeToken</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">,</span><span class="w">         </span><span class="c1">// ADD THIS</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">options</span><span class="p">;</span>
+</code></pre></div></p>
+<p><strong>Change 2 — inject token via addInitScript</strong>: immediately after the existing
+<code>addInitScript</code> call at line 152 that sets <code>OPENCLAW_BRIDGE_CLIENT_TYPE</code>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1">// Existing:</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="k">await</span><span class="w"> </span><span class="nx">STATE</span><span class="p">.</span><span class="nx">page</span><span class="p">.</span><span class="nx">addInitScript</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">    </span><span class="nb">globalThis</span><span class="p">.</span><span class="nx">OPENCLAW_BRIDGE_CLIENT_TYPE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;headless&#39;</span><span class="p">;</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="p">});</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="c1">// ADD IMMEDIATELY AFTER:</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">bridgeToken</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">STATE</span><span class="p">.</span><span class="nx">page</span><span class="p">.</span><span class="nx">addInitScript</span><span class="p">((</span><span class="nx">token</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="w">        </span><span class="nb">globalThis</span><span class="p">.</span><span class="nx">OPENCLAW_BRIDGE_BRIDGE_TOKEN</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">token</span><span class="p">;</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="w">    </span><span class="p">},</span><span class="w"> </span><span class="nx">bridgeToken</span><span class="p">);</span>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="p">}</span>
+</code></pre></div></p>
+<p><strong>Playwright <code>addInitScript(fn, arg)</code> note</strong>: Playwright serializes <code>arg</code> and
+passes it to <code>fn</code> as its first parameter. The function body runs in an isolated
+page context, so it cannot close over Node.js variables — the argument must be
+explicitly passed this way, not via a closure. Strings are serializable, so this
+works correctly. Do NOT write <code>addInitScript(() =&gt; { globalThis.OPENCLAW_BRIDGE_BRIDGE_TOKEN = bridgeToken; })</code>
+(closure capture) — <code>bridgeToken</code> would be <code>undefined</code> inside the page context.</p>
+<p><strong>Graceful degradation</strong>: if <code>bridgeToken</code> is empty (unconfigured dev setup),
+<code>if (bridgeToken)</code> skips the injection. The WS server's check is
+<code>if (expectedToken &amp;&amp; ...)</code> — if <code>expectedToken</code> is also empty, the check is
+skipped entirely and the headless client registers without auth. No breakage in
+dev setups without a token configured.</p>
+<h3 id="6c-st-pluginindexjs">6c — <code>st-plugin/index.js</code><a class="headerlink" href="#6c-st-pluginindexjs" title="Permanent link">&para;</a></h3>
+<p>Find the <code>headlessService.start(...)</code> call inside <code>init()</code> and add <code>bridgeToken</code>.
+Search for <code>headlessService.start(</code> in <code>st-plugin/index.js</code> — there is exactly
+one call site. Add <code>bridgeToken: getAuthToken()</code> to its options object:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nx">headlessService</span><span class="p">.</span><span class="nx">start</span><span class="p">({</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">    </span><span class="nx">stUrl</span><span class="o">:</span><span class="w"> </span><span class="p">...,</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">    </span><span class="nx">timeoutMs</span><span class="o">:</span><span class="w"> </span><span class="p">...,</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">    </span><span class="nx">onError</span><span class="o">:</span><span class="w"> </span><span class="p">...,</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">    </span><span class="nx">bridgeToken</span><span class="o">:</span><span class="w"> </span><span class="nx">getAuthToken</span><span class="p">(),</span><span class="w">   </span><span class="c1">// ADD THIS</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="p">});</span>
+</code></pre></div></p>
+<h3 id="6d-st-extensionsrcindexjs">6d — <code>st-extension/src/index.js</code><a class="headerlink" href="#6d-st-extensionsrcindexjs" title="Permanent link">&para;</a></h3>
+<p>In the <code>open</code> handler (~line 1467–1468), change the register send:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1">// BEFORE:</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">clientType</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">globalThis</span><span class="p">.</span><span class="nx">OPENCLAW_BRIDGE_CLIENT_TYPE</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;ui&#39;</span><span class="p">;</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">ws</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;register&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clientType</span><span class="w"> </span><span class="p">}));</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="c1">// AFTER:</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="kd">const</span><span class="w"> </span><span class="nx">clientType</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">globalThis</span><span class="p">.</span><span class="nx">OPENCLAW_BRIDGE_CLIENT_TYPE</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;ui&#39;</span><span class="p">;</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="kd">const</span><span class="w"> </span><span class="nx">regToken</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">globalThis</span><span class="p">.</span><span class="nx">OPENCLAW_BRIDGE_BRIDGE_TOKEN</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">STATE</span><span class="p">.</span><span class="nx">bridgeToken</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="kc">undefined</span><span class="p">;</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">ws</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;register&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clientType</span><span class="p">,</span><span class="w"> </span><span class="nx">token</span><span class="o">:</span><span class="w"> </span><span class="nx">regToken</span><span class="w"> </span><span class="p">}));</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+</code></pre></div></p>
+<p>On first headless connect: <code>OPENCLAW_BRIDGE_BRIDGE_TOKEN</code> is set by addInitScript
+before the page loads → <code>regToken</code> is the real token.
+On first UI connect: neither global is set, <code>STATE.bridgeToken</code> is null →
+<code>regToken</code> is undefined → token field absent → server skips check for <code>clientType: 'ui'</code>.
+On UI reconnect: <code>STATE.bridgeToken</code> is set from the previous welcome → <code>regToken</code>
+has the token → server ignores it for UI anyway.</p>
+<p><strong>After editing <code>src/index.js</code>, rebuild the bundle:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>npm<span class="w"> </span>run<span class="w"> </span>build:extension
+</code></pre></div>
+Commit both <code>st-extension/src/index.js</code> and <code>st-extension/index.js</code>.</p>
+<h3 id="6e-dockerfulldocker-composefullyml">6e — <code>docker/full/docker-compose.full.yml</code><a class="headerlink" href="#6e-dockerfulldocker-composefullyml" title="Permanent link">&para;</a></h3>
+<p>In the <code>sillytavern-full</code> service's <code>environment</code> block (where
+<code>OPENCLAW_BRIDGE_WS_PORT=8765</code> is already listed), add:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OPENCLAW_BRIDGE_WS_HOST=0.0.0.0</span>
+</code></pre></div>
+This allows the test-runner container to reach port 8765 inside the ST container
+(cross-container connections don't go through loopback).</p>
+<h3 id="6f-update-existing-test">6f — Update existing test<a class="headerlink" href="#6f-update-existing-test" title="Permanent link">&para;</a></h3>
+<p>In <code>full-e2e.test.js</code>, in the <code>multiple headless clients</code> describe block, the
+raw WS connection sends a register without a token. Update it:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="c1">// BEFORE:</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="nx">ws2</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;register&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clientType</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;headless&#39;</span><span class="w"> </span><span class="p">}));</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="c1">// AFTER:</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="nx">ws2</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;register&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clientType</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;headless&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">token</span><span class="o">:</span><span class="w"> </span><span class="nx">BRIDGE_TOKEN</span><span class="w"> </span><span class="p">}));</span>
+</code></pre></div></p>
+<h3 id="6g-promote-st_ws_url-to-top-level-constant">6g — Promote ST_WS_URL to top-level constant<a class="headerlink" href="#6g-promote-st_ws_url-to-top-level-constant" title="Permanent link">&para;</a></h3>
+<p>Add to the top-level constants block (with the other <code>const</code> declarations):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">ST_WS_URL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">ST_WS_URL</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;ws://sillytavern-full:8765&#39;</span><span class="p">;</span>
+</code></pre></div>
+Remove the inline <code>const ST_WS_URL = ...</code> definition from inside the
+<code>multiple headless clients</code> describe block. <strong>This removal is mandatory</strong> —
+leaving both declarations causes a <code>Cannot redeclare block-scoped variable</code>
+error at the top-level const because the inline one is in the same module scope.</p>
+<h3 id="6h-new-describe-block-in-full-e2etestjs">6h — New describe block in <code>full-e2e.test.js</code><a class="headerlink" href="#6h-new-describe-block-in-full-e2etestjs" title="Permanent link">&para;</a></h3>
+<p>All WS tests: use a 10000ms internal Promise timeout and 15000ms Jest timeout.
+Pattern: resolve on the expected event, reject on error or the internal timer.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;WS authentication (#191, #171)&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;headless register without token is rejected with close code 4401&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">before</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/health&#39;</span><span class="p">);</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">countBefore</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">before</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">clients</span><span class="o">?</span><span class="p">.</span><span class="nx">headless</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span>
+<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>
+<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">closeCode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">ws</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WebSocket</span><span class="p">(</span><span class="nx">ST_WS_URL</span><span class="p">);</span>
+<a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span><span class="w"> </span><span class="nx">reject</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a><span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">timer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">setTimeout</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">reject</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="ne">Error</span><span class="p">(</span><span class="s1">&#39;timeout waiting for close&#39;</span><span class="p">)),</span><span class="w"> </span><span class="mf">10000</span><span class="p">);</span>
+<a id="__codelineno-25-10" name="__codelineno-25-10" href="#__codelineno-25-10"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;open&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-11" name="__codelineno-25-11" href="#__codelineno-25-11"></a><span class="w">        </span><span class="nx">ws</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;register&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clientType</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;headless&#39;</span><span class="w"> </span><span class="p">}));</span><span class="w"> </span><span class="c1">// no token</span>
+<a id="__codelineno-25-12" name="__codelineno-25-12" href="#__codelineno-25-12"></a><span class="w">      </span><span class="p">});</span>
+<a id="__codelineno-25-13" name="__codelineno-25-13" href="#__codelineno-25-13"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;close&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-14" name="__codelineno-25-14" href="#__codelineno-25-14"></a><span class="w">        </span><span class="nx">clearTimeout</span><span class="p">(</span><span class="nx">timer</span><span class="p">);</span>
+<a id="__codelineno-25-15" name="__codelineno-25-15" href="#__codelineno-25-15"></a><span class="w">        </span><span class="nx">closeCode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">e</span><span class="p">.</span><span class="nx">code</span><span class="p">;</span>
+<a id="__codelineno-25-16" name="__codelineno-25-16" href="#__codelineno-25-16"></a><span class="w">        </span><span class="nx">resolve</span><span class="p">();</span>
+<a id="__codelineno-25-17" name="__codelineno-25-17" href="#__codelineno-25-17"></a><span class="w">      </span><span class="p">});</span>
+<a id="__codelineno-25-18" name="__codelineno-25-18" href="#__codelineno-25-18"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* let close handle it */</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-25-19" name="__codelineno-25-19" href="#__codelineno-25-19"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-25-20" name="__codelineno-25-20" href="#__codelineno-25-20"></a>
+<a id="__codelineno-25-21" name="__codelineno-25-21" href="#__codelineno-25-21"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">closeCode</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">4401</span><span class="p">);</span>
+<a id="__codelineno-25-22" name="__codelineno-25-22" href="#__codelineno-25-22"></a>
+<a id="__codelineno-25-23" name="__codelineno-25-23" href="#__codelineno-25-23"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">after</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/health&#39;</span><span class="p">);</span>
+<a id="__codelineno-25-24" name="__codelineno-25-24" href="#__codelineno-25-24"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">after</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">clients</span><span class="o">?</span><span class="p">.</span><span class="nx">headless</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="mf">0</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="nx">countBefore</span><span class="p">);</span>
+<a id="__codelineno-25-25" name="__codelineno-25-25" href="#__codelineno-25-25"></a><span class="w">  </span><span class="p">},</span><span class="w"> </span><span class="mf">15000</span><span class="p">);</span>
+<a id="__codelineno-25-26" name="__codelineno-25-26" href="#__codelineno-25-26"></a>
+<a id="__codelineno-25-27" name="__codelineno-25-27" href="#__codelineno-25-27"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;headless register with wrong token is rejected with close code 4401&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-28" name="__codelineno-25-28" href="#__codelineno-25-28"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">closeCode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<a id="__codelineno-25-29" name="__codelineno-25-29" href="#__codelineno-25-29"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">ws</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WebSocket</span><span class="p">(</span><span class="nx">ST_WS_URL</span><span class="p">);</span>
+<a id="__codelineno-25-30" name="__codelineno-25-30" href="#__codelineno-25-30"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span><span class="w"> </span><span class="nx">reject</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-31" name="__codelineno-25-31" href="#__codelineno-25-31"></a><span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">timer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">setTimeout</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">reject</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="ne">Error</span><span class="p">(</span><span class="s1">&#39;timeout&#39;</span><span class="p">)),</span><span class="w"> </span><span class="mf">10000</span><span class="p">);</span>
+<a id="__codelineno-25-32" name="__codelineno-25-32" href="#__codelineno-25-32"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;open&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-33" name="__codelineno-25-33" href="#__codelineno-25-33"></a><span class="w">        </span><span class="nx">ws</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;register&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clientType</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;headless&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">token</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;wrong-token&#39;</span><span class="w"> </span><span class="p">}));</span>
+<a id="__codelineno-25-34" name="__codelineno-25-34" href="#__codelineno-25-34"></a><span class="w">      </span><span class="p">});</span>
+<a id="__codelineno-25-35" name="__codelineno-25-35" href="#__codelineno-25-35"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;close&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">clearTimeout</span><span class="p">(</span><span class="nx">timer</span><span class="p">);</span><span class="w"> </span><span class="nx">closeCode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">e</span><span class="p">.</span><span class="nx">code</span><span class="p">;</span><span class="w"> </span><span class="nx">resolve</span><span class="p">();</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-25-36" name="__codelineno-25-36" href="#__codelineno-25-36"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{});</span>
+<a id="__codelineno-25-37" name="__codelineno-25-37" href="#__codelineno-25-37"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-25-38" name="__codelineno-25-38" href="#__codelineno-25-38"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">closeCode</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">4401</span><span class="p">);</span>
+<a id="__codelineno-25-39" name="__codelineno-25-39" href="#__codelineno-25-39"></a><span class="w">  </span><span class="p">},</span><span class="w"> </span><span class="mf">15000</span><span class="p">);</span>
+<a id="__codelineno-25-40" name="__codelineno-25-40" href="#__codelineno-25-40"></a>
+<a id="__codelineno-25-41" name="__codelineno-25-41" href="#__codelineno-25-41"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;headless register with valid token is accepted and receives welcome&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-42" name="__codelineno-25-42" href="#__codelineno-25-42"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">welcomed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<a id="__codelineno-25-43" name="__codelineno-25-43" href="#__codelineno-25-43"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">ws</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WebSocket</span><span class="p">(</span><span class="nx">ST_WS_URL</span><span class="p">);</span>
+<a id="__codelineno-25-44" name="__codelineno-25-44" href="#__codelineno-25-44"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span><span class="w"> </span><span class="nx">reject</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-45" name="__codelineno-25-45" href="#__codelineno-25-45"></a><span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">timer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">setTimeout</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">reject</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="ne">Error</span><span class="p">(</span><span class="s1">&#39;timeout waiting for welcome&#39;</span><span class="p">)),</span><span class="w"> </span><span class="mf">10000</span><span class="p">);</span>
+<a id="__codelineno-25-46" name="__codelineno-25-46" href="#__codelineno-25-46"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;open&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-47" name="__codelineno-25-47" href="#__codelineno-25-47"></a><span class="w">        </span><span class="nx">ws</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;register&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clientType</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;headless&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">token</span><span class="o">:</span><span class="w"> </span><span class="nx">BRIDGE_TOKEN</span><span class="w"> </span><span class="p">}));</span>
+<a id="__codelineno-25-48" name="__codelineno-25-48" href="#__codelineno-25-48"></a><span class="w">      </span><span class="p">});</span>
+<a id="__codelineno-25-49" name="__codelineno-25-49" href="#__codelineno-25-49"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-50" name="__codelineno-25-50" href="#__codelineno-25-50"></a><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-51" name="__codelineno-25-51" href="#__codelineno-25-51"></a><span class="w">          </span><span class="kd">const</span><span class="w"> </span><span class="nx">msg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">data</span><span class="p">);</span>
+<a id="__codelineno-25-52" name="__codelineno-25-52" href="#__codelineno-25-52"></a><span class="w">          </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">type</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;welcome&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">clearTimeout</span><span class="p">(</span><span class="nx">timer</span><span class="p">);</span><span class="w"> </span><span class="nx">welcomed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w"> </span><span class="nx">ws</span><span class="p">.</span><span class="nx">close</span><span class="p">();</span><span class="w"> </span><span class="nx">resolve</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-25-53" name="__codelineno-25-53" href="#__codelineno-25-53"></a><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-25-54" name="__codelineno-25-54" href="#__codelineno-25-54"></a><span class="w">      </span><span class="p">});</span>
+<a id="__codelineno-25-55" name="__codelineno-25-55" href="#__codelineno-25-55"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">clearTimeout</span><span class="p">(</span><span class="nx">timer</span><span class="p">);</span><span class="w"> </span><span class="nx">reject</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="ne">Error</span><span class="p">(</span><span class="s1">&#39;ws error&#39;</span><span class="p">));</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-25-56" name="__codelineno-25-56" href="#__codelineno-25-56"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-25-57" name="__codelineno-25-57" href="#__codelineno-25-57"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">welcomed</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+<a id="__codelineno-25-58" name="__codelineno-25-58" href="#__codelineno-25-58"></a><span class="w">  </span><span class="p">},</span><span class="w"> </span><span class="mf">15000</span><span class="p">);</span>
+<a id="__codelineno-25-59" name="__codelineno-25-59" href="#__codelineno-25-59"></a>
+<a id="__codelineno-25-60" name="__codelineno-25-60" href="#__codelineno-25-60"></a><span class="w">  </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;UI register without token is accepted (UI clients are exempt)&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-61" name="__codelineno-25-61" href="#__codelineno-25-61"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">welcomed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<a id="__codelineno-25-62" name="__codelineno-25-62" href="#__codelineno-25-62"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">ws</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WebSocket</span><span class="p">(</span><span class="nx">ST_WS_URL</span><span class="p">);</span>
+<a id="__codelineno-25-63" name="__codelineno-25-63" href="#__codelineno-25-63"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span><span class="w"> </span><span class="nx">reject</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-64" name="__codelineno-25-64" href="#__codelineno-25-64"></a><span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">timer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">setTimeout</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">reject</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="ne">Error</span><span class="p">(</span><span class="s1">&#39;timeout&#39;</span><span class="p">)),</span><span class="w"> </span><span class="mf">10000</span><span class="p">);</span>
+<a id="__codelineno-25-65" name="__codelineno-25-65" href="#__codelineno-25-65"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;open&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-66" name="__codelineno-25-66" href="#__codelineno-25-66"></a><span class="w">        </span><span class="nx">ws</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;register&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clientType</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;ui&#39;</span><span class="w"> </span><span class="p">}));</span><span class="w"> </span><span class="c1">// no token — UI exempt</span>
+<a id="__codelineno-25-67" name="__codelineno-25-67" href="#__codelineno-25-67"></a><span class="w">      </span><span class="p">});</span>
+<a id="__codelineno-25-68" name="__codelineno-25-68" href="#__codelineno-25-68"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-69" name="__codelineno-25-69" href="#__codelineno-25-69"></a><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-70" name="__codelineno-25-70" href="#__codelineno-25-70"></a><span class="w">          </span><span class="kd">const</span><span class="w"> </span><span class="nx">msg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">data</span><span class="p">);</span>
+<a id="__codelineno-25-71" name="__codelineno-25-71" href="#__codelineno-25-71"></a><span class="w">          </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">type</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;welcome&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">clearTimeout</span><span class="p">(</span><span class="nx">timer</span><span class="p">);</span><span class="w"> </span><span class="nx">welcomed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w"> </span><span class="nx">ws</span><span class="p">.</span><span class="nx">close</span><span class="p">();</span><span class="w"> </span><span class="nx">resolve</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-25-72" name="__codelineno-25-72" href="#__codelineno-25-72"></a><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-25-73" name="__codelineno-25-73" href="#__codelineno-25-73"></a><span class="w">      </span><span class="p">});</span>
+<a id="__codelineno-25-74" name="__codelineno-25-74" href="#__codelineno-25-74"></a><span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">clearTimeout</span><span class="p">(</span><span class="nx">timer</span><span class="p">);</span><span class="w"> </span><span class="nx">reject</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="ne">Error</span><span class="p">(</span><span class="s1">&#39;ws error&#39;</span><span class="p">));</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-25-75" name="__codelineno-25-75" href="#__codelineno-25-75"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-25-76" name="__codelineno-25-76" href="#__codelineno-25-76"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">welcomed</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+<a id="__codelineno-25-77" name="__codelineno-25-77" href="#__codelineno-25-77"></a><span class="w">  </span><span class="p">},</span><span class="w"> </span><span class="mf">15000</span><span class="p">);</span>
+<a id="__codelineno-25-78" name="__codelineno-25-78" href="#__codelineno-25-78"></a><span class="p">});</span>
+</code></pre></div>
+<h3 id="implementation-notes-for-phase-6">Implementation notes for Phase 6<a class="headerlink" href="#implementation-notes-for-phase-6" title="Permanent link">&para;</a></h3>
+<p><strong>Order of sub-steps matters</strong>: do 6a → 6b → 6c → 6d (rebuild) → 6e → 6f+6g →
+6h. The extension rebuild (6d) must happen before adding the WS auth tests (6h)
+that verify the headless client actually connects — the tests would fail if the
+extension bundle still sends a register without a token.</p>
+<p><strong>Verifying headless still connects after 6d</strong>: before writing the 6h tests,
+check <code>stFetch('/health').body.clients.headless &gt; 0</code> from within the test
+environment. If it's 0, the token injection failed — debug <code>addInitScript</code>
+before proceeding.</p>
+<p><strong>The "valid token accepted" test registers an extra headless client</strong>: after
+<code>ws.close()</code>, the session-manager's unregister is asynchronous. Do NOT check the
+client count immediately after <code>ws.close()</code> — use <code>waitFor</code> (like the existing
+<code>multiple headless clients</code> test does) to wait for the count to drop back to
+baseline before asserting.</p>
+<p><strong>Placement of the 6h describe block</strong>: append at the very end of the file,
+after <code>cold-start with no character-links.json</code>. Phases 2–5 inserted before
+<code>cold-start</code>; Phase 6 goes after it to avoid continually inserting in the middle
+of the file.</p>
+<p><strong>Gate for Phase 6</strong>: all four new WS auth tests pass. The existing
+<code>multiple headless clients</code> test still passes (now sends token). The headless
+service connects and registers successfully (token injected via addInitScript).</p>
+<hr />
+<h2 id="phase-7-full-test-run-pr">Phase 7 — Full test run + PR<a class="headerlink" href="#phase-7-full-test-run-pr" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Run in background (suite takes 15–30 min):
+  <code>npm run test:all 2&gt;&amp;1 | tee /tmp/test-191.txt</code></li>
+<li>Check at most once every 5 minutes or on background task notification —
+  do NOT poll every few seconds (per CLAUDE.md testing feedback)</li>
+<li>Confirm zero failures across all four tiers: unit + fast + browser + full</li>
+<li>If disk space is low before the run: <code>docker system prune -f --volumes &amp;&amp; docker builder prune -f</code></li>
+<li>Present a summary of what changed and why, and wait for the maintainer's
+  explicit go-ahead before creating any commit (per CLAUDE.md commit workflow)</li>
+<li>PR title suggestion: <code>test: full-tier E2E trust &amp; security coverage; fix WS auth (#191, #171)</code></li>
+<li>PR closes: #191, #171</li>
+<li>PR partially addresses: #96 (documents that no CSRF bypass is in current code;
+  bearer tests in Phase 3 provide the coverage #96 requested)</li>
+<li>Do NOT commit or push without the maintainer's explicit go-ahead (per CLAUDE.md)</li>
+</ul>
+<hr />
+<h2 id="risk-log">Risk log<a class="headerlink" href="#risk-log" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Extension rebuild breaks headless path</td>
+<td>headless-reconnect test catches regressions</td>
+</tr>
+<tr>
+<td>127.0.0.1 bind breaks Docker test runner cross-container WS</td>
+<td>compose sets OPENCLAW_BRIDGE_WS_HOST=0.0.0.0</td>
+</tr>
+<tr>
+<td>getAuthToken not available in headless-service scope</td>
+<td>pass as bridgeToken option from index.js</td>
+</tr>
+<tr>
+<td>CSRF test returns 401 instead of 403 (if middleware order differs)</td>
+<td>accept [401, 403] in the expect if it turns out the order is different</td>
+</tr>
+<tr>
+<td>WebSocket close code 4401 not delivered in Node 22 built-in WebSocket</td>
+<td>test with the close event's <code>code</code> property; if it comes back 1006 (abnormal), switch to checking <code>reason</code> string</td>
+</tr>
+<tr>
+<td>Phase 6 breaks the headless WS registration (token injection fails)</td>
+<td>can verify by checking stFetch('/health').body.clients.headless &gt; 0 after startup</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="session-resumption-checklist">Session resumption checklist<a class="headerlink" href="#session-resumption-checklist" title="Permanent link">&para;</a></h2>
+<ol>
+<li><code>git checkout feat/issue-191-trust-security-e2e</code></li>
+<li>Read this file (<code>docs/plan-issue-191.md</code>)</li>
+<li>Run <code>git diff --name-only</code> to see what is already changed</li>
+<li>Resume from the first incomplete phase below</li>
+</ol>
+<h3 id="status">Status<a class="headerlink" href="#status" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] Phase 0 — Plan written</li>
+<li>[x] Phase 1 — fake-ollama <code>/last-prompt</code> endpoint</li>
+<li>[x] Phase 2 — Trust label injection tests (Gap 1)</li>
+<li>[x] Phase 3 — Bearer token validation tests (Gap 2, #96)</li>
+<li>[x] Phase 4 — CSRF enforcement tests (Gap 4)</li>
+<li>[x] Phase 5 — Character name case sensitivity test (Gap 5)</li>
+<li>[ ] Phase 6 — WS authentication fix + tests (Gap 3, #171)</li>
+<li>[ ] Phase 7 — Full test run + PR</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "search.suggest", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
