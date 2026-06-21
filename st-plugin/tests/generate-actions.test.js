@@ -948,6 +948,64 @@ describe('/generate action injection and parsing', () => {
             );
             expect(errorCall).toBeDefined();
         });
+
+        test('send_message with missing content is filtered from pending_actions and error is logged (#195)', async () => {
+            const rawResponse = 'On it! <action>{"type":"send_message","channel":"discord"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            const appendMessage = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory, appendMessage };
+            });
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([]);
+            const errorCall = appendMessage.mock.calls.find(([, entry]) =>
+                entry.mes && entry.mes.includes('send_message failed') && entry.mes.includes('content')
+            );
+            expect(errorCall).toBeDefined();
+        });
+
+        test('heartbeat path: send_message with missing content is filtered and error is logged (#195)', async () => {
+            const rawResponse = 'Checking in! <action>{"type":"send_message","channel":"discord"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            const appendMessage = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory, appendMessage };
+            });
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: [], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+            expect(res.body.actions).toEqual([]);
+            const errorCall = appendMessage.mock.calls.find(([, entry]) =>
+                entry.mes && entry.mes.includes('send_message failed') && entry.mes.includes('content')
+            );
+            expect(errorCall).toBeDefined();
+        });
     });
 
     test('write_memory with missing entry_key is skipped on main path — upsertMemoryEntry not called (#87)', async () => {
