@@ -35,6 +35,10 @@ const scenarioQueue = [];
 let nextErrorOnce = false;
 let pendingDelayCount = 0;
 
+// Last prompt capture — reset by POST /reset; read by GET /last-prompt (#191)
+let lastPromptRaw = null;
+let lastPromptEndpoint = null;
+
 function readBody(req) {
     return new Promise((resolve, reject) => {
         let data = '';
@@ -117,6 +121,8 @@ const server = http.createServer(async (req, res) => {
     if (method === 'POST' && path === '/reset') {
         scenarioQueue.length = 0;
         nextErrorOnce = false;
+        lastPromptRaw = null;
+        lastPromptEndpoint = null;
         // pendingDelayCount is live state; requests still in-flight at reset will decrement it naturally
         return json(res, 200, { ok: true });
     }
@@ -152,6 +158,8 @@ const server = http.createServer(async (req, res) => {
         try {
             const body = await readBody(req);
             const parsed = JSON.parse(body);
+            lastPromptRaw = body;
+            lastPromptEndpoint = path;
             const stream = parsed.stream !== false;
             const base = scenarioQueue.length > 0 ? scenarioQueue.shift() : defaultResponse;
 
@@ -188,6 +196,13 @@ const server = http.createServer(async (req, res) => {
         } catch (err) {
             return json(res, 400, { error: err.message });
         }
+    }
+
+    if (method === 'GET' && path === '/last-prompt') {
+        if (lastPromptRaw === null) {
+            return json(res, 404, { error: 'no prompt received yet' });
+        }
+        return json(res, 200, { raw: lastPromptRaw, endpoint: lastPromptEndpoint });
     }
 
     res.writeHead(404);

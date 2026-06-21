@@ -121,6 +121,7 @@ async function start(options = {}) {
         stUrl = 'http://127.0.0.1:8000',
         timeoutMs = 30000,
         onError = null,
+        bridgeToken = '',
     } = options;
 
     STATE.startupPromise = (async () => {
@@ -152,6 +153,11 @@ async function start(options = {}) {
             await STATE.page.addInitScript(() => {
                 globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless';
             });
+            if (bridgeToken) {
+                await STATE.page.addInitScript((token) => {
+                    globalThis.OPENCLAW_BRIDGE_BRIDGE_TOKEN = token;
+                }, bridgeToken);
+            }
 
             // Navigate to SillyTavern — retry on ERR_CONNECTION_REFUSED because
             // init() fires during ST's own startup before it's listening on the port.

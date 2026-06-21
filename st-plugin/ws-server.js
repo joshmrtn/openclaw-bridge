@@ -34,9 +34,10 @@ function runHeartbeatTick(serverClients, sessionManager) {
 }
 
 function startWebSocketServer({ port = 8765, sessionManager, getAuthToken, heartbeatIntervalMs = 30000 }) {
-    const server = new WS.Server({ port, host: '0.0.0.0' });
-    console.info(`[openclaw-bridge] WS server listening on 0.0.0.0:${port}`);
-    console.info(`[openclaw-bridge] WS server ready to accept connections on ws://localhost:${port} or ws://127.0.0.1:${port}`);
+    const wsHost = process.env.OPENCLAW_BRIDGE_WS_HOST || '127.0.0.1';
+    const server = new WS.Server({ port, host: wsHost });
+    console.info(`[openclaw-bridge] WS server listening on ${wsHost}:${port}`);
+    console.info(`[openclaw-bridge] WS server ready to accept connections on ws://${wsHost}:${port}`);
 
     server.on('connection', socket => {
         socket.isAlive = true;
@@ -49,6 +50,14 @@ function startWebSocketServer({ port = 8765, sessionManager, getAuthToken, heart
             let parsed;
             try { parsed = JSON.parse(message.toString()); } catch (e) {}
             if (parsed?.type === 'register') {
+                if (parsed.clientType === 'headless') {
+                    const expectedToken = typeof getAuthToken === 'function' ? getAuthToken() : '';
+                    if (expectedToken && parsed.token !== expectedToken) {
+                        console.warn('[openclaw-bridge] WS headless register rejected: missing or invalid token from', remote);
+                        try { socket.close(4401, 'Unauthorized'); } catch (e) {}
+                        return;
+                    }
+                }
                 sessionManager.registerClient(socket, {
                     isHeadless: parsed.clientType === 'headless',
                     isUi: parsed.clientType === 'ui',
