@@ -47,6 +47,7 @@ services:
       # Enable headless Playwright — this is the difference from the fast tier.
       - OPENCLAW_BRIDGE_ENABLE_HEADLESS=true
       - OPENCLAW_BRIDGE_WS_PORT=8765
+      - OPENCLAW_BRIDGE_WS_HOST=0.0.0.0
       # Shared volume so OC's heartbeat loop reads the same link state as ST.
       - OPENCLAW_BRIDGE_LINKS_PATH=/shared/character-links.json
       # Give the headless browser time to start (Playwright launch is slow in Docker).

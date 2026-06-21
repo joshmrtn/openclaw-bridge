@@ -17,6 +17,7 @@ const http = require('http');
 
 const WS_URL = process.env.WS_URL || 'ws://localhost:8765';
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || '4000', 10);
+const BRIDGE_TOKEN = process.env.OPENCLAW_BRIDGE_AUTH_TOKEN || '';
 const RECONNECT_DELAY_MS = 2000;
 
 let ws = null;
@@ -42,7 +43,7 @@ function connect() {
     ws.on('open', () => {
         // Must send 'register' so session-manager adds this socket to its client map.
         // clientType 'headless' gives generation priority over UI clients.
-        ws.send(JSON.stringify({ type: 'register', clientType: 'headless' }));
+        ws.send(JSON.stringify({ type: 'register', clientType: 'headless', token: BRIDGE_TOKEN || undefined }));
         connected = true;
         console.log('[fake-extension] connected and registered as headless');
     });

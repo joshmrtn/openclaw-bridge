@@ -173,6 +173,7 @@ async function init(router) {
                 headlessStartupError = err;
                 console.error('[openclaw-bridge-plugin] Headless service error:', err.message);
             },
+            bridgeToken: getAuthToken(),
         }).then(() => {
             console.info('[openclaw-bridge-plugin] Headless service started');
         }).catch(err => {

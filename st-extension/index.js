@@ -1326,8 +1326,9 @@ function connect() {
         fetchCsrfToken().catch(() => {
         });
         const clientType = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE || "ui";
+        const regToken = globalThis.OPENCLAW_BRIDGE_BRIDGE_TOKEN || STATE.bridgeToken || void 0;
         try {
-          ws.send(JSON.stringify({ type: "register", clientType }));
+          ws.send(JSON.stringify({ type: "register", clientType, token: regToken }));
         } catch (e) {
         }
       });

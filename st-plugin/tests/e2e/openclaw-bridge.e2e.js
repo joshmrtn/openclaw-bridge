@@ -27,9 +27,10 @@ async function bootExtension(page, { characterName, generateImpl }) {
     // after goto() is too late: __openclawBridgeLoaded is already true, so
     // openclawBridgeInit() becomes a no-op and the extension stays in SSE mode
     // (the UI browser path), making getClient() unable to find it.
-    await page.addInitScript(() => {
+    await page.addInitScript((token) => {
         globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless';
-    });
+        globalThis.OPENCLAW_BRIDGE_BRIDGE_TOKEN = token;
+    }, AUTH_TOKEN);
 
     await page.goto('/');
     await page.waitForFunction(() => document.getElementById('preloader') === null, null, { timeout: 30000 });

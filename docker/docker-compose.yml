@@ -31,6 +31,7 @@ services:
       # Disable headless Playwright; fake-extension handles generation via WS.
       - OPENCLAW_BRIDGE_ENABLE_HEADLESS=false
       - OPENCLAW_BRIDGE_WS_PORT=8765
+      - OPENCLAW_BRIDGE_WS_HOST=0.0.0.0
       # Store character-links.json in ST's data dir (not inside plugins/).
       - OPENCLAW_BRIDGE_LINKS_PATH=/home/node/app/data/openclaw-bridge/character-links.json
     ports:
@@ -56,6 +57,7 @@ services:
     environment:
       - WS_URL=ws://sillytavern:8765
       - HTTP_PORT=4000
+      - OPENCLAW_BRIDGE_AUTH_TOKEN=e2e-test-token
     ports:
       - "14000:4000"   # HTTP control API
     depends_on:

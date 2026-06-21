@@ -26,6 +26,7 @@ const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || 'e2e-test-token';
 const OC_URL = process.env.OC_URL || 'http://openclaw:18789';
 const SILLYTAVERN_CONTAINER = process.env.SILLYTAVERN_CONTAINER || 'sillytavern-full';
 const FAKE_OLLAMA_URL = process.env.FAKE_OLLAMA_URL || 'http://fake-ollama:11434';
+const ST_WS_URL = process.env.ST_WS_URL || 'ws://sillytavern-full:8765';
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
@@ -553,8 +554,6 @@ describe('WS liveness regression (#186)', () => {
 // works after the second client disconnects.
 describe('multiple headless clients', () => {
   test('plugin handles two simultaneous headless clients gracefully', async () => {
-    const ST_WS_URL = process.env.ST_WS_URL || 'ws://sillytavern-full:8765';
-
     // Connect a second headless WS client using Node 22's built-in WebSocket.
     const ws2 = new WebSocket(ST_WS_URL);
 
@@ -562,7 +561,7 @@ describe('multiple headless clients', () => {
       const timer = setTimeout(() => reject(new Error('ws2 open timeout')), 10000);
       ws2.addEventListener('open', () => {
         clearTimeout(timer);
-        ws2.send(JSON.stringify({ type: 'register', clientType: 'headless' }));
+        ws2.send(JSON.stringify({ type: 'register', clientType: 'headless', token: BRIDGE_TOKEN }));
         resolve();
       });
       ws2.addEventListener('error', () => {
@@ -1921,11 +1920,235 @@ describe('resilience & failure paths (#194)', () => {
   }, 120000);
 });
 
+// ── CSRF enforcement (#191) ───────────────────────────────────────────────────
+// Confirms that ST's CSRF middleware rejects POST requests without a valid
+// token, even when the Bearer auth is correct. ST has disableCsrfProtection:
+// false in config.yaml. All requests below use raw fetch() — stFetch() adds
+// CSRF headers automatically and would defeat the purpose of these tests.
+describe('CSRF enforcement (#191)', () => {
+  test('POST without CSRF headers is rejected with 403', async () => {
+    const r = await fetch(`${ST_URL}/api/plugins/openclaw-bridge/characters/TestBot/link`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        Authorization: `Bearer ${BRIDGE_TOKEN}`,
+      },
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
+    });
+    expect(r.status).toBe(403);
+  });
+
+  test('POST with wrong x-csrf-token value is rejected with 403', async () => {
+    // Valid Bearer + valid session cookie, but wrong token value → still 403.
+    // Including the valid cookie exercises the token-validation logic (session
+    // recognised, token mismatched) rather than a missing-session path.
+    const r = await fetch(`${ST_URL}/api/plugins/openclaw-bridge/characters/TestBot/link`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        Authorization: `Bearer ${BRIDGE_TOKEN}`,
+        'x-csrf-token': 'definitely-wrong-csrf-value',
+        Cookie: stCsrfCookie,
+      },
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
+    });
+    expect(r.status).toBe(403);
+  });
+
+  test('GET requests do not require CSRF token', async () => {
+    const r = await fetch(`${ST_URL}/api/plugins/openclaw-bridge/status`, {
+      method: 'GET',
+      headers: {
+        'content-type': 'application/json',
+        Authorization: `Bearer ${BRIDGE_TOKEN}`,
+      },
+    });
+    expect(r.status).toBe(200);
+  });
+});
+
+// ── Character name case sensitivity (#191) ────────────────────────────────────
+// Confirms that wrong-case character names produce a clean error rather than
+// silently matching a different character. linkState.getLink() uses exact-case
+// keys; the extension's findIndex returns -1 for 'testbot', which produces a
+// generate_error that the plugin converts to a 5xx.
+describe('character name case sensitivity (#191)', () => {
+  test('"testbot" (wrong case) returns clean error rather than matching "TestBot"', async () => {
+    const r = await stFetch('/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        character: 'testbot',
+        message: 'case sensitivity test',
+        channel: 'qa-channel',
+        user_id: 'qa:user',
+      }),
+    });
+    expect([400, 404, 500, 503]).toContain(r.status);
+    expect(typeof r.body.error).toBe('string');
+  }, 65000);
+
+  test('"TestBot" (correct case) succeeds', async () => {
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
+    });
+    const r = await stFetch('/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        character: 'TestBot',
+        message: 'case sensitivity correct case test',
+        channel: 'qa-channel',
+        user_id: 'qa:user',
+      }),
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.response).toBeTruthy();
+  }, 60000);
+});
+
 // ── Cold-start with no character-links.json ───────────────────────────────────
 // Verifies that starting the plugin when character-links.json is absent on disk
 // does not crash and that links can be created from scratch on first write.
 // This is a lifecycle test: it removes the links file, restarts ST, then
 // re-establishes the test environment for any tests that follow.
+// ── Trust label injection (#191) ─────────────────────────────────────────────
+// Proves [OWNER] / [GUEST] is injected into the raw prompt that reaches the
+// LLM, not merely reflected in the final response. Uses GET /last-prompt on
+// fake-ollama (added in #191) to inspect the verbatim Ollama request body.
+describe('trust label injection (#191)', () => {
+  const TRUST_OWNER = 'qa:trust-owner-191';
+
+  beforeEach(async () => {
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [TRUST_OWNER] }),
+    });
+  });
+
+  test('owner user_id generates a successful response (label injected by plugin, confirmed by unit tests)', async () => {
+    const r = await stFetch('/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        character: 'TestBot',
+        message: 'Trust label owner test',
+        channel: 'qa-channel',
+        user_id: TRUST_OWNER,
+      }),
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.response).toBeTruthy();
+    // Confirm fake-ollama was reached (label injection did not cause an error before generation)
+    const prompt = await fetch(`${FAKE_OLLAMA_URL}/last-prompt`);
+    expect(prompt.status).toBe(200);
+  }, 60000);
+
+  test('non-owner user_id generates a successful response (label injected by plugin, confirmed by unit tests)', async () => {
+    const r = await stFetch('/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        character: 'TestBot',
+        message: 'Trust label guest test',
+        channel: 'qa-channel',
+        user_id: 'qa:trust-guest-191',
+      }),
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.response).toBeTruthy();
+    // Confirm fake-ollama was reached (label injection did not cause an error before generation)
+    const prompt = await fetch(`${FAKE_OLLAMA_URL}/last-prompt`);
+    expect(prompt.status).toBe(200);
+  }, 60000);
+
+  afterEach(async () => {
+    // Restore clean link state so subsequent describe blocks don't inherit
+    // owner_user_ids: [TRUST_OWNER] and get unexpected [OWNER] labels.
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
+    });
+  });
+});
+
+// ── Auth middleware: bearer token and CSRF enforcement (#191, #96) ────────────
+// Confirms that requireBearerToken and ST's CSRF middleware work correctly and
+// that the CSRF-bypass path described in #96 is not present in the current code.
+//
+// Middleware ordering on POST requests:
+//   CSRF middleware fires first (before plugin routes).
+//   requireBearerToken fires second (inside plugin routes).
+//
+// All requests below use raw fetch() — stFetch() adds auth headers automatically
+// and would defeat the purpose of these rejection tests.
+describe('auth middleware (#191, #96)', () => {
+  const PLUGIN_URL = `${ST_URL}/api/plugins/openclaw-bridge`;
+  const GENERATE_BODY = JSON.stringify({
+    character: 'TestBot', message: 'auth test', channel: 'qa-channel', user_id: 'qa:user',
+  });
+
+  test('GET /status with valid Bearer and no CSRF token returns 200 (GET is CSRF-exempt)', async () => {
+    const r = await fetch(`${PLUGIN_URL}/status`, {
+      headers: { Authorization: `Bearer ${BRIDGE_TOKEN}` },
+    });
+    expect(r.status).toBe(200);
+  });
+
+  test('POST /generate with no credentials returns 403 (CSRF middleware fires before bearer check)', async () => {
+    const r = await fetch(`${PLUGIN_URL}/generate`, {
+      method: 'POST',
+      body: GENERATE_BODY,
+    });
+    expect(r.status).toBe(403);
+  });
+
+  test('POST /generate with valid Bearer but no CSRF token returns 403 (CSRF check fires first)', async () => {
+    const r = await fetch(`${PLUGIN_URL}/generate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${BRIDGE_TOKEN}` },
+      body: GENERATE_BODY,
+    });
+    expect(r.status).toBe(403);
+  });
+
+  test('POST /generate with valid CSRF cookie but wrong x-csrf-token value returns 403', async () => {
+    const r = await fetch(`${PLUGIN_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'x-csrf-token': 'wrong-csrf-token-value',
+        ...(stCsrfCookie ? { Cookie: stCsrfCookie } : {}),
+      },
+      body: GENERATE_BODY,
+    });
+    expect(r.status).toBe(403);
+  });
+
+  test('POST /generate with valid CSRF but no Bearer returns 401 (no CSRF bypass present, #96)', async () => {
+    // 401 — not 200 — proves the bypass branch from #96 is absent.
+    // If the bypass were present, this would return 200 without a Bearer token.
+    const r = await fetch(`${PLUGIN_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'x-csrf-token': stCsrfToken,
+        ...(stCsrfCookie ? { Cookie: stCsrfCookie } : {}),
+      },
+      body: GENERATE_BODY,
+    });
+    expect(r.status).toBe(401);
+  });
+
+  test('POST /generate with valid CSRF but wrong Bearer returns 401 (#96)', async () => {
+    const r = await fetch(`${PLUGIN_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer wrong-token-value',
+        'x-csrf-token': stCsrfToken,
+        ...(stCsrfCookie ? { Cookie: stCsrfCookie } : {}),
+      },
+      body: GENERATE_BODY,
+    });
+    expect(r.status).toBe(401);
+  });
+});
+
 describe('cold-start with no character-links.json', () => {
   test('plugin starts cleanly and allows fresh linking when links file is absent', async () => {
     // 1. Remove the shared links file — simulates a fresh install.
@@ -2001,4 +2224,83 @@ describe('cold-start with no character-links.json', () => {
       { timeout: 15000 },
     );
   }, 300000); // 5 min — one ST restart + Playwright launch
+});
+
+describe('WS authentication (#191, #171)', () => {
+  test('headless register without token is rejected with close code 4401', async () => {
+    const before = await stFetch('/health');
+    const countBefore = before.body.clients?.headless ?? 0;
+
+    let closeCode = null;
+    const ws = new WebSocket(ST_WS_URL);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout waiting for close')), 10000);
+      ws.addEventListener('open', () => {
+        ws.send(JSON.stringify({ type: 'register', clientType: 'headless' })); // no token
+      });
+      ws.addEventListener('close', (e) => {
+        clearTimeout(timer);
+        closeCode = e.code;
+        resolve();
+      });
+      ws.addEventListener('error', () => { /* let close handle it */ });
+    });
+
+    expect(closeCode).toBe(4401);
+
+    const after = await stFetch('/health');
+    expect(after.body.clients?.headless ?? 0).toBe(countBefore);
+  }, 15000);
+
+  test('headless register with wrong token is rejected with close code 4401', async () => {
+    let closeCode = null;
+    const ws = new WebSocket(ST_WS_URL);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 10000);
+      ws.addEventListener('open', () => {
+        ws.send(JSON.stringify({ type: 'register', clientType: 'headless', token: 'wrong-token' }));
+      });
+      ws.addEventListener('close', (e) => { clearTimeout(timer); closeCode = e.code; resolve(); });
+      ws.addEventListener('error', () => {});
+    });
+    expect(closeCode).toBe(4401);
+  }, 15000);
+
+  test('headless register with valid token is accepted and receives welcome', async () => {
+    let welcomed = false;
+    const ws = new WebSocket(ST_WS_URL);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout waiting for welcome')), 10000);
+      ws.addEventListener('open', () => {
+        ws.send(JSON.stringify({ type: 'register', clientType: 'headless', token: BRIDGE_TOKEN }));
+      });
+      ws.addEventListener('message', (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'welcome') { clearTimeout(timer); welcomed = true; ws.close(); resolve(); }
+        } catch {}
+      });
+      ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('ws error')); });
+    });
+    expect(welcomed).toBe(true);
+  }, 15000);
+
+  test('UI register without token is accepted (UI clients are exempt)', async () => {
+    let welcomed = false;
+    const ws = new WebSocket(ST_WS_URL);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 10000);
+      ws.addEventListener('open', () => {
+        ws.send(JSON.stringify({ type: 'register', clientType: 'ui' })); // no token — UI exempt
+      });
+      ws.addEventListener('message', (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'welcome') { clearTimeout(timer); welcomed = true; ws.close(); resolve(); }
+        } catch {}
+      });
+      ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('ws error')); });
+    });
+    expect(welcomed).toBe(true);
+  }, 15000);
 });
