@@ -10,10 +10,10 @@
  *   GET  /api/version   → {"version":"0.1.0"}
  *   POST /api/generate  → generate (streaming NDJSON)
  *   POST /api/chat      → chat (streaming NDJSON)
- *   POST /scenario      → { response } set next scripted response
+ *   POST /scenario      → { response } set sticky response (persists until /reset or next /scenario)
  *   POST /error-once    → next generate/chat request returns HTTP 500
  *   GET  /pending-count → { count } of requests currently held by a delay scenario
- *   POST /reset         → clear scenario queue and all control flags
+ *   POST /reset         → clear sticky scenario and all control flags
  *
  * Special sentinel values for scenario responses:
  *   __INVALID_NDJSON__       → write garbled bytes (not valid JSON)
@@ -29,7 +29,7 @@ let defaultResponse = process.env.DEFAULT_RESPONSE || 'This is a fake LLM respon
 // When set, fake-ollama scans incoming prompts for these character names and
 // prepends [persona:NAME] to the response, enabling bleed-detection assertions.
 const echoMarkers = (process.env.ECHO_CHARACTER_MARKERS || '').split(',').filter(Boolean);
-const scenarioQueue = [];
+let stickyScenario = null;
 
 // Control flags for failure-path testing (all reset by POST /reset)
 let nextErrorOnce = false;
@@ -119,7 +119,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (method === 'POST' && path === '/reset') {
-        scenarioQueue.length = 0;
+        stickyScenario = null;
         nextErrorOnce = false;
         lastPromptRaw = null;
         lastPromptEndpoint = null;
@@ -137,8 +137,8 @@ const server = http.createServer(async (req, res) => {
             const body = await readBody(req);
             const { response } = JSON.parse(body);
             if (typeof response !== 'string') return json(res, 400, { error: 'response must be a string' });
-            scenarioQueue.push(response);
-            return json(res, 200, { queued: true, queueLength: scenarioQueue.length });
+            stickyScenario = response;
+            return json(res, 200, { ok: true });
         } catch {
             return json(res, 400, { error: 'invalid JSON' });
         }
@@ -161,7 +161,7 @@ const server = http.createServer(async (req, res) => {
             lastPromptRaw = body;
             lastPromptEndpoint = path;
             const stream = parsed.stream !== false;
-            const base = scenarioQueue.length > 0 ? scenarioQueue.shift() : defaultResponse;
+            const base = stickyScenario !== null ? stickyScenario : defaultResponse;
 
             // __INVALID_NDJSON__: return garbled bytes that cannot be parsed as NDJSON
             if (base === '__INVALID_NDJSON__') {

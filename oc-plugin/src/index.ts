@@ -197,6 +197,14 @@ function isTableSeparatorRow(line: string): boolean {
     return !/[^|:\-\s]/.test(t.slice(1, -1));
 }
 
+export function shouldFireIdleHeartbeat(
+    state: { lastMessageAt: number; idleHeartbeatFiredAt: number },
+    idleMs: number,
+    now: number,
+): boolean {
+    return idleMs > 0 && now - state.lastMessageAt >= idleMs && state.idleHeartbeatFiredAt < state.lastMessageAt;
+}
+
 // Strip inline and block-level markdown, preserving semantic content. Collapses extra whitespace.
 export function formatOutboundText(text: string, channelId: string, linkEntry: LinkEntry): string {
     if (!shouldStripAsteriskMarkup(channelId, linkEntry)) return text;
@@ -747,7 +755,7 @@ export default definePluginEntry({
                 }
 
                 // Idle detection (R10.7): fire once when channel has been quiet too long
-                if (idleMs > 0 && now - s.lastMessageAt >= idleMs && s.idleHeartbeatFiredAt < s.lastMessageAt) {
+                if (shouldFireIdleHeartbeat(s, idleMs, now)) {
                     s.idleHeartbeatFiredAt = now;
                     s.lastHeartbeatAt = now;
                     runHeartbeat(character, link, "idle", api).catch(err => {

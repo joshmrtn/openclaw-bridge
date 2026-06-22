@@ -1020,8 +1020,8 @@ async function handleGenerateRequest(payload) {
     const actions = STATE.pendingActions.get(character) || [];
     const stSideActions = STATE.pendingStSideActions.get(character) || [];
     console.info("[openclaw-bridge] Generation completed:", { requestId, responseLength: response?.length, actionsCount: actions.length, stSideActionsCount: stSideActions.length, responsePreview: response?.substring(0, 100) });
-    if (!response) {
-      sendSocketMessage({ type: "generate_error", requestId, error: "Generation returned empty response \u2014 check LLM model/connection" });
+    if (response == null) {
+      sendSocketMessage({ type: "generate_error", requestId, error: "Generation returned null/undefined \u2014 check LLM model/connection" });
       return;
     }
     sendSocketMessage({
