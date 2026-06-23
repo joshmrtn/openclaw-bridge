@@ -56,7 +56,7 @@ services:
       # Point headless-service.js at the Alpine system Chromium (see Dockerfile).
       - CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
       # Short ping interval for WS liveness regression test (default is 30 s).
-      - OPENCLAW_BRIDGE_WS_HEARTBEAT_MS=3000
+      - OPENCLAW_BRIDGE_WS_HEARTBEAT_MS=1000
     volumes:
       - character-links:/shared
     ports:
@@ -136,8 +136,11 @@ services:
       - OPENCLAW_BRIDGE_ST_URL=http://sillytavern-full:8000
       # Shared volume so OC reads the same character-links.json that ST writes.
       - OPENCLAW_BRIDGE_LINKS_PATH=/shared/character-links.json
-      # Speed up heartbeat loop for E2E (production default is 60000ms).
-      - OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS=5000
+      # Speed up heartbeat loop for E2E (production default is 60000ms). The loop is
+      # only a polling granularity — actual firing is gated by per-character interval_ms
+      # and a non-reentrant running-guard (oc-plugin/src/index.ts), so 1000ms is safe and
+      # makes heartbeat-dependent waits resolve far faster.
+      - OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS=1000
     volumes:
       - type: bind
         source: ./openclaw

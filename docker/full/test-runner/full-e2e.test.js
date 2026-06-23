@@ -491,7 +491,7 @@ describe('heartbeat fires on schedule (R10)', () => {
   // The OC plugin's heartbeat loop reads character-links.json from the shared
   // Docker volume, calls ST /generate with is_heartbeat: true, and posts the
   // response via the qa-channel outbound adapter → qa-bus.
-  // OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS=5000 means it fires within 5s of
+  // OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS=1000 means it fires within ~1s of
   // configuration, so the test needs only a 30s waitFor.
   test('OC plugin heartbeat fires and posts response to qa-bus', async () => {
     // Set heartbeat config on TestBot. beforeEach already cleared qa-bus.
@@ -506,13 +506,13 @@ describe('heartbeat fires on schedule (R10)', () => {
           enabled: true,
           channel_id: 'qa-channel',
           target: 'heartbeat-test-conv',
-          interval_ms: 1000,   // fires immediately on first sidecar tick (<=5s)
+          interval_ms: 1000,   // fires immediately on first sidecar tick (<=1s)
           idle_ms: 0,
         },
       }),
     });
 
-    // Heartbeat loop runs every 5s (OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS) -- allow 30s for first fire.
+    // Heartbeat loop runs every 1s (OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS) -- allow 30s for first fire.
     const outbound = await waitFor(async () => {
       const state = await fetch(`${QA_BUS_URL}/v1/state`);
       const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
@@ -585,7 +585,7 @@ describe('heartbeat completeness (R10) (#196)', () => {
             channel_id: 'qa-channel',
             target: 'heartbeat-idle-conv',
             interval_ms: 999999,     // scheduled heartbeat will not fire during this test
-            idle_threshold_ms: 1000, // idle threshold met on the 2nd loop tick (~5s after state init)
+            idle_threshold_ms: 1000, // idle threshold met on the 2nd loop tick (~2s after state init)
           },
         }),
       });
@@ -599,8 +599,9 @@ describe('heartbeat completeness (R10) (#196)', () => {
         return events.length >= 1 ? events : null;
       }, { timeoutMs: 20000, intervalMs: 1000, label: 'idle heartbeat outbound message' });
 
-      // Wait two more loop ticks and assert no second idle heartbeat fires.
-      await sleep(12000);
+      // Wait several more loop ticks (now ~1s each) plus a generation round-trip
+      // and assert no second idle heartbeat fires.
+      await sleep(4000);
       const state = await fetch(`${QA_BUS_URL}/v1/state`);
       const idleMessages = (state.body.events || []).filter(
         e => e.kind === 'outbound-message' && (e.message?.text || '').includes(IDLE_SENTINEL)
@@ -631,7 +632,7 @@ describe('heartbeat completeness (R10) (#196)', () => {
         }),
       });
 
-      // Wait for at least 2 heartbeat cycles (loop runs every 5s → 2 fires within ~15s).
+      // Wait for at least 2 heartbeat cycles (loop runs every 1s → 2 fires within ~3s).
       await waitFor(async () => {
         const state = await fetch(`${QA_BUS_URL}/v1/state`);
         const events = (state.body.events || []).filter(e => e.kind === 'outbound-message');
@@ -707,7 +708,7 @@ describe('heartbeat completeness (R10) (#196)', () => {
 // ── WS liveness regression (#186) ────────────────────────────────────────────
 // PR #186 added server-side WebSocket keepalives (ping/pong). This test
 // verifies the connection survives an idle period longer than the configured
-// ping interval (OPENCLAW_BRIDGE_WS_HEARTBEAT_MS=3000 in docker-compose.full.yml).
+// ping interval (OPENCLAW_BRIDGE_WS_HEARTBEAT_MS=1000 in docker-compose.full.yml).
 describe('WS liveness regression (#186)', () => {
   test('WS connection survives idle period longer than the ping interval', async () => {
     const before = await stFetch('/status');
@@ -715,8 +716,8 @@ describe('WS liveness regression (#186)', () => {
     const clientsBefore = Number(before.body.connected_ws_clients);
     expect(clientsBefore).toBeGreaterThanOrEqual(1);
 
-    // Sleep for > 2 heartbeat intervals (3 s each) to exercise the ping/pong cycle.
-    await sleep(8000);
+    // Sleep for > 2 ping intervals (1 s each) to exercise the ping/pong cycle.
+    await sleep(3000);
 
     const after = await stFetch('/status');
     expect(after.status).toBe(200);
