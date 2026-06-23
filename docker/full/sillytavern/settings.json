@@ -1,13 +1,12 @@
 {
-  "main_api": "textgenerationwebui",
-  "textgenerationwebui_settings": {
-    "type": "ollama",
-    "ollama_model": "fake-model",
-    "server_urls": {
-      "ollama": "http://fake-ollama:11434"
-    },
-    "streaming": true,
-    "max_length": 512,
-    "context_length": 8192
+  "main_api": "openai",
+  "oai_settings": {
+    "chat_completion_source": "custom",
+    "custom_url": "http://fake-openai:11436/v1",
+    "custom_model": "fake-model",
+    "stream_openai": true,
+    "bypass_status_check": true,
+    "openai_max_tokens": 512,
+    "openai_max_context": 8192
   }
 }

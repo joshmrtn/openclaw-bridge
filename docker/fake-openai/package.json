@@ -1,0 +1,10 @@
+{
+  "name": "fake-openai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpenAI-compatible mock LLM for openclaw-bridge E2E tests (ST + OC)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

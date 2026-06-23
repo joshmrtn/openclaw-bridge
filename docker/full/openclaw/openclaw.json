@@ -20,10 +20,10 @@
     "defaults": {
       "workspace": "/tmp/openclaw/workspace",
       "model": {
-        "primary": "mock-openai/gpt-5.5"
+        "primary": "fake-openai/fake-model"
       },
       "models": {
-        "mock-openai/gpt-5.5": {
+        "fake-openai/fake-model": {
           "params": {
             "transport": "sse",
             "openaiWsWarmup": false
@@ -49,18 +49,18 @@
   "models": {
     "mode": "replace",
     "providers": {
-      "mock-openai": {
-        "baseUrl": "http://mock-llm:11435/v1",
+      "fake-openai": {
+        "baseUrl": "http://fake-openai:11436/v1",
         "apiKey": "test",
-        "api": "openai-responses",
+        "api": "openai-completions",
         "request": {
           "allowPrivateNetwork": true
         },
         "models": [
           {
-            "id": "gpt-5.5",
-            "name": "gpt-5.5",
-            "api": "openai-responses",
+            "id": "fake-model",
+            "name": "fake-model",
+            "api": "openai-completions",
             "reasoning": true,
             "input": ["text", "image"],
             "cost": {

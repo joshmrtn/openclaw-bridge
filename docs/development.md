@@ -47,7 +47,7 @@ All three automatic tiers run on every push and pull request. A PR cannot be mer
 
 Every `test:e2e:*` command begins with `docker compose down --rmi local` before rebuilding. This is intentional and load-bearing — do not remove it.
 
-The problem it prevents: `docker compose run --build service-name` only rebuilds the image for the named service (the test runner). Dependency services — `sillytavern`, `fake-extension`, `fake-ollama`, etc. — are reused from whatever image was built last. If source code has changed since the last build, those services silently run stale code. Tests then pass or fail for the wrong reasons, and hours are lost chasing phantom bugs.
+The problem it prevents: `docker compose run --build service-name` only rebuilds the image for the named service (the test runner). Dependency services — `sillytavern`, `fake-extension`, `fake-openai`, etc. — are reused from whatever image was built last. If source code has changed since the last build, those services silently run stale code. Tests then pass or fail for the wrong reasons, and hours are lost chasing phantom bugs.
 
 `--rmi local` removes all compose-built images (pulled images like `alpine` and pre-built images like `openclaw-bridge:oc-full` are unaffected). On the next run, every locally-built service is rebuilt from scratch. Docker layer caching means this is fast in practice — only layers whose source files changed are re-executed.
 
