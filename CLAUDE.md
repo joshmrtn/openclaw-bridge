@@ -117,6 +117,8 @@ Quiet generation returns text without saving to chat history or rendering in ST'
 
 Every `/generate` request includes a `user_id`. The plugin compares it against `owner_user_ids` from link-state and prepends `[OWNER]` or `[GUEST]` to the message before generation. This is hard enforcement — a guest message cannot escalate to owner trust regardless of content. Never make the label optional or let message content influence which label it receives.
 
+**`user_id` is channel-prefixed — `owner_user_ids` must match that form.** OC builds the `user_id` as `` `${channelType}:${senderId}` `` (`oc-plugin/src/index.ts`), e.g. a Discord sender `123456789` arrives as `discord:123456789`. The owner check is an exact `owner_user_ids.includes(user_id)`, so entries stored via `/characters/:name/link` **must** carry the same prefix. A bare platform id (`123456789`) silently fails to match and the owner is labeled `[GUEST]` — a real bug that hid for a while because the early E2E test only asserted a response came back, not which label was injected. Full-path coverage now asserts the literal `[OWNER]`/`[GUEST]` in the prompt (`docker/full/test-runner/full-e2e.test.js`, "trust label injection").
+
 ### No intermediary process
 
 OC calls the plugin directly via HTTP. There is no Python bridge, no adapter layer. References to `bridge.py`, `characters.yaml`, or channel adapters are from an earlier architecture and should be removed.
