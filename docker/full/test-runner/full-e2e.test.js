@@ -27,6 +27,13 @@ const SILLYTAVERN_CONTAINER = process.env.SILLYTAVERN_CONTAINER || 'sillytavern-
 const FAKE_OPENAI_URL = process.env.FAKE_OPENAI_URL || 'http://fake-openai:11436';
 const ST_WS_URL = process.env.ST_WS_URL || 'ws://sillytavern-full:8765';
 
+// Bounded window for negative assertions ("prove X did NOT happen"). A wrongful
+// generation (loop, self-message, dropped action) would manifest as a fake-openai
+// request + qa-bus outbound within one round-trip (~3s), so a window comfortably
+// above that is enough to catch it. This is an intentional wait, NOT a lazy drain —
+// quiescence polling cannot help here because the bad effect may not have started yet.
+const NEGATIVE_ASSERT_MS = 4000;
+
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 // CSRF state: fetched once in beforeAll, included in all ST POST/DELETE requests.
@@ -136,6 +143,26 @@ async function waitFor(fn, { timeoutMs = 30000, intervalMs = 500, label = 'condi
     await sleep(intervalMs);
   }
   throw new Error(`Timeout waiting for ${label}${lastErr ? `: ${lastErr.message}` : ''}`);
+}
+
+// Deterministically wait until fake-openai stops receiving completion requests —
+// i.e. no stray heartbeat generation is in flight — instead of sleeping a fixed
+// drain. settleMs first lets any stray that is about to fire enter the pipeline
+// (the heartbeat loop ticks every ~1s); then we require the monotonic
+// /request-count to hold steady for stableMs. stableMs MUST exceed the heartbeat
+// fire interval (1000ms) so we never mistake the gap between two fires for quiet.
+async function waitForQuiescence({ settleMs = 1000, stableMs = 1500, timeoutMs = 15000 } = {}) {
+  await sleep(settleMs);
+  const reqCount = async () => Number((await fetch(`${FAKE_OPENAI_URL}/request-count`)).body.count);
+  const deadline = Date.now() + timeoutMs;
+  let last = await reqCount();
+  let stableSince = Date.now();
+  while (Date.now() < deadline) {
+    await sleep(250);
+    const now = await reqCount();
+    if (now !== last) { last = now; stableSince = Date.now(); continue; }
+    if (Date.now() - stableSince >= stableMs) return;
+  }
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -540,10 +567,9 @@ describe('heartbeat completeness (R10) (#196)', () => {
   beforeAll(async () => {
     // The preceding 'heartbeat fires on schedule' test cleans up by setting
     // heartbeat: null, but OC's loop may fire once more before reading the
-    // updated config (loop interval = 5s). With sticky scenarios, strays no
-    // longer consume test responses — 6s (1 tick + 1s buffer) is enough to
-    // let any stray pipeline complete before the reset clears fake-openai.
-    await sleep(6000);
+    // updated config. Wait deterministically for that stray generation to drain
+    // (no completion requests in flight) before the reset clears fake-openai.
+    await waitForQuiescence();
     await post(`${FAKE_OPENAI_URL}/reset`, {});
   }, 10000);
 
@@ -601,7 +627,7 @@ describe('heartbeat completeness (R10) (#196)', () => {
 
       // Wait several more loop ticks (now ~1s each) plus a generation round-trip
       // and assert no second idle heartbeat fires.
-      await sleep(4000);
+      await sleep(NEGATIVE_ASSERT_MS);
       const state = await fetch(`${QA_BUS_URL}/v1/state`);
       const idleMessages = (state.body.events || []).filter(
         e => e.kind === 'outbound-message' && (e.message?.text || '').includes(IDLE_SENTINEL)
@@ -652,10 +678,9 @@ describe('heartbeat completeness (R10) (#196)', () => {
         method: 'POST',
         body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [], heartbeat: null }),
       });
-      // OC may fire one more heartbeat before reading the null config (up to 5s).
-      // With sticky scenarios, strays don't consume test responses — 6s is
-      // enough for the stray pipeline to complete before the next test starts.
-      await sleep(6000);
+      // OC may fire one more heartbeat before reading the null config. Wait
+      // deterministically for that stray generation to drain before the next test.
+      await waitForQuiescence();
     }
   }, 60000);
 
@@ -697,10 +722,9 @@ describe('heartbeat completeness (R10) (#196)', () => {
         method: 'POST',
         body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [], heartbeat: null }),
       });
-      // OC may fire one more heartbeat before reading the null config (up to 5s).
-      // With sticky scenarios, strays don't consume test responses — 6s is
-      // enough for the stray pipeline to complete before the next test starts.
-      await sleep(6000);
+      // OC may fire one more heartbeat before reading the null config. Wait
+      // deterministically for that stray generation to drain before the next test.
+      await waitForQuiescence();
     }
   }, 60000);
 });
@@ -1433,7 +1457,7 @@ describe('send_message action and loop prevention (#111)', () => {
     const snapBefore = (await fetch(`${QA_BUS_URL}/v1/state`)).body.events.filter(
       e => e.kind === 'outbound-message'
     ).length;
-    await sleep(6000);
+    await sleep(NEGATIVE_ASSERT_MS);
     const snapAfter = (await fetch(`${QA_BUS_URL}/v1/state`)).body.events.filter(
       e => e.kind === 'outbound-message'
     ).length;
@@ -1463,8 +1487,7 @@ describe('send_message action and loop prevention (#111)', () => {
     });
 
     // Allow enough time for a full generation round-trip if one were triggered.
-    // fake-openai pipeline completes in ~3s; 6s gives comfortable headroom.
-    await sleep(6000);
+    await sleep(NEGATIVE_ASSERT_MS);
 
     const state = await fetch(`${QA_BUS_URL}/v1/state`);
     const loopDetected = (state.body.events || []).some(
@@ -1553,7 +1576,7 @@ describe('send_message action and loop prevention (#111)', () => {
     expect(reply.message.text).not.toContain('<action>');
 
     // Wait a moment and confirm no blank channel post arrives.
-    await sleep(5000);
+    await sleep(NEGATIVE_ASSERT_MS);
     const state = await fetch(`${QA_BUS_URL}/v1/state`);
     const channelPost = (state.body.events || []).find(
       e => e.kind === 'outbound-message' && e.message?.conversation?.id === 'qa-send-test'

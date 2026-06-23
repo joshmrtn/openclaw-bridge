@@ -11,6 +11,7 @@
  *   POST /scenario             → { response } sticky reply (until /reset or next /scenario)
  *   POST /error-once           → next completion returns HTTP 500
  *   GET  /pending-count        → { count } requests held by a delay scenario
+ *   GET  /request-count        → { count } monotonic total completion requests seen
  *   GET  /last-prompt          → { raw } the last completion request body
  *   POST /reset                → clear sticky scenario + control flags
  *   GET  /healthz              → { ok: true }
@@ -45,6 +46,10 @@ let stickyScenario = null;
 let nextErrorOnce = false;
 let pendingDelayCount = 0;
 let lastPromptRaw = null;
+// Monotonic count of every /v1/chat/completions request that has arrived. Tests poll
+// GET /request-count and wait for it to stop changing to detect generation quiescence
+// (no heartbeat/stray pipeline in flight) deterministically, instead of fixed sleeps.
+let requestsSeen = 0;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -146,6 +151,9 @@ const server = http.createServer(async (req, res) => {
     if (method === 'GET' && path === '/pending-count') {
         return json(res, 200, { count: pendingDelayCount });
     }
+    if (method === 'GET' && path === '/request-count') {
+        return json(res, 200, { count: requestsSeen });
+    }
     if (method === 'GET' && path === '/last-prompt') {
         return lastPromptRaw === null ? json(res, 404, { error: 'no prompt yet' }) : json(res, 200, { raw: lastPromptRaw });
     }
@@ -167,6 +175,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (method === 'POST' && path === '/v1/chat/completions') {
+        requestsSeen++;
         if (nextErrorOnce) {
             nextErrorOnce = false;
             console.log('[fake-openai] error-once → 500');
