@@ -344,6 +344,8 @@ describe('trust label enforcement', () => {
 
 describe('character isolation', () => {
   test('unlinked character returns error from ST', async () => {
+    // FULL-PATH-EXCEPTION: OC's mock-llm hardcodes the target character, so it
+    // cannot address an unlinked one; this drives ST's link validation directly.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({ character: 'UnlinkedChar', message: 'test', channel: 'qa-channel', user_id: 'qa:user' }),
@@ -360,6 +362,8 @@ describe('character isolation', () => {
     // fake-ollama is configured with ECHO_CHARACTER_MARKERS=TestBot,Narrator: it
     // inspects the incoming system prompt and prepends [persona:NAME] to its
     // response. If bleed occurred, the wrong character's marker would appear.
+    // FULL-PATH-EXCEPTION: same-instant concurrency must be dispatched from one
+    // Promise.all; OC cannot issue truly simultaneous same-tick generations.
     const [r1, r2] = await Promise.all([
       stFetch('/generate', {
         method: 'POST',
@@ -383,6 +387,8 @@ describe('character isolation', () => {
     // Fire 3 simultaneous /generate calls for TestBot.
     // withCharacterLock in the extension serialises them so they don't interleave.
     // fake-ollama echoes [persona:TestBot] for each — all three must carry it.
+    // FULL-PATH-EXCEPTION: same-instant concurrency — OC cannot drive three
+    // simultaneous same-character generations to exercise the extension lock.
     const [r1, r2, r3] = await Promise.all([
       stFetch('/generate', {
         method: 'POST',
@@ -414,6 +420,8 @@ describe('character isolation', () => {
     // TestBot requests serialise via withCharacterLock; Narrator enters the global
     // generation lock queue independently and does not wait behind all 3 TestBot
     // requests. All 4 must complete with the correct persona marker and no bleed.
+    // FULL-PATH-EXCEPTION: same-instant concurrency — OC cannot dispatch four
+    // simultaneous generations to test the extension's lock fairness.
     const [r1, r2, r3, rN] = await Promise.all([
       stFetch('/generate', {
         method: 'POST',
@@ -546,6 +554,9 @@ describe('heartbeat completeness (R10) (#196)', () => {
     // Use test_char_1 (not TestBot/Narrator) so fake-ollama's ECHO_CHARACTER_MARKERS
     // persona-prefix system does not add content to the empty scenario response.
     await post(`${FAKE_OLLAMA_URL}/scenario`, { response: '' });
+    // FULL-PATH-EXCEPTION: drives the heartbeat generate path directly to isolate the
+    // plugin's empty-response handling from OC-loop timing (the OC heartbeat loop is
+    // covered by 'heartbeat fires on schedule').
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -713,6 +724,8 @@ describe('WS liveness regression (#186)', () => {
     expect(Number(after.body.connected_ws_clients)).toBeGreaterThanOrEqual(1);
 
     // Confirm generation still works end-to-end after the idle period.
+    // FULL-PATH-EXCEPTION: post-idle sanity probe within a WS ping/pong keepalive
+    // test; WS liveness is plugin-layer, not OC-driven.
     await stFetch('/characters/TestBot/link', {
       method: 'POST',
       body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
@@ -774,6 +787,8 @@ describe('multiple headless clients', () => {
     expect(healthAfter.body.clients.headless).toBeLessThan(2);
 
     // Verify generation still works with the original headless client.
+    // FULL-PATH-EXCEPTION: post-disconnect sanity probe within a multi-headless-client
+    // test; WS client-registry behaviour is plugin-layer, not OC-driven.
     await stFetch('/characters/TestBot/link', {
       method: 'POST',
       body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
@@ -1367,9 +1382,9 @@ describe('send_message action and loop prevention (#111)', () => {
       response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":"${ACTION_TEXT}"}</action>`,
     });
 
-    // Call /generate directly: verifies plugin parsing, stripping, and resolveActions.
-    // Delivery to the qa-bus channel requires an OC outbound adapter for qa-channel,
-    // which is not available in the E2E environment (qa-channel is inbound-only).
+    // FULL-PATH-EXCEPTION: qa-channel is inbound-only (no OC outbound adapter), so
+    // send_message resolution is asserted on the /generate response directly. This
+    // verifies plugin parsing, stripping, and resolveActions.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -1466,6 +1481,8 @@ describe('send_message action and loop prevention (#111)', () => {
       response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":"${ACTION1}"}</action><action>{"type":"send_message","channel":"qa","content":"${ACTION2}"}</action>`,
     });
 
+    // FULL-PATH-EXCEPTION: qa-channel is inbound-only (no OC outbound adapter), so
+    // send_message resolution is asserted on the /generate response directly.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -1493,6 +1510,8 @@ describe('send_message action and loop prevention (#111)', () => {
       response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":${JSON.stringify(UNICODE_CONTENT)}}</action>`,
     });
 
+    // FULL-PATH-EXCEPTION: qa-channel is inbound-only (no OC outbound adapter), so
+    // send_message resolution is asserted on the /generate response directly.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -1579,9 +1598,9 @@ describe('R11: memory write on OC path', () => {
   test('write_memory block is stripped from reply and persists to lorebook (owner sender)', async () => {
     await post(`${FAKE_OLLAMA_URL}/scenario`, { response: MEMORY_RESPONSE });
 
-    // Call /generate directly: verifies plugin-side stSideActions processing.
-    // write_memory is processed by the plugin (not forwarded to OC), so the
-    // direct call exercises exactly the same code path as the OC route.
+    // FULL-PATH-EXCEPTION: write_memory is a plugin-side stSideAction (not forwarded
+    // to OC), so the direct call exercises the identical code path. Verifies plugin-
+    // side stSideActions processing, stripping, and lorebook persistence.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -1689,6 +1708,8 @@ describe('R11: memory write on OC path', () => {
 
     await post(`${FAKE_OLLAMA_URL}/scenario`, { response: idempResponse });
 
+    // FULL-PATH-EXCEPTION: write_memory is a plugin-side stSideAction (not forwarded
+    // to OC), so the direct call exercises the identical idempotency code path.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -2110,6 +2131,8 @@ describe('resilience & failure paths (#194)', () => {
   // We poll GET /pending-count until fake-ollama confirms it has the request
   // before restarting — no sleep-based timing.
   test('plugin restart: in-flight request lost cleanly, next request succeeds', async () => {
+    // FULL-PATH-EXCEPTION: induces a container restart mid-request and asserts clean
+    // failure + recovery — an infra-failure path OC cannot orchestrate.
     await ensureHeadlessRunning('headless running before restart test');
 
     // Verify the full generation pipeline is working before posting the delay scenario.
@@ -2203,6 +2226,8 @@ describe('resilience & failure paths (#194)', () => {
   // LLM HTTP 500: extension must report generate_error and plugin must return a
   // clean 5xx — no infinite hang, no silent empty reply (#194).
   test('fake-ollama 500: plugin returns clean error rather than hanging', async () => {
+    // FULL-PATH-EXCEPTION: induces an LLM HTTP 500 and asserts a clean, prompt error
+    // — an infra-failure path OC cannot orchestrate.
     await ensureHeadlessRunning('headless running before error-once test');
 
     // Arm the 500 on the next LLM request.
@@ -2230,6 +2255,8 @@ describe('resilience & failure paths (#194)', () => {
   // LLM invalid NDJSON: unparseable bytes from the LLM must produce a clean error,
   // not a hang or silent empty reply (#194).
   test('fake-ollama invalid NDJSON: plugin returns clean error rather than hanging', async () => {
+    // FULL-PATH-EXCEPTION: induces unparseable LLM bytes and asserts a clean error
+    // — an infra-failure path OC cannot orchestrate.
     await ensureHeadlessRunning('headless running before invalid-ndjson test');
 
     await post(`${FAKE_OLLAMA_URL}/scenario`, { response: '__INVALID_NDJSON__' });
@@ -2255,6 +2282,8 @@ describe('resilience & failure paths (#194)', () => {
   // generate requests fall to the HTTP polling queue, and that the test runner
   // can act as an HTTP poller and receive the correct response (#194).
   test('headless down: /health reports isRunning false and HTTP polling fallback works', async () => {
+    // FULL-PATH-EXCEPTION: kills the headless browser and acts as the HTTP poller
+    // itself to verify the polling-queue fallback — transport mechanics OC never exercises.
     await ensureHeadlessRunning('headless running before kill test');
 
     killChromium();
@@ -2322,6 +2351,8 @@ describe('resilience & failure paths (#194)', () => {
   // HTTP polling queue timeout: when headless is absent and nobody polls the queue,
   // the pending request timer must fire and return a clean error — not hang (#194).
   test('HTTP polling queue: request times out cleanly when no poller responds', async () => {
+    // FULL-PATH-EXCEPTION: kills headless and asserts the polling-queue timeout fires
+    // — transport mechanics OC never exercises.
     // headless was restored by the previous test; verify before killing again
     await ensureHeadlessRunning('headless running before queue-timeout test');
 
@@ -2415,6 +2446,8 @@ describe('CSRF enforcement (#191)', () => {
 // generate_error that the plugin converts to a 5xx.
 describe('character name case sensitivity (#191)', () => {
   test('"testbot" (wrong case) returns clean error rather than matching "TestBot"', async () => {
+    // FULL-PATH-EXCEPTION: OC's mock-llm hardcodes the target character and cannot
+    // send a wrong-case name; this drives ST's exact-case validation directly.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -2433,6 +2466,8 @@ describe('character name case sensitivity (#191)', () => {
       method: 'POST',
       body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
     });
+    // FULL-PATH-EXCEPTION: OC's mock-llm hardcodes the target character; this paired
+    // correct-case test drives ST's exact-case validation directly.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -2467,6 +2502,10 @@ describe('trust label injection (#191)', () => {
   });
 
   test('owner user_id generates a successful response (label injected by plugin, confirmed by unit tests)', async () => {
+    // FULL-PATH-EXCEPTION (temporary): asserts only that generation succeeds; the
+    // [OWNER]/[GUEST] label injection itself is covered by unit tests. This trust
+    // path IS drivable via qa-bus (owner/guest senderId -> /last-prompt) and should
+    // be promoted to the full path.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
@@ -2484,6 +2523,10 @@ describe('trust label injection (#191)', () => {
   }, 60000);
 
   test('non-owner user_id generates a successful response (label injected by plugin, confirmed by unit tests)', async () => {
+    // FULL-PATH-EXCEPTION (temporary): asserts only that generation succeeds; the
+    // [OWNER]/[GUEST] label injection itself is covered by unit tests. This trust
+    // path IS drivable via qa-bus (owner/guest senderId -> /last-prompt) and should
+    // be promoted to the full path.
     const r = await stFetch('/generate', {
       method: 'POST',
       body: JSON.stringify({
