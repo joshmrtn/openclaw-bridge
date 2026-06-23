@@ -3,15 +3,14 @@
  *
  * Tests the complete message path:
  *   qa-bus → OC (qa-channel) → character-bridge skill → ST plugin
- *   → headless Playwright extension → fake-ollama LLM → response
+ *   → headless Playwright extension → fake-openai LLM → response
  *   → ST plugin → OC → qa-bus
  *
  * Services required (docker-compose.full.yml):
  *   sillytavern-full  — ST with headless Playwright + plugin + extension
  *   openclaw          — OC gateway with qa-channel + character-bridge skill
  *   qa-bus            — Message bus (fake Discord channel)
- *   mock-llm          — OpenAI Responses API mock (always calls generate_response)
- *   fake-ollama       — Ollama API mock (LLM responses for ST)
+ *   fake-openai       — OpenAI-compatible mock LLM for both ST and OC's agent
  */
 
 'use strict';
@@ -25,7 +24,7 @@ const QA_BUS_URL = process.env.QA_BUS_URL || 'http://qa-bus:15000';
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || 'e2e-test-token';
 const OC_URL = process.env.OC_URL || 'http://openclaw:18789';
 const SILLYTAVERN_CONTAINER = process.env.SILLYTAVERN_CONTAINER || 'sillytavern-full';
-const FAKE_OLLAMA_URL = process.env.FAKE_OLLAMA_URL || 'http://fake-ollama:11434';
+const FAKE_OPENAI_URL = process.env.FAKE_OPENAI_URL || 'http://fake-openai:11436';
 const ST_WS_URL = process.env.ST_WS_URL || 'ws://sillytavern-full:8765';
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -171,9 +170,9 @@ beforeAll(async () => {
 }, 300000); // 5 min total setup timeout
 
 beforeEach(async () => {
-  // Clear qa-bus state and any queued fake-ollama scenarios between tests.
+  // Clear qa-bus state and any queued fake-openai scenarios between tests.
   await post(`${QA_BUS_URL}/v1/reset`, {});
-  await post(`${FAKE_OLLAMA_URL}/reset`, {});
+  await post(`${FAKE_OPENAI_URL}/reset`, {});
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -233,7 +232,7 @@ describe('qa-bus protocol', () => {
   });
 });
 
-describe('full message path: qa-bus → OC → ST → fake-ollama → qa-bus', () => {
+describe('full message path: qa-bus → OC → ST → fake-openai → qa-bus', () => {
   test('guest message generates response via headless Playwright', async () => {
     const convId = `dm-${Date.now()}`;
 
@@ -255,8 +254,8 @@ describe('full message path: qa-bus → OC → ST → fake-ollama → qa-bus', (
     expect(outboundMsg).toBeTruthy();
     expect(outboundMsg.message.text).toBeTruthy();
     expect(outboundMsg.message.text.length).toBeGreaterThan(0);
-    // If the character-bridge skill isn't loaded, mock-llm falls back to its
-    // hardcoded reply instead of calling generate_response. Catch that regression.
+    // Guard against a stale agent-fallback artifact leaking into the reply: the
+    // response must come from ST via the bridge, never a raw mock-llm fallback tag.
     expect(outboundMsg.message.text).not.toContain('[mock-llm]');
     console.log('[test] Got response:', outboundMsg.message.text.slice(0, 100));
   }, 90000);
@@ -344,7 +343,7 @@ describe('trust label enforcement', () => {
 
 describe('character isolation', () => {
   test('unlinked character returns error from ST', async () => {
-    // FULL-PATH-EXCEPTION: OC's mock-llm hardcodes the target character, so it
+    // FULL-PATH-EXCEPTION: OC's fake-openai agent hardcodes the target character, so it
     // cannot address an unlinked one; this drives ST's link validation directly.
     const r = await stFetch('/generate', {
       method: 'POST',
@@ -359,7 +358,7 @@ describe('character isolation', () => {
     // serialises them, so name2 for TestBot cannot contaminate Narrator's prompt or
     // vice-versa.
     //
-    // fake-ollama is configured with ECHO_CHARACTER_MARKERS=TestBot,Narrator: it
+    // fake-openai is configured with ECHO_CHARACTER_MARKERS=TestBot,Narrator: it
     // inspects the incoming system prompt and prepends [persona:NAME] to its
     // response. If bleed occurred, the wrong character's marker would appear.
     // FULL-PATH-EXCEPTION: same-instant concurrency must be dispatched from one
@@ -386,7 +385,7 @@ describe('character isolation', () => {
   test('three concurrent requests for the same character all succeed with correct persona (R7.4)', async () => {
     // Fire 3 simultaneous /generate calls for TestBot.
     // withCharacterLock in the extension serialises them so they don't interleave.
-    // fake-ollama echoes [persona:TestBot] for each — all three must carry it.
+    // fake-openai echoes [persona:TestBot] for each — all three must carry it.
     // FULL-PATH-EXCEPTION: same-instant concurrency — OC cannot drive three
     // simultaneous same-character generations to exercise the extension lock.
     const [r1, r2, r3] = await Promise.all([
@@ -455,7 +454,7 @@ describe('character isolation', () => {
 });
 
 // ── Large LLM responses ───────────────────────────────────────────────────────
-// Verifies that a very long fake-ollama response (10,000 chars) passes through
+// Verifies that a very long fake-openai response (10,000 chars) passes through
 // the full pipeline without truncation.
 describe('large LLM responses', () => {
   beforeEach(async () => {
@@ -467,7 +466,7 @@ describe('large LLM responses', () => {
 
   test('10,000-char response reaches qa-bus intact without truncation', async () => {
     const bigText = 'A'.repeat(9950) + ' big-response-sentinel';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: bigText });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: bigText });
 
     const convId = `dm-bigtext-${Date.now()}`;
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
@@ -543,17 +542,17 @@ describe('heartbeat completeness (R10) (#196)', () => {
     // heartbeat: null, but OC's loop may fire once more before reading the
     // updated config (loop interval = 5s). With sticky scenarios, strays no
     // longer consume test responses — 6s (1 tick + 1s buffer) is enough to
-    // let any stray pipeline complete before the reset clears fake-ollama.
+    // let any stray pipeline complete before the reset clears fake-openai.
     await sleep(6000);
-    await post(`${FAKE_OLLAMA_URL}/reset`, {});
+    await post(`${FAKE_OPENAI_URL}/reset`, {});
   }, 10000);
 
   test('empty LLM response: plugin returns empty text and does not crash (R10.4)', async () => {
     // Call the heartbeat generate path directly rather than going through OC's
     // loop — eliminates timing variability from OC's in-memory heartbeat state.
-    // Use test_char_1 (not TestBot/Narrator) so fake-ollama's ECHO_CHARACTER_MARKERS
+    // Use test_char_1 (not TestBot/Narrator) so fake-openai's ECHO_CHARACTER_MARKERS
     // persona-prefix system does not add content to the empty scenario response.
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: '' });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: '' });
     // FULL-PATH-EXCEPTION: drives the heartbeat generate path directly to isolate the
     // plugin's empty-response handling from OC-loop timing (the OC heartbeat loop is
     // covered by 'heartbeat fires on schedule').
@@ -573,7 +572,7 @@ describe('heartbeat completeness (R10) (#196)', () => {
     // Use Narrator (not TestBot) so idle-gate state from the previous test does not
     // carry over — each character has independent heartbeat state in OC's process memory.
     const IDLE_SENTINEL = 'idle-heartbeat-sentinel';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: IDLE_SENTINEL });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: IDLE_SENTINEL });
 
     try {
       await stFetch('/characters/Narrator/link', {
@@ -665,7 +664,7 @@ describe('heartbeat completeness (R10) (#196)', () => {
     // A unique sentinel response lets us filter out any leftover outbound-message events
     // from the consecutive-heartbeat test above.
     const SENTINEL = 'test-char-1-heartbeat-sentinel';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: SENTINEL });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: SENTINEL });
     try {
       await stFetch('/characters/test_char_1/link', {
         method: 'POST',
@@ -1129,7 +1128,7 @@ describe('outbound character actions (R5)', () => {
   test('action block in LLM response is executed and logged; response text is clean', async () => {
     // Queue a response that contains an <action> block — ST's /generate handler
     // will parse and strip it before returning to OC.
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: ACTION_RESPONSE });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: ACTION_RESPONSE });
 
     const convId = `dm-r5-owner-${Date.now()}`;
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
@@ -1162,7 +1161,7 @@ describe('outbound character actions (R5)', () => {
   }, 120000);
 
   test('guest sender cannot trigger outbound actions (R5.4)', async () => {
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: ACTION_RESPONSE });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: ACTION_RESPONSE });
 
     const convId = `dm-r5-guest-${Date.now()}`;
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
@@ -1191,7 +1190,7 @@ describe('outbound character actions (R5)', () => {
 
   test('malformed JSON inside action block: pipeline delivers clean text without crashing (#195)', async () => {
     const REPLY_TEXT = 'No crash here.';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY_TEXT} <action>NOT_VALID_JSON_AT_ALL</action>`,
     });
 
@@ -1214,7 +1213,7 @@ describe('outbound character actions (R5)', () => {
 
   test('action block with missing type field: pipeline delivers clean text without crashing (#195)', async () => {
     const REPLY_TEXT = 'Still works.';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY_TEXT} <action>{"channel_id":"qa-test","content":"no type"}</action>`,
     });
 
@@ -1239,7 +1238,7 @@ describe('outbound character actions (R5)', () => {
 
   test('action block at very start of response text: action parsed, clean text delivered (#195)', async () => {
     const REPLY_TEXT = 'Posted it!';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `<action>{"type":"discord_post","channel_id":"qa-test","content":"start-pos"}</action> ${REPLY_TEXT}`,
     });
 
@@ -1262,7 +1261,7 @@ describe('outbound character actions (R5)', () => {
 
   test('action block at very end of response text: action parsed, clean text delivered (#195)', async () => {
     const REPLY_TEXT = 'On it!';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY_TEXT} <action>{"type":"discord_post","channel_id":"qa-test","content":"end-pos"}</action>`,
     });
 
@@ -1289,7 +1288,7 @@ describe('outbound character actions (R5)', () => {
     const REPLY2 = 'Got your follow-up.';
 
     // First generation: action block fires, log-action is called by OC, clean text delivered.
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY1} <action>{"type":"discord_post","channel_id":"qa-test","content":"${ACTION_TEXT}"}</action>`,
     });
 
@@ -1322,7 +1321,7 @@ describe('outbound character actions (R5)', () => {
     // Verify the pipeline continues to work after the action log — the action does not
     // block or corrupt the next exchange.
     await post(`${QA_BUS_URL}/v1/reset`, {});
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: REPLY2 });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: REPLY2 });
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
       conversation: { id: convId, kind: 'direct' },
       senderId: 'qa:owner-user',
@@ -1378,7 +1377,7 @@ describe('send_message action and loop prevention (#111)', () => {
   test('send_message action is parsed, stripped from reply, and resolved with correct fields', async () => {
     const REPLY_TEXT = 'On it, posting now!';
     const ACTION_TEXT = 'Channel announcement from TestBot!';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":"${ACTION_TEXT}"}</action>`,
     });
 
@@ -1408,7 +1407,7 @@ describe('send_message action and loop prevention (#111)', () => {
   test('send_message action does not trigger a second generation (no loop)', async () => {
     const REPLY_TEXT = 'Sure, posting to channel.';
     const ACTION_TEXT = 'Hello from character!';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":"${ACTION_TEXT}"}</action>`,
     });
 
@@ -1450,7 +1449,7 @@ describe('send_message action and loop prevention (#111)', () => {
   test('inbound message from bot own account does not trigger generation', async () => {
     // Queue a marker scenario: appears in an outbound message only if the guard
     // fails and generation actually runs for the self-message.
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: 'SELF_LOOP_DETECTED_DO_NOT_WANT' });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: 'SELF_LOOP_DETECTED_DO_NOT_WANT' });
 
     // Inject a message from the bot's own account ID (botUserId: "openclaw" in
     // openclaw.json for the qa-channel).  Real platforms (Discord, Telegram) filter
@@ -1463,7 +1462,7 @@ describe('send_message action and loop prevention (#111)', () => {
     });
 
     // Allow enough time for a full generation round-trip if one were triggered.
-    // fake-ollama pipeline completes in ~3s; 6s gives comfortable headroom.
+    // fake-openai pipeline completes in ~3s; 6s gives comfortable headroom.
     await sleep(6000);
 
     const state = await fetch(`${QA_BUS_URL}/v1/state`);
@@ -1477,7 +1476,7 @@ describe('send_message action and loop prevention (#111)', () => {
     const REPLY_TEXT = 'Sending to both!';
     const ACTION1 = 'First channel post from character';
     const ACTION2 = 'Second channel post from character';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":"${ACTION1}"}</action><action>{"type":"send_message","channel":"qa","content":"${ACTION2}"}</action>`,
     });
 
@@ -1506,7 +1505,7 @@ describe('send_message action and loop prevention (#111)', () => {
   test('send_message with unicode content delivers content verbatim to channel (#195)', async () => {
     const REPLY_TEXT = 'Posting it!';
     const UNICODE_CONTENT = 'Héllo wörld 🐸 — "quoted"';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa","content":${JSON.stringify(UNICODE_CONTENT)}}</action>`,
     });
 
@@ -1530,7 +1529,7 @@ describe('send_message action and loop prevention (#111)', () => {
 
   test('send_message with missing content: clean error logged, no blank message sent (#195)', async () => {
     const REPLY_TEXT = 'Response without action.';
-    await post(`${FAKE_OLLAMA_URL}/scenario`, {
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
       response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"qa"}</action>`,
     });
 
@@ -1573,7 +1572,7 @@ describe('send_message action and loop prevention (#111)', () => {
 });
 
 // ── R11: memory write on OC path ─────────────────────────────────────────────
-// Proves the full pipeline: OC message in → fake-ollama returns response with a
+// Proves the full pipeline: OC message in → fake-openai returns response with a
 // write_memory <action> block → plugin parses/strips the block and writes the
 // lorebook entry → entry confirmed via GET /characters/:name/memory.
 // The write_memory block is never forwarded to OC (it stays in stSideActions).
@@ -1596,7 +1595,7 @@ describe('R11: memory write on OC path', () => {
   });
 
   test('write_memory block is stripped from reply and persists to lorebook (owner sender)', async () => {
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: MEMORY_RESPONSE });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: MEMORY_RESPONSE });
 
     // FULL-PATH-EXCEPTION: write_memory is a plugin-side stSideAction (not forwarded
     // to OC), so the direct call exercises the identical code path. Verifies plugin-
@@ -1632,7 +1631,7 @@ describe('R11: memory write on OC path', () => {
     const convId = `dm-r11-guest-${Date.now()}`;
     const guestMemoryKey = `oc_guest_mem_${Date.now()}`;
     const guestResponse = `Noted.<action>{"type":"write_memory","entry_key":"${guestMemoryKey}","content":"Guest info noted","tier":2}</action>`;
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: guestResponse });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: guestResponse });
 
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
       conversation: { id: convId, kind: 'direct' },
@@ -1659,9 +1658,9 @@ describe('R11: memory write on OC path', () => {
     const hbMemoryKey = `hb_mem_${Date.now()}`;
     const hbResponse = `Autonomous check-in complete.<action>{"type":"write_memory","entry_key":"${hbMemoryKey}","content":"Heartbeat ran at scheduled time","tier":2}</action>`;
 
-    // Seed fake-ollama before enabling the heartbeat so the scenario is ready
+    // Seed fake-openai before enabling the heartbeat so the scenario is ready
     // the moment the heartbeat fires.
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: hbResponse });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: hbResponse });
 
     await stFetch('/characters/TestBot/link', {
       method: 'POST',
@@ -1706,7 +1705,7 @@ describe('R11: memory write on OC path', () => {
     // Two identical write_memory blocks in a single response — must not create duplicates.
     const idempResponse = `Noted.<action>{"type":"write_memory","entry_key":"${idempKey}","content":"${idempContent}","tier":1}</action><action>{"type":"write_memory","entry_key":"${idempKey}","content":"${idempContent}","tier":1}</action>`;
 
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: idempResponse });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: idempResponse });
 
     // FULL-PATH-EXCEPTION: write_memory is a plugin-side stSideAction (not forwarded
     // to OC), so the direct call exercises the identical idempotency code path.
@@ -2124,11 +2123,11 @@ describe('resilience & failure paths (#194)', () => {
   // Plugin restart with an in-flight request: verifies the caller receives a
   // clean error (not a hang), headless reconnects, and the next request succeeds.
   //
-  // Runs before LLM-error tests (#194) because error responses from fake-ollama
+  // Runs before LLM-error tests (#194) because error responses from fake-openai
   // can leave ST's Generate() in a backoff state that prevents it calling Ollama.
   //
-  // Race-free: __DELAY_MS:90000__ holds the request in fake-ollama for 90s.
-  // We poll GET /pending-count until fake-ollama confirms it has the request
+  // Race-free: __DELAY_MS:90000__ holds the request in fake-openai for 90s.
+  // We poll GET /pending-count until fake-openai confirms it has the request
   // before restarting — no sleep-based timing.
   test('plugin restart: in-flight request lost cleanly, next request succeeds', async () => {
     // FULL-PATH-EXCEPTION: induces a container restart mid-request and asserts clean
@@ -2155,7 +2154,7 @@ describe('resilience & failure paths (#194)', () => {
     }, { timeoutMs: 60000, intervalMs: 2000, label: 'warm-up generate to confirm pipeline ready' });
 
     // Queue a 90s delay so the request stays in-flight well past the restart.
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: '__DELAY_MS:90000__' });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: '__DELAY_MS:90000__' });
 
     // Fire the generate request without waiting — it will be in-flight.
     let inFlightError = null;
@@ -2170,12 +2169,12 @@ describe('resilience & failure paths (#194)', () => {
       }),
     }).then(r => r).catch(err => { inFlightError = err; return null; });
 
-    // Wait until fake-ollama confirms it has received and is holding the request.
+    // Wait until fake-openai confirms it has received and is holding the request.
     // This guarantees the request is genuinely in-flight before we restart.
     await waitFor(async () => {
-      const r = await fetch(`${FAKE_OLLAMA_URL}/pending-count`);
+      const r = await fetch(`${FAKE_OPENAI_URL}/pending-count`);
       return r.body.count > 0 ? true : null;
-    }, { timeoutMs: 60000, intervalMs: 500, label: 'fake-ollama to hold in-flight request' });
+    }, { timeoutMs: 60000, intervalMs: 500, label: 'fake-openai to hold in-flight request' });
 
     // Restart the container — closes all TCP connections including the in-flight one.
     execSync(`docker restart ${SILLYTAVERN_CONTAINER}`, { timeout: 30000 });
@@ -2205,8 +2204,8 @@ describe('resilience & failure paths (#194)', () => {
     // CSRF token is invalidated by the restart — refresh before making POST calls.
     await fetchStCsrfState();
 
-    // Clear any remaining fake-ollama state from the delay scenario.
-    await post(`${FAKE_OLLAMA_URL}/reset`, {});
+    // Clear any remaining fake-openai state from the delay scenario.
+    await post(`${FAKE_OPENAI_URL}/reset`, {});
 
     // Verify the next request after reconnect succeeds end-to-end.
     const r = await stFetch('/generate', {
@@ -2225,13 +2224,13 @@ describe('resilience & failure paths (#194)', () => {
 
   // LLM HTTP 500: extension must report generate_error and plugin must return a
   // clean 5xx — no infinite hang, no silent empty reply (#194).
-  test('fake-ollama 500: plugin returns clean error rather than hanging', async () => {
+  test('fake-openai 500: plugin returns clean error rather than hanging', async () => {
     // FULL-PATH-EXCEPTION: induces an LLM HTTP 500 and asserts a clean, prompt error
     // — an infra-failure path OC cannot orchestrate.
     await ensureHeadlessRunning('headless running before error-once test');
 
     // Arm the 500 on the next LLM request.
-    await post(`${FAKE_OLLAMA_URL}/error-once`, {});
+    await post(`${FAKE_OPENAI_URL}/error-once`, {});
 
     const start = Date.now();
     const r = await stFetch('/generate', {
@@ -2254,12 +2253,12 @@ describe('resilience & failure paths (#194)', () => {
 
   // LLM invalid NDJSON: unparseable bytes from the LLM must produce a clean error,
   // not a hang or silent empty reply (#194).
-  test('fake-ollama invalid NDJSON: plugin returns clean error rather than hanging', async () => {
+  test('fake-openai invalid NDJSON: plugin returns clean error rather than hanging', async () => {
     // FULL-PATH-EXCEPTION: induces unparseable LLM bytes and asserts a clean error
     // — an infra-failure path OC cannot orchestrate.
     await ensureHeadlessRunning('headless running before invalid-ndjson test');
 
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: '__INVALID_NDJSON__' });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: '__INVALID_BODY__' });
 
     const start = Date.now();
     const r = await stFetch('/generate', {
@@ -2446,7 +2445,7 @@ describe('CSRF enforcement (#191)', () => {
 // generate_error that the plugin converts to a 5xx.
 describe('character name case sensitivity (#191)', () => {
   test('"testbot" (wrong case) returns clean error rather than matching "TestBot"', async () => {
-    // FULL-PATH-EXCEPTION: OC's mock-llm hardcodes the target character and cannot
+    // FULL-PATH-EXCEPTION: OC's fake-openai agent hardcodes the target character and cannot
     // send a wrong-case name; this drives ST's exact-case validation directly.
     const r = await stFetch('/generate', {
       method: 'POST',
@@ -2466,7 +2465,7 @@ describe('character name case sensitivity (#191)', () => {
       method: 'POST',
       body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
     });
-    // FULL-PATH-EXCEPTION: OC's mock-llm hardcodes the target character; this paired
+    // FULL-PATH-EXCEPTION: OC's fake-openai agent hardcodes the target character; this paired
     // correct-case test drives ST's exact-case validation directly.
     const r = await stFetch('/generate', {
       method: 'POST',
@@ -2490,7 +2489,7 @@ describe('character name case sensitivity (#191)', () => {
 // ── Trust label injection (#191) ─────────────────────────────────────────────
 // Proves [OWNER] / [GUEST] is injected into the raw prompt that reaches the
 // LLM, not merely reflected in the final response. Uses GET /last-prompt on
-// fake-ollama (added in #191) to inspect the verbatim Ollama request body.
+// fake-openai (added in #191) to inspect the verbatim Ollama request body.
 describe('trust label injection (#191)', () => {
   const TRUST_OWNER = 'qa:trust-owner-191';
 
@@ -2517,8 +2516,8 @@ describe('trust label injection (#191)', () => {
     });
     expect(r.status).toBe(200);
     expect(r.body.response).toBeTruthy();
-    // Confirm fake-ollama was reached (label injection did not cause an error before generation)
-    const prompt = await fetch(`${FAKE_OLLAMA_URL}/last-prompt`);
+    // Confirm fake-openai was reached (label injection did not cause an error before generation)
+    const prompt = await fetch(`${FAKE_OPENAI_URL}/last-prompt`);
     expect(prompt.status).toBe(200);
   }, 60000);
 
@@ -2538,8 +2537,8 @@ describe('trust label injection (#191)', () => {
     });
     expect(r.status).toBe(200);
     expect(r.body.response).toBeTruthy();
-    // Confirm fake-ollama was reached (label injection did not cause an error before generation)
-    const prompt = await fetch(`${FAKE_OLLAMA_URL}/last-prompt`);
+    // Confirm fake-openai was reached (label injection did not cause an error before generation)
+    const prompt = await fetch(`${FAKE_OPENAI_URL}/last-prompt`);
     expect(prompt.status).toBe(200);
   }, 60000);
 
@@ -2814,7 +2813,7 @@ describe('chat-file integrity under load (full path)', () => {
     const sentinels = Array.from({ length: N }, (_, i) => `integrity-msg-${stamp}-${i}`);
 
     // One sticky reply for all N exchanges (ECHO_CHARACTER_MARKERS prepends the persona).
-    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: `integrity-reply-${stamp}` });
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: `integrity-reply-${stamp}` });
 
     // Fire all N inbound messages in a tight burst so OC drives overlapping
     // generate/write work and exercises the history write lock under contention.

@@ -6,15 +6,15 @@ There are three Docker tiers depending on how much infrastructure you have avail
 
 | Tier | Command | CI | Services | Mock depth | When to use |
 |------|---------|-----|----------|------------|-------------|
-| **Fast** | `npm run test:e2e:fast` | ✅ | ST + fake-extension + fake-ollama | LLM + extension echo | Every PR; quick regression; no OC repo needed |
-| **Browser** | `npm run test:e2e:browser` | ✅ | ST + fake-extension + Chromium | LLM | Every PR; validates real browser extension code |
-| **Full** | `npm run test:e2e:full` | ❌ local only | ST + OC gateway + qa-bus + mock-llm + fake-ollama | LLM only | Pre-release; OC integration changes; requires `~/projects/openclaw` |
+| **Fast** | `npm run test:e2e:fast` | ✅ | ST + fake-extension | extension echo | Every PR; quick regression; no OC repo needed |
+| **Browser** | `npm run test:e2e:browser` | ✅ | ST + fake-extension + Chromium | extension echo | Every PR; validates real browser extension code |
+| **Full** | `npm run test:e2e:full` | ❌ local only | ST + OC gateway + qa-bus + fake-openai | LLM only | Pre-release; OC integration changes; requires `~/projects/openclaw` |
 
 ---
 
 ## Fast tier
 
-Tests ST, the plugin, and the headless WebSocket round-trip. The extension is replaced by `fake-extension.js` (an echo server), and `fake-ollama` returns a canned LLM response. No OC repo or OC binary required.
+Tests ST, the plugin, and the headless WebSocket round-trip. The extension is replaced by `fake-extension.js` (an echo server) that returns a canned response over the WebSocket — no real LLM is involved. No OC repo or OC binary required.
 
 ```bash
 npm run test:e2e:fast
@@ -28,7 +28,6 @@ This command runs `docker compose` with `docker/docker-compose.yml`, waits for s
 |-----------|-------|------|
 | `sillytavern` | built from `docker/sillytavern/` | ST with plugin + headless service |
 | `fake-extension` | built from `docker/fake-extension/` | WebSocket echo server |
-| `fake-ollama` | built from `docker/fake-ollama/` | Returns fixed LLM text |
 | `test-runner` | built from `docker/test-runner/` | Jest suite |
 
 **What it covers:**
@@ -78,7 +77,7 @@ Playwright drives Chromium non-interactively, making it functionally a headless 
 
 ## Full tier
 
-Tests the entire message path: a synthetic inbound message enters via `qa-bus` (the fake channel), OC picks it up via `qa-channel`, invokes the `character-bridge` skill, which calls the ST plugin, which dispatches to headless Playwright, which calls `fake-ollama`, and the response travels back through OC to `qa-bus` where the test asserts on it.
+Tests the entire message path: a synthetic inbound message enters via `qa-bus` (the fake channel), OC picks it up via `qa-channel`, invokes the `character-bridge` skill, which calls the ST plugin, which dispatches to headless Playwright, which calls `fake-openai`, and the response travels back through OC to `qa-bus` where the test asserts on it.
 
 ```bash
 # One-time: build the OC image (requires openclaw repo at ~/projects/openclaw)
@@ -97,13 +96,12 @@ This command runs `docker compose` with `docker/full/docker-compose.full.yml` (2
 | `sillytavern-full` | built from `docker/full/sillytavern/` | ST with headless Playwright extension |
 | `openclaw` | `openclaw-bridge:oc-full` (pre-built) | OC gateway + qa-channel + character-bridge skill |
 | `qa-bus` | built from `docker/full/qa-bus/` | Fake channel (message bus) |
-| `mock-llm` | built from `docker/full/mock-llm/` | OpenAI Responses API mock (always calls `generate_response`) |
-| `fake-ollama` | shared with fast tier | Returns fixed LLM text to ST |
+| `fake-openai` | built from `docker/fake-openai/` | OpenAI-compatible mock LLM for both ST and OC's agent |
 | `full-test-runner` | built from `docker/full/test-runner/` | Jest suite |
 
 **What it covers (in addition to what the fast tier proves):**
 
-- Full message path: `qa-bus → OC → character-bridge skill → ST plugin → headless Playwright → fake-ollama → qa-bus`
+- Full message path: `qa-bus → OC → character-bridge skill → ST plugin → headless Playwright → fake-openai → qa-bus`
 - Trust label enforcement end-to-end with a real OC agent identity
 - Multiple sequential messages handled without collision
 - ST chat history written after generation
@@ -166,7 +164,7 @@ docker/
 │   ├── Dockerfile
 │   └── config.yaml                 securityOverride: true required for Docker
 ├── fake-extension/                 WebSocket echo server (fast + browser)
-├── fake-ollama/                    Fixed-response Ollama mock
+├── fake-openai/                    OpenAI-compatible mock LLM (full tier; ST + OC)
 ├── test-runner/                    Fast-tier Jest suite
 │   └── e2e.test.js
 ├── browser-test-runner/            Browser-tier Playwright runner
@@ -181,7 +179,6 @@ docker/
     │   ├── Dockerfile
     │   └── openclaw.json           OC runtime config
     ├── qa-bus/                     Fake channel message bus
-    ├── mock-llm/                   OpenAI Responses API mock (instructs OC to call generate_response)
     └── test-runner/                Full-tier Jest suite
         └── full-e2e.test.js
 ```
@@ -202,7 +199,7 @@ docker compose -f docker/full/docker-compose.full.yml build full-test-runner
 
 **`qa-bus` as the fake channel.** The qa-bus exposes `/v1/inbound/message` (inject a message), `/v1/state` (read all events including outbound), and `/v1/reset` (clear between tests). Tests poll `/v1/state` waiting for `outbound-message` events to appear — that's how they verify OC sent a response.
 
-**`mock-llm` role.** The mock-llm intercepts OC's LLM calls and always returns a tool call instructing OC to invoke `generate_response` (the character-bridge skill's main tool). This forces OC through the full skill execution path without requiring a real LLM or OpenClaw subscription.
+**`fake-openai` role.** One OpenAI-compatible mock serves both ST and OC's agent (both speak the OpenAI API), replacing the old fake-ollama (ST) + mock-llm (OC agent) split. ST points at it as a `custom` chat-completion source; OC points at it as an `openai-completions` provider. It is runtime-primeable (`/scenario`, `/reset`, `/error-once`, `/last-prompt`, `/pending-count`) so tests assert on unique sentinels instead of sleeping. In the normal path the OC bridge plugin intercepts the inbound message and calls ST `/generate` directly (ST brain drives, OC body executes), so the agent-LLM side of the mock only fires on the true fallback (no linked character) or when an ST character explicitly drives the OC agent — in which case it returns a `generate_response` tool call.
 
 **Headless client wait.** `beforeAll` in `full-e2e.test.js` polls `/health` until `headless.isRunning === true` before running any tests. ST's headless Playwright service takes 15–30 seconds to launch Chromium inside the container and connect via WebSocket. The setup timeout is 5 minutes.
 

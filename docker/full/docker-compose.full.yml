@@ -4,7 +4,7 @@ name: openclaw-bridge-e2e-full
 #
 # Tests the complete message path with real OC and headless Playwright:
 #   qa-bus → OC (qa-channel) → character-bridge skill → ST plugin
-#   → headless Playwright extension → fake-ollama → response → qa-bus
+#   → headless Playwright extension → fake-openai → response → qa-bus
 #
 # Prerequisites (one-time setup):
 #   1. Build OC image with qa-channel extension:
@@ -65,7 +65,7 @@ services:
     depends_on:
       character-links-init:
         condition: service_completed_successfully
-      fake-ollama:
+      fake-openai:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/api/plugins/openclaw-bridge/status", "-H", "Authorization: Bearer e2e-test-token"]
@@ -88,39 +88,20 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── mock-llm ───────────────────────────────────────────────────────────────
-  # OpenAI Responses API mock. OC's agent uses this for its LLM calls.
-  # It deterministically calls generate_response for any user message so that
-  # OC always invokes the character-bridge skill.
-  mock-llm:
+  # ── fake-openai ────────────────────────────────────────────────────────────
+  # One OpenAI-compatible mock for BOTH ST (chat_completion_source: custom) and
+  # OC's agent (api: openai-completions). Replaces the old fake-ollama + mock-llm.
+  fake-openai:
     build:
-      context: mock-llm
+      context: ../fake-openai
     environment:
-      - PORT=11435
-      - CHARACTER_NAME=TestBot
-      - CHANNEL=qa-channel
-      - MOCK_ACTION_BLOCK=<action>{"type":"discord_post","channel_id":"qa-test","content":"Test action from character"}</action>
-    ports:
-      - "11435:11435"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:11435/healthz"]
-      interval: 3s
-      timeout: 3s
-      retries: 10
-
-  # ── fake-ollama ────────────────────────────────────────────────────────────
-  # Ollama API mock for ST's LLM calls (headless extension → Generate() → Ollama).
-  fake-ollama:
-    build:
-      context: ../fake-ollama
-    environment:
-      - PORT=11434
+      - PORT=11436
       - DEFAULT_RESPONSE=This is a fake LLM response for E2E testing.
       - ECHO_CHARACTER_MARKERS=TestBot,Narrator
     ports:
-      - "11437:11434"    # Different host port to avoid conflict with fast-tier
+      - "11436:11436"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:11434/api/tags"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:11436/healthz"]
       interval: 3s
       timeout: 3s
       retries: 5
@@ -178,7 +159,7 @@ services:
     depends_on:
       qa-bus:
         condition: service_healthy
-      mock-llm:
+      fake-openai:
         condition: service_healthy
       sillytavern-full:
         condition: service_healthy

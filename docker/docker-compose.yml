@@ -69,25 +69,6 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── fake-ollama ───────────────────────────────────────────────────────────────
-  # Implements the Ollama API with scripted responses.
-  # Used when running ST with the headless Playwright service (ENABLE_HEADLESS=true).
-  # Idle in this default compose but available for headless E2E development.
-  fake-ollama:
-    build:
-      context: fake-ollama
-      cache_from:
-        - type=gha,scope=fake-ollama
-      cache_to:
-        - type=gha,scope=fake-ollama,mode=max
-    ports:
-      - "21434:11434"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:11434/api/tags"]
-      interval: 3s
-      timeout: 3s
-      retries: 5
-
   # ── test-runner ───────────────────────────────────────────────────────────────
   # Runs the Jest E2E suite against the services above.
   # Only started when --profile test is passed:

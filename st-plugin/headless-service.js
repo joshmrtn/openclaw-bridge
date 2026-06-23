@@ -36,13 +36,14 @@ function checkPlaywrightAvailable() {
     }
 }
 
-// Click the Ollama/textgen Connect button and wait for online_status to leave
-// 'no_connection'. Required after both initial page load and page.reload() because
-// ST's Generate() returns Promise.resolve() (empty) while online_status is unset.
+// Click the OpenAI (chat completion) Connect button and wait for online_status to
+// leave 'no_connection'. Required after both initial page load and page.reload()
+// because ST's Generate() returns Promise.resolve() (empty) while online_status is
+// unset.
 async function _triggerBackendConnection(page) {
     try {
         await page.evaluate(() => {
-            document.querySelector('#api_button_textgenerationwebui')?.click();
+            document.querySelector('#api_button_openai')?.click();
         });
         await page.waitForFunction(
             () => {
