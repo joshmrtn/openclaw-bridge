@@ -2,11 +2,13 @@
 # test-all.sh — Run all four test tiers in sequence with mandatory image rebuilds.
 #
 # Why mandatory rebuilds?
-#   The full-tier openclaw service uses a named image (openclaw-bridge:oc-full) that
-#   docker compose's --rmi local flag does NOT remove, because compose didn't build it
-#   (it was built by docker build directly).  Stale OC plugin code has caused repeated
-#   false-green full-tier runs.  This script rebuilds everything from scratch so "the
-#   image was stale" is structurally impossible.
+#   Stale full-tier images have caused repeated false-green runs. Every tier here is
+#   rebuilt by `docker compose build` before it runs, so "the image was stale" is
+#   structurally impossible. The openclaw service has a build: stanza, so compose
+#   rebuilds oc-full via content-addressed caching (a change to oc-plugin busts its
+#   COPY layer) — no force-rmi needed. The only image compose can't build is the
+#   oc-qa base (built from the external OpenClaw repo by build-oc.sh); it is a
+#   one-time prerequisite and is preflight-checked before tier 4.
 #
 # Usage:
 #   ./scripts/test-all.sh             # run all four tiers
@@ -51,7 +53,10 @@ teardown_full() {
   docker compose -f docker/full/docker-compose.full.yml down --remove-orphans --rmi local --volumes >/dev/null 2>&1 || true
   docker rm -f openclaw-bridge-e2e-full-link-setup-1 \
                openclaw-bridge-e2e-full-character-links-init-1 >/dev/null 2>&1 || true
-  docker rmi -f openclaw-bridge:oc-full >/dev/null 2>&1 || true
+  # Note: oc-full is intentionally NOT force-removed. The openclaw service now has a
+  # build: stanza, so `docker compose build` below rebuilds it via content-addressed
+  # caching (the COPY layer busts when oc-plugin changes). Keeping the image between
+  # runs reuses the cache for a faster, still-never-stale rebuild.
 }
 
 # Print FAIL/PASS file lines, Jest ● error blocks, or log tail on build failure.
@@ -137,9 +142,16 @@ teardown_shared
 # ── tier 4: full E2E ──────────────────────────────────────────────────────────
 
 echo "▶ Tier 4/4 — Full E2E (Docker)..."
+# The oc-qa base image is built from the external OpenClaw repo (build-oc.sh) and
+# cannot be built by compose — it is a one-time prerequisite. oc-full and every
+# other full-tier image are rebuilt below by `docker compose build`.
+if ! docker image inspect openclaw-bridge:oc-qa >/dev/null 2>&1; then
+  echo "  ✗ Full E2E: base image openclaw-bridge:oc-qa is missing." >&2
+  echo "    Build it once (needs the OpenClaw repo): npm run docker:full:build-oc" >&2
+  exit 1
+fi
 teardown_full
 : > "$TMPLOG"
-run_build "oc-full image" docker build -t openclaw-bridge:oc-full -f docker/full/openclaw/Dockerfile .
 run_build "full-tier compose build" docker compose -f docker/full/docker-compose.full.yml --profile full-test build
 run_tier "Full E2E" docker compose -f docker/full/docker-compose.full.yml --profile full-test run --rm full-test-runner
 
