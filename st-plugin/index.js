@@ -267,6 +267,10 @@ async function init(router) {
 
     router.post('/characters/:name/link', async (request, response) => {
         const characterName = normalizeCharacterName(request?.params?.name);
+        // owner_user_ids must be CHANNEL-PREFIXED ids in the form `${channelType}:${senderId}`
+        // (e.g. "discord:123456789", "telegram:42"), because that is exactly how OC labels the
+        // user_id on each inbound /generate (oc-plugin/src/index.ts). A bare platform id will not
+        // match at trust-label time and the owner is silently demoted to [GUEST].
         const { oc_agent_id = null, owner_user_ids = null, heartbeat = undefined, channels = undefined } = request.body || {};
 
         if (!characterName) {
@@ -571,7 +575,12 @@ async function init(router) {
             const actionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS]);
             const sanitizedMessage = sanitizeTrustTokens(message);
 
-            // Try to label message with owner/guest if link exists
+            // Try to label message with owner/guest if link exists.
+            // user_id arrives channel-prefixed: OC builds it as `${channelType}:${senderId}`
+            // (oc-plugin/src/index.ts), e.g. a Discord sender 123456789 becomes
+            // "discord:123456789". This match is exact, so owner_user_ids entries MUST be
+            // stored in that same prefixed form — a bare platform id will silently fail to
+            // match and the owner will be labeled [GUEST]. See the /characters/:name/link route.
             try {
                 const links = linkState.getLink(character) || {};
                 const ownerIds = links?.owner_user_ids ?? [];

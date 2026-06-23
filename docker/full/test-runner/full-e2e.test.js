@@ -2487,64 +2487,69 @@ describe('character name case sensitivity (#191)', () => {
 // This is a lifecycle test: it removes the links file, restarts ST, then
 // re-establishes the test environment for any tests that follow.
 // ── Trust label injection (#191) ─────────────────────────────────────────────
-// Proves [OWNER] / [GUEST] is injected into the raw prompt that reaches the
-// LLM, not merely reflected in the final response. Uses GET /last-prompt on
-// fake-openai (added in #191) to inspect the verbatim Ollama request body.
+// Proves [OWNER] / [GUEST] is hard-injected into the raw prompt that reaches the
+// LLM, not merely reflected in the final response — driven through the REAL path
+// (qa-bus inbound -> OC -> ST). The plugin compares the inbound senderId against
+// owner_user_ids and prepends [OWNER]/[GUEST] (st-plugin/index.js). We assert the
+// label by inspecting fake-openai's verbatim captured request body via /last-prompt,
+// which proves the label survived ST's full prompt assembly into the LLM request.
 describe('trust label injection (#191)', () => {
-  const TRUST_OWNER = 'qa:trust-owner-191';
+  // OC prepends the channel type to the inbound senderId before calling ST
+  // (oc-plugin/src/index.ts: `${channelType}:${senderId}`), so on the qa channel
+  // a senderId of `trust-owner-191` reaches ST as user_id `qa:trust-owner-191`.
+  // owner_user_ids must therefore hold the channel-prefixed form to match.
+  const OWNER_SENDER = 'trust-owner-191';
+  const GUEST_SENDER = 'trust-guest-191';
+  const OWNER_USER_ID = `qa:${OWNER_SENDER}`;
 
   beforeEach(async () => {
+    await post(`${QA_BUS_URL}/v1/reset`, {});
+    await post(`${FAKE_OPENAI_URL}/reset`, {});
     await stFetch('/characters/TestBot/link', {
       method: 'POST',
-      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [TRUST_OWNER] }),
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [OWNER_USER_ID] }),
     });
   });
 
-  test('owner user_id generates a successful response (label injected by plugin, confirmed by unit tests)', async () => {
-    // FULL-PATH-EXCEPTION (temporary): asserts only that generation succeeds; the
-    // [OWNER]/[GUEST] label injection itself is covered by unit tests. This trust
-    // path IS drivable via qa-bus (owner/guest senderId -> /last-prompt) and should
-    // be promoted to the full path.
-    const r = await stFetch('/generate', {
-      method: 'POST',
-      body: JSON.stringify({
-        character: 'TestBot',
-        message: 'Trust label owner test',
-        channel: 'qa-channel',
-        user_id: TRUST_OWNER,
-      }),
+  // Drive an inbound message through qa-bus with the given senderId, then return
+  // fake-openai's captured request body for THAT message. The message text carries
+  // a unique marker so we can poll /last-prompt past any interleaved heartbeat
+  // requests (which share the single lastPromptRaw slot) and capture our own prompt.
+  async function driveAndCapturePrompt(senderId, sentinel) {
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: sentinel });
+    const marker = `Trust label test ${sentinel}`;
+    const convId = `dm-trust-${Date.now()}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: convId, kind: 'direct' },
+      senderId,
+      senderName: 'Trust Tester',
+      text: marker,
     });
-    expect(r.status).toBe(200);
-    expect(r.body.response).toBeTruthy();
-    // Confirm fake-openai was reached (label injection did not cause an error before generation)
-    const prompt = await fetch(`${FAKE_OPENAI_URL}/last-prompt`);
-    expect(prompt.status).toBe(200);
-  }, 60000);
 
-  test('non-owner user_id generates a successful response (label injected by plugin, confirmed by unit tests)', async () => {
-    // FULL-PATH-EXCEPTION (temporary): asserts only that generation succeeds; the
-    // [OWNER]/[GUEST] label injection itself is covered by unit tests. This trust
-    // path IS drivable via qa-bus (owner/guest senderId -> /last-prompt) and should
-    // be promoted to the full path.
-    const r = await stFetch('/generate', {
-      method: 'POST',
-      body: JSON.stringify({
-        character: 'TestBot',
-        message: 'Trust label guest test',
-        channel: 'qa-channel',
-        user_id: 'qa:trust-guest-191',
-      }),
-    });
-    expect(r.status).toBe(200);
-    expect(r.body.response).toBeTruthy();
-    // Confirm fake-openai was reached (label injection did not cause an error before generation)
-    const prompt = await fetch(`${FAKE_OPENAI_URL}/last-prompt`);
-    expect(prompt.status).toBe(200);
-  }, 60000);
+    return waitFor(async () => {
+      const prompt = await fetch(`${FAKE_OPENAI_URL}/last-prompt`);
+      if (prompt.status === 200 && (prompt.body.raw || '').includes(marker)) {
+        return prompt.body.raw;
+      }
+      return null;
+    }, { timeoutMs: 60000, intervalMs: 1000, label: `captured prompt for ${sentinel}` });
+  }
+
+  test('owner senderId injects [OWNER] into the prompt reaching the LLM', async () => {
+    const raw = await driveAndCapturePrompt(OWNER_SENDER, 'trust-owner-sentinel-191');
+    expect(raw).toContain('[OWNER]');
+    expect(raw).not.toContain('[GUEST]');
+  }, 90000);
+
+  test('non-owner senderId injects [GUEST] into the prompt reaching the LLM', async () => {
+    const raw = await driveAndCapturePrompt(GUEST_SENDER, 'trust-guest-sentinel-191');
+    expect(raw).toContain('[GUEST]');
+    expect(raw).not.toContain('[OWNER]');
+  }, 90000);
 
   afterEach(async () => {
     // Restore clean link state so subsequent describe blocks don't inherit
-    // owner_user_ids: [TRUST_OWNER] and get unexpected [OWNER] labels.
+    // owner_user_ids: [OWNER_USER_ID] and get unexpected [OWNER] labels.
     await stFetch('/characters/TestBot/link', {
       method: 'POST',
       body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [] }),
