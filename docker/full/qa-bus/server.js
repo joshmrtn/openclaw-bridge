@@ -113,7 +113,13 @@ function getSnapshot() {
 }
 
 function resetState() {
-  cursor = 0;
+  // Deliberately DO NOT reset `cursor` to 0. OC's qa-channel long-polls with its
+  // last-seen cursor and only receives events whose cursor is greater. Zeroing the
+  // cursor here makes freshly-injected events (cursor 1, 2, …) fall *below* OC's
+  // stale poll cursor, so OC silently never sees them until the counter climbs back
+  // up — a race that intermittently dropped the first message(s) injected right
+  // after a beforeEach reset (e.g. the "multiple sequential messages" test). Keeping
+  // the cursor monotonic guarantees post-reset events always sort above OC's cursor.
   events.length = 0;
   messages.clear();
   conversations.clear();

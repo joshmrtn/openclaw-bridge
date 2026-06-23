@@ -4,5 +4,5 @@ WORKDIR /runner
 COPY docker/full/test-runner/package.json .
 RUN npm install --no-audit --no-fund --quiet
 COPY . /repo
-COPY docker/full/test-runner/full-e2e.test.js .
+COPY docker/full/test-runner/*.js .
 CMD ["npm", "test"]

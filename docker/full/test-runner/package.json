@@ -2,13 +2,15 @@
   "name": "openclaw-bridge-full-e2e-runner",
   "private": true,
   "scripts": {
-    "test": "jest --testTimeout=120000 --forceExit"
+    "test": "jest --testTimeout=120000 --forceExit --runInBand"
   },
   "devDependencies": {
     "jest": "^29.0.0"
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/full-e2e.test.js"]
+    "testMatch": ["**/*.e2e.test.js"],
+    "globalSetup": "<rootDir>/globalSetup.js",
+    "testSequencer": "<rootDir>/sequencer.js"
   }
 }

@@ -26,10 +26,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const FULL_E2E_PATH = path.resolve(
-    __dirname,
-    '../../docker/full/test-runner/full-e2e.test.js',
-);
+// The full-tier suite is split into several thematic *.e2e.test.js files under the
+// test-runner directory. Scan all of them.
+const FULL_E2E_DIR = path.resolve(__dirname, '../../docker/full/test-runner');
+const fullE2eFiles = () =>
+    fs.readdirSync(FULL_E2E_DIR)
+        .filter(f => f.endsWith('.e2e.test.js'))
+        .map(f => path.join(FULL_E2E_DIR, f));
 
 // A direct call into ST's generation endpoint from the full-tier runner.
 const DIRECT_GENERATE = /stFetch\(\s*['"]\/generate\b/;
@@ -65,20 +68,21 @@ function findViolations(source) {
 }
 
 describe('full-tier invariant guardrail', () => {
-    test('the full-tier suite file exists where the guardrail expects it', () => {
-        expect(fs.existsSync(FULL_E2E_PATH)).toBe(true);
+    test('the full-tier suite files exist where the guardrail expects them', () => {
+        expect(fullE2eFiles().length).toBeGreaterThan(0);
     });
 
     test('every direct stFetch(/generate) call in the full tier is justified with FULL-PATH-EXCEPTION', () => {
-        const source = fs.readFileSync(FULL_E2E_PATH, 'utf8');
-        const violations = findViolations(source);
-        const report = violations
-            .map(v => `  - line ${v.line} in test: "${v.test}"`)
+        const report = fullE2eFiles()
+            .flatMap(file =>
+                findViolations(fs.readFileSync(file, 'utf8'))
+                    .map(v => `  - ${path.basename(file)}:${v.line} in test: "${v.test}"`),
+            )
             .join('\n');
         expect(
-            violations.length === 0
+            report === ''
                 ? ''
-                : `Unjustified direct /generate calls (bypass OC) in full-e2e.test.js:\n${report}\n` +
+                : `Unjustified direct /generate calls (bypass OC) in the full tier:\n${report}\n` +
                   `Either route the behaviour through qa-bus, or add a "// FULL-PATH-EXCEPTION: <reason>" ` +
                   `comment in the same test/hook block above the call.`,
         ).toBe('');
