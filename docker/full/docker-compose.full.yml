@@ -129,7 +129,17 @@ services:
   # Real OC with qa-channel extension + character-bridge skill.
   # Requires pre-built openclaw-bridge:oc-full image (see Prerequisites above).
   openclaw:
+    # Built by compose (not a pre-baked image:) so `docker compose build` rebuilds
+    # it via content-addressed caching — a change to oc-plugin busts the COPY layer
+    # and the image is rebuilt in place. The heavy oc-qa base stays cached as FROM.
+    # This is what makes the old `docker rmi -f openclaw-bridge:oc-full` hammer
+    # unnecessary: stale oc-full code can no longer survive a build.
     image: openclaw-bridge:oc-full
+    build:
+      context: ../..
+      dockerfile: docker/full/openclaw/Dockerfile
+      args:
+        OC_BASE: openclaw-bridge:oc-qa
     environment:
       - OPENCLAW_CONFIG_PATH=/tmp/openclaw/openclaw.json
       - OPENCLAW_STATE_DIR=/tmp/openclaw/state
