@@ -2788,3 +2788,95 @@ describe('WS authentication (#191, #171)', () => {
     expect(welcomed).toBe(true);
   }, 15000);
 });
+
+// ── Chat-file integrity under load (full path) ───────────────────────────────
+// Drives a burst of qa-bus messages through the REAL path (qa-bus -> OC -> ST)
+// and then reads TestBot's raw chat JSONL from the container to prove the file
+// is never corrupted: every line is valid JSON (no torn/interleaved writes from
+// the history write lock), every message has the expected schema, every
+// exchange_id is paired exactly once (user + assistant), and every message we
+// sent is persisted exactly once. Corrupting a user's chat file is the worst
+// failure this project could cause, so this asserts on the raw bytes — not the
+// parsed /history view, which could mask a malformed line.
+describe('chat-file integrity under load (full path)', () => {
+  // Filename contains spaces, so the command substitution must be quoted.
+  function readRawTestBotChat() {
+    return execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} sh -c ` +
+      `'cat "$(ls -t /home/node/app/data/default-user/chats/TestBot/*.jsonl | head -1)"'`,
+      { timeout: 15000 },
+    ).toString();
+  }
+
+  test('a burst of qa-bus messages leaves a valid, uncorrupted TestBot chat JSONL', async () => {
+    const N = 8;
+    const stamp = Date.now();
+    const sentinels = Array.from({ length: N }, (_, i) => `integrity-msg-${stamp}-${i}`);
+
+    // One sticky reply for all N exchanges (ECHO_CHARACTER_MARKERS prepends the persona).
+    await post(`${FAKE_OLLAMA_URL}/scenario`, { response: `integrity-reply-${stamp}` });
+
+    // Fire all N inbound messages in a tight burst so OC drives overlapping
+    // generate/write work and exercises the history write lock under contention.
+    await Promise.all(sentinels.map((text, i) =>
+      post(`${QA_BUS_URL}/v1/inbound/message`, {
+        conversation: { id: `dm-integrity-${stamp}-${i}`, kind: 'direct' },
+        senderId: `integrity-user-${i}`,
+        senderName: 'IntegrityTester',
+        text,
+      }),
+    ));
+
+    // Wait until all N have round-tripped back to qa-bus. Because the /generate
+    // handler writes history BEFORE returning to OC (which then posts outbound),
+    // seeing N outbound messages guarantees all N history writes have completed.
+    await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      const out = (state.body.events || []).filter(e => e.kind === 'outbound-message');
+      return out.length >= N ? out : null;
+    }, { timeoutMs: 150000, intervalMs: 1500, label: `${N} outbound messages for integrity burst` });
+
+    const raw = readRawTestBotChat();
+    const lines = raw.split('\n').filter(Boolean);
+    expect(lines.length).toBeGreaterThan(0);
+
+    // 1. Every line must parse — a torn/interleaved write would throw here.
+    const parsed = [];
+    for (let i = 0; i < lines.length; i++) {
+      let obj;
+      expect(() => { obj = JSON.parse(lines[i]); }).not.toThrow();
+      parsed.push(obj);
+    }
+
+    // Header line(s) carry chat_metadata and no `mes`; the rest are messages.
+    const messages = parsed.filter(o => o.mes !== undefined);
+    expect(messages.length).toBeGreaterThanOrEqual(N * 2); // each exchange = user + assistant
+
+    // 2. Schema: every message line is well-formed.
+    for (const m of messages) {
+      expect(typeof m.name).toBe('string');
+      expect(typeof m.is_user).toBe('boolean');
+      expect(typeof m.mes).toBe('string');
+      expect(m.send_date).toBeTruthy();
+    }
+
+    // 3. exchange_id pairing: any exchange_id present must appear exactly twice
+    //    (one user + one assistant entry). A count of 1 means a torn write.
+    const exchangeCounts = {};
+    for (const m of messages) {
+      if (m.exchange_id) exchangeCounts[m.exchange_id] = (exchangeCounts[m.exchange_id] || 0) + 1;
+    }
+    for (const count of Object.values(exchangeCounts)) {
+      expect(count).toBe(2);
+    }
+
+    // 4. Each sentinel we sent is persisted exactly once as a user entry — no
+    //    loss and no duplication despite the concurrent burst.
+    for (const text of sentinels) {
+      const matches = messages.filter(
+        m => m.is_user === true && typeof m.mes === 'string' && m.mes.includes(text),
+      );
+      expect(matches.length).toBe(1);
+    }
+  }, 200000);
+});
