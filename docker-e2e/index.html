@@ -776,8 +776,8 @@
 <td><strong>Fast</strong></td>
 <td><code>npm run test:e2e:fast</code></td>
 <td>✅</td>
-<td>ST + fake-extension + fake-ollama</td>
-<td>LLM + extension echo</td>
+<td>ST + fake-extension</td>
+<td>extension echo</td>
 <td>Every PR; quick regression; no OC repo needed</td>
 </tr>
 <tr>
@@ -785,14 +785,14 @@
 <td><code>npm run test:e2e:browser</code></td>
 <td>✅</td>
 <td>ST + fake-extension + Chromium</td>
-<td>LLM</td>
+<td>extension echo</td>
 <td>Every PR; validates real browser extension code</td>
 </tr>
 <tr>
 <td><strong>Full</strong></td>
 <td><code>npm run test:e2e:full</code></td>
 <td>❌ local only</td>
-<td>ST + OC gateway + qa-bus + mock-llm + fake-ollama</td>
+<td>ST + OC gateway + qa-bus + fake-openai</td>
 <td>LLM only</td>
 <td>Pre-release; OC integration changes; requires <code>~/projects/openclaw</code></td>
 </tr>
@@ -800,7 +800,7 @@
 </table>
 <hr />
 <h2 id="fast-tier">Fast tier<a class="headerlink" href="#fast-tier" title="Permanent link">&para;</a></h2>
-<p>Tests ST, the plugin, and the headless WebSocket round-trip. The extension is replaced by <code>fake-extension.js</code> (an echo server), and <code>fake-ollama</code> returns a canned LLM response. No OC repo or OC binary required.</p>
+<p>Tests ST, the plugin, and the headless WebSocket round-trip. The extension is replaced by <code>fake-extension.js</code> (an echo server) that returns a canned response over the WebSocket — no real LLM is involved. No OC repo or OC binary required.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>npm<span class="w"> </span>run<span class="w"> </span>test:e2e:fast
 </code></pre></div>
 <p>This command runs <code>docker compose</code> with <code>docker/docker-compose.yml</code>, waits for services to be healthy, then executes the Jest suite inside the <code>test-runner</code> container (22 tests).</p>
@@ -823,11 +823,6 @@
 <td><code>fake-extension</code></td>
 <td>built from <code>docker/fake-extension/</code></td>
 <td>WebSocket echo server</td>
-</tr>
-<tr>
-<td><code>fake-ollama</code></td>
-<td>built from <code>docker/fake-ollama/</code></td>
-<td>Returns fixed LLM text</td>
 </tr>
 <tr>
 <td><code>test-runner</code></td>
@@ -893,7 +888,7 @@
 <p>Playwright drives Chromium non-interactively, making it functionally a headless client. The <code>bootExtension</code> helper sets <code>globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless'</code> before loading the extension so <code>session-manager.getClient()</code> picks it up (it only selects headless clients, never the user's interactive browser — this is by design to prevent UI hijacking).</p>
 <hr />
 <h2 id="full-tier">Full tier<a class="headerlink" href="#full-tier" title="Permanent link">&para;</a></h2>
-<p>Tests the entire message path: a synthetic inbound message enters via <code>qa-bus</code> (the fake channel), OC picks it up via <code>qa-channel</code>, invokes the <code>character-bridge</code> skill, which calls the ST plugin, which dispatches to headless Playwright, which calls <code>fake-ollama</code>, and the response travels back through OC to <code>qa-bus</code> where the test asserts on it.</p>
+<p>Tests the entire message path: a synthetic inbound message enters via <code>qa-bus</code> (the fake channel), OC picks it up via <code>qa-channel</code>, invokes the <code>character-bridge</code> skill, which calls the ST plugin, which dispatches to headless Playwright, which calls <code>fake-openai</code>, and the response travels back through OC to <code>qa-bus</code> where the test asserts on it.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># One-time: build the OC image (requires openclaw repo at ~/projects/openclaw)</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>bash<span class="w"> </span>docker/full/build-oc.sh
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
@@ -927,14 +922,9 @@
 <td>Fake channel (message bus)</td>
 </tr>
 <tr>
-<td><code>mock-llm</code></td>
-<td>built from <code>docker/full/mock-llm/</code></td>
-<td>OpenAI Responses API mock (always calls <code>generate_response</code>)</td>
-</tr>
-<tr>
-<td><code>fake-ollama</code></td>
-<td>shared with fast tier</td>
-<td>Returns fixed LLM text to ST</td>
+<td><code>fake-openai</code></td>
+<td>built from <code>docker/fake-openai/</code></td>
+<td>OpenAI-compatible mock LLM for both ST and OC's agent</td>
 </tr>
 <tr>
 <td><code>full-test-runner</code></td>
@@ -945,7 +935,7 @@
 </table>
 <p><strong>What it covers (in addition to what the fast tier proves):</strong></p>
 <ul>
-<li>Full message path: <code>qa-bus → OC → character-bridge skill → ST plugin → headless Playwright → fake-ollama → qa-bus</code></li>
+<li>Full message path: <code>qa-bus → OC → character-bridge skill → ST plugin → headless Playwright → fake-openai → qa-bus</code></li>
 <li>Trust label enforcement end-to-end with a real OC agent identity</li>
 <li>Multiple sequential messages handled without collision</li>
 <li>ST chat history written after generation</li>
@@ -996,7 +986,7 @@
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>│   ├── Dockerfile
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>│   └── config.yaml                 securityOverride: true required for Docker
 <a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>├── fake-extension/                 WebSocket echo server (fast + browser)
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>├── fake-ollama/                    Fixed-response Ollama mock
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>├── fake-openai/                    OpenAI-compatible mock LLM (full tier; ST + OC)
 <a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>├── test-runner/                    Fast-tier Jest suite
 <a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>│   └── e2e.test.js
 <a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>├── browser-test-runner/            Browser-tier Playwright runner
@@ -1011,9 +1001,8 @@
 <a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>    │   ├── Dockerfile
 <a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>    │   └── openclaw.json           OC runtime config
 <a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>    ├── qa-bus/                     Fake channel message bus
-<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    ├── mock-llm/                   OpenAI Responses API mock (instructs OC to call generate_response)
-<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>    └── test-runner/                Full-tier Jest suite
-<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>        └── full-e2e.test.js
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    └── test-runner/                Full-tier Jest suite
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>        └── full-e2e.test.js
 </code></pre></div>
 <hr />
 <h2 id="implementation-notes">Implementation notes<a class="headerlink" href="#implementation-notes" title="Permanent link">&para;</a></h2>
@@ -1023,7 +1012,7 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker/full/docker-compose.full.yml<span class="w"> </span>build<span class="w"> </span>full-test-runner
 </code></pre></div>
 <p><strong><code>qa-bus</code> as the fake channel.</strong> The qa-bus exposes <code>/v1/inbound/message</code> (inject a message), <code>/v1/state</code> (read all events including outbound), and <code>/v1/reset</code> (clear between tests). Tests poll <code>/v1/state</code> waiting for <code>outbound-message</code> events to appear — that's how they verify OC sent a response.</p>
-<p><strong><code>mock-llm</code> role.</strong> The mock-llm intercepts OC's LLM calls and always returns a tool call instructing OC to invoke <code>generate_response</code> (the character-bridge skill's main tool). This forces OC through the full skill execution path without requiring a real LLM or OpenClaw subscription.</p>
+<p><strong><code>fake-openai</code> role.</strong> One OpenAI-compatible mock serves both ST and OC's agent (both speak the OpenAI API), replacing the old fake-ollama (ST) + mock-llm (OC agent) split. ST points at it as a <code>custom</code> chat-completion source; OC points at it as an <code>openai-completions</code> provider. It is runtime-primeable (<code>/scenario</code>, <code>/reset</code>, <code>/error-once</code>, <code>/last-prompt</code>, <code>/pending-count</code>) so tests assert on unique sentinels instead of sleeping. In the normal path the OC bridge plugin intercepts the inbound message and calls ST <code>/generate</code> directly (ST brain drives, OC body executes), so the agent-LLM side of the mock only fires on the true fallback (no linked character) or when an ST character explicitly drives the OC agent — in which case it returns a <code>generate_response</code> tool call.</p>
 <p><strong>Headless client wait.</strong> <code>beforeAll</code> in <code>full-e2e.test.js</code> polls <code>/health</code> until <code>headless.isRunning === true</code> before running any tests. ST's headless Playwright service takes 15–30 seconds to launch Chromium inside the container and connect via WebSocket. The setup timeout is 5 minutes.</p>
 <hr />
 <h2 id="when-to-run-which-tier">When to run which tier<a class="headerlink" href="#when-to-run-which-tier" title="Permanent link">&para;</a></h2>
