@@ -1,0 +1,900 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bridge OpenClaw and SillyTavern so AI companion characters maintain a single identity across all communication channels.">
+      
+      
+      
+        <link rel="canonical" href="https://joshmrtn.github.io/openclaw-bridge/plan-192-chat-history-e2e/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Plan: Issue #192 — Full-tier E2E: chat history write correctness - openclaw-bridge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#plan-issue-192-full-tier-e2e-chat-history-write-correctness" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="openclaw-bridge" class="md-header__button md-logo" aria-label="openclaw-bridge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            openclaw-bridge
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Plan: Issue #192 — Full-tier E2E: chat history write correctness
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="red"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="red"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/joshmrtn/openclaw-bridge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    joshmrtn/openclaw-bridge
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="openclaw-bridge" class="md-nav__button md-logo" aria-label="openclaw-bridge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    openclaw-bridge
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/joshmrtn/openclaw-bridge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    joshmrtn/openclaw-bridge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding-a-character/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a character
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../oc-security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker-e2e/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker E2E testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-were-building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What we're building
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#new-endpoint-get-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New endpoint: GET /history
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-character-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test character strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sticky-scenario-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sticky scenario usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phases
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phases">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-add-get-history-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1 — Add GET /history endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-concurrent-write-locking-unit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2 — Concurrent write locking (unit)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-full-tier-e2e-content-labels-gaps-1-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3 — Full-tier E2E: content + labels (gaps 1 + 2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-full-tier-e2e-heartbeat-path-history-write-gap-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4 — Full-tier E2E: heartbeat path history write (gap 3)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-5-harden-remaining-soft-skips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 5 — Harden remaining soft-skips
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-questions-resolved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open questions resolved
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/joshmrtn/openclaw-bridge/edit/main/docs/plan-192-chat-history-e2e.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="plan-issue-192-full-tier-e2e-chat-history-write-correctness">Plan: Issue #192 — Full-tier E2E: chat history write correctness<a class="headerlink" href="#plan-issue-192-full-tier-e2e-chat-history-write-correctness" title="Permanent link">&para;</a></h1>
+<h2 id="what-were-building">What we're building<a class="headerlink" href="#what-were-building" title="Permanent link">&para;</a></h2>
+<p>Four coverage gaps to close, plus a new plugin endpoint that makes all the
+full-tier history assertions possible:</p>
+<ol>
+<li>JSONL content correctness (inbound + outbound both written, right text)</li>
+<li>Correct labels and metadata (ExternalChat, role, timestamp)</li>
+<li>Heartbeat path history write</li>
+<li>Concurrent write locking (unit tier)</li>
+</ol>
+<h2 id="new-endpoint-get-history">New endpoint: GET /history<a class="headerlink" href="#new-endpoint-get-history" title="Permanent link">&para;</a></h2>
+<p><code>readLatestChat</code> already exists in <code>chat-history.js</code> but is never exposed as a
+route. All four soft-skips in the E2E suite (<code>if (historyResp.status === 200)</code>)
+exist because the endpoint didn't exist yet. Adding it unblocks all of them.</p>
+<p><strong>Route:</strong> <code>GET /history?character=&lt;name&gt;</code><br />
+<strong>Auth:</strong> bearer token, via existing <code>router.use(authMiddleware)</code> — automatic<br />
+<strong>Returns:</strong> <code>{ messages: [...] }</code> where each element is a parsed JSONL object<br />
+<strong>Errors:</strong> 400 if <code>character</code> param missing; 400 if <code>_charDirFor</code> throws
+path-traversal; 500 on other read errors<br />
+<strong>Registration:</strong> add before <code>log-action</code>, after existing GET routes —
+route order matters for test mocks (GET routes don't affect the POST /generate
+mock capture, but keep it consistent)</p>
+<h2 id="test-character-strategy">Test character strategy<a class="headerlink" href="#test-character-strategy" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Gap</th>
+<th>Character</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gap 1 + 2 (content, labels)</td>
+<td><code>test_char_2</code></td>
+<td>No ECHO_CHARACTER_MARKERS prefix; no prior test accumulation; not used by any existing test</td>
+</tr>
+<tr>
+<td>Gap 3 (heartbeat)</td>
+<td><code>test_char_1</code></td>
+<td>Already used in the test_char_1 heartbeat test; extend that test rather than add a new one</td>
+</tr>
+<tr>
+<td>Gap 4 (concurrent, unit)</td>
+<td>temp dir fixture</td>
+<td>Pure unit test, no ST involved</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sticky-scenario-usage">Sticky scenario usage<a class="headerlink" href="#sticky-scenario-usage" title="Permanent link">&para;</a></h2>
+<p><code>POST ${FAKE_OLLAMA_URL}/scenario</code> sets a response string that persists until
+<code>/reset</code> (called in beforeEach). For content assertion tests:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">await</span><span class="w"> </span><span class="nx">post</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">FAKE_OLLAMA_URL</span><span class="si">}</span><span class="sb">/scenario`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">response</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;history-sentinel-unique&#39;</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1">// → POST stFetch(&#39;/generate&#39;, { character: &#39;test_char_2&#39;, ... })</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1">// → GET stFetch(&#39;/history?character=test_char_2&#39;)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1">// → assert assistant entry content includes &#39;history-sentinel-unique&#39;</span>
+</code></pre></div>
+<p>test_char_2 is not in ECHO_CHARACTER_MARKERS so the sentinel is returned
+verbatim (no <code>[persona:test_char_2]</code> prefix). </p>
+<h2 id="phases">Phases<a class="headerlink" href="#phases" title="Permanent link">&para;</a></h2>
+<h3 id="phase-1-add-get-history-endpoint">Phase 1 — Add GET /history endpoint<a class="headerlink" href="#phase-1-add-get-history-endpoint" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong> <code>st-plugin/index.js</code></p>
+<p>Red test: harden the existing soft-skip at line ~281 ("response is written to
+ST chat history") — it currently passes silently because the skip means no
+assertion runs. Changing it to a hard <code>expect(historyResp.status).toBe(200)</code>
+will fail until the endpoint exists. Run the full-tier suite to confirm red.</p>
+<p>Green: add the route.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nx">router</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">&#39;/history&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">(</span><span class="nx">request</span><span class="p">,</span><span class="w"> </span><span class="nx">response</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">character</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">request</span><span class="p">.</span><span class="nx">query</span><span class="p">.</span><span class="nx">character</span><span class="p">;</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">character</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">response</span><span class="p">.</span><span class="nx">status</span><span class="p">(</span><span class="mf">400</span><span class="p">).</span><span class="nx">json</span><span class="p">({</span><span class="w"> </span><span class="nx">error</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;character param required&#39;</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">messages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">chatHistory</span><span class="p">.</span><span class="nx">readLatestChat</span><span class="p">(</span><span class="nx">character</span><span class="p">);</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">        </span><span class="nx">response</span><span class="p">.</span><span class="nx">json</span><span class="p">({</span><span class="w"> </span><span class="nx">messages</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="nx">err</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">err</span><span class="p">.</span><span class="nx">message</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">err</span><span class="p">.</span><span class="nx">message</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="s1">&#39;path traversal&#39;</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="nx">response</span><span class="p">.</span><span class="nx">status</span><span class="p">(</span><span class="mf">400</span><span class="p">).</span><span class="nx">json</span><span class="p">({</span><span class="w"> </span><span class="nx">error</span><span class="o">:</span><span class="w"> </span><span class="nx">err</span><span class="p">.</span><span class="nx">message</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">        </span><span class="nx">response</span><span class="p">.</span><span class="nx">status</span><span class="p">(</span><span class="mf">500</span><span class="p">).</span><span class="nx">json</span><span class="p">({</span><span class="w"> </span><span class="nx">error</span><span class="o">:</span><span class="w"> </span><span class="nx">err</span><span class="p">.</span><span class="nx">message</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">});</span>
+</code></pre></div>
+<p>Gate: unit tests green, full-tier E2E green (the hardened line-281 test passes).</p>
+<h3 id="phase-2-concurrent-write-locking-unit">Phase 2 — Concurrent write locking (unit)<a class="headerlink" href="#phase-2-concurrent-write-locking-unit" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong> <code>st-plugin/tests/chat-history.test.js</code></p>
+<p>Red: add a test that calls <code>appendExternalChatToHistory</code> twice concurrently
+(via <code>Promise.all</code>) for the same character, using different exchange IDs and
+message content. Assert: the file contains exactly 5 lines (1 header + 2 user
+entries + 2 assistant entries), every line parses as valid JSON, and both
+sentinels appear.</p>
+<p>Green: already green (locking is implemented). Confirm it passes, then gate.</p>
+<h3 id="phase-3-full-tier-e2e-content-labels-gaps-1-2">Phase 3 — Full-tier E2E: content + labels (gaps 1 + 2)<a class="headerlink" href="#phase-3-full-tier-e2e-content-labels-gaps-1-2" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong> <code>docker/full/test-runner/full-e2e.test.js</code></p>
+<p>The full pipeline: qa-bus inbound → OC → mock-llm → generate_response on ST
+→ fake-ollama → response written to JSONL → OC posts outbound to qa-bus.
+Character is TestBot throughout (mock-llm is wired to CHARACTER_NAME=TestBot).</p>
+<p>The existing "response is written to ST chat history" test (around line 264)
+sends a message and only checks <code>msgs.length &gt; 0</code>. Replace it with real
+content and label assertions:</p>
+<ul>
+<li>Set fake-ollama sticky scenario to a timestamp-unique sentinel string
+  (e.g. <code>history-sentinel-${Date.now()}</code>) so we can find the right assistant
+  entry amid all the TestBot history accumulated by preceding tests</li>
+<li>Send inbound to qa-bus with a matching unique message text</li>
+<li>Wait for outbound on qa-bus (same waitFor pattern as existing test)</li>
+<li>GET <code>/history?character=TestBot</code> — hard <code>expect(historyResp.status).toBe(200)</code></li>
+<li>Find the user entry whose content includes the unique message text</li>
+<li>Find the assistant entry whose content includes the unique sentinel</li>
+<li>Assert on each:</li>
+<li>user entry: <code>role === 'user'</code>, <code>name === 'ExternalChat'</code> (mock-llm calls
+    <code>/generate</code> without user_name, so ExternalChat is the expected fallback),
+    <code>send_date</code> is truthy</li>
+<li>assistant entry: <code>role === 'assistant'</code>, <code>send_date</code> is truthy</li>
+<li>Both <code>find()</code> calls must return a defined result (Jest will report clearly
+  if either is undefined)</li>
+</ul>
+<p>Add a second focused test: "history entries carry user_name when provided"
+— call <code>/generate</code> directly from the test runner as OC would (POST with
+<code>user_name: 'HistoryTester'</code>), then read history and assert the user entry
+<code>name</code> field includes 'HistoryTester'. This path is the plugin handler, not
+the OC-agent path, so direct call is appropriate: it IS the full system for
+that code path (OC calls <code>/generate</code> directly via HTTP — the test is doing
+exactly what OC does).</p>
+<p>Gate: full-tier suite green.</p>
+<h3 id="phase-4-full-tier-e2e-heartbeat-path-history-write-gap-3">Phase 4 — Full-tier E2E: heartbeat path history write (gap 3)<a class="headerlink" href="#phase-4-full-tier-e2e-heartbeat-path-history-write-gap-3" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong> <code>docker/full/test-runner/full-e2e.test.js</code></p>
+<p>Extend the existing "heartbeat fires correctly for a secondary character
+(test_char_1)" test. After the <code>waitFor</code> confirms the outbound arrives:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1">// Verify history was written on the heartbeat path</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">histResp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">stFetch</span><span class="p">(</span><span class="s1">&#39;/history?character=test_char_1&#39;</span><span class="p">);</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nx">expect</span><span class="p">(</span><span class="nx">histResp</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">msgs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">histResp</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">messages</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">[];</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="kd">const</span><span class="w"> </span><span class="nx">assistantEntry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">msgs</span><span class="p">.</span><span class="nx">find</span><span class="p">(</span><span class="nx">m</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">m</span><span class="p">.</span><span class="nx">role</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;assistant&#39;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">m</span><span class="p">.</span><span class="nx">content</span><span class="o">?</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="nx">SENTINEL</span><span class="p">));</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nx">expect</span><span class="p">(</span><span class="nx">assistantEntry</span><span class="p">).</span><span class="nx">toBeDefined</span><span class="p">();</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nx">expect</span><span class="p">(</span><span class="nx">assistantEntry</span><span class="p">.</span><span class="nx">send_date</span><span class="p">).</span><span class="nx">toBeTruthy</span><span class="p">();</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1">// Heartbeat path does not write a user-side entry (no inbound message)</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1">// — only an assistant entry is expected. Do not assert on user entries here.</span>
+</code></pre></div>
+<p>Note: the heartbeat path in <code>index.js</code> only writes the assistant (generated
+response) entry to history, not a user-side inbound entry. Verify this is
+actually the case before writing the assertion (read the heartbeat branch of
+<code>index.js</code>). Adjust the assertion if both entries are written.</p>
+<p>Gate: full-tier suite green.</p>
+<h3 id="phase-5-harden-remaining-soft-skips">Phase 5 — Harden remaining soft-skips<a class="headerlink" href="#phase-5-harden-remaining-soft-skips" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong> <code>docker/full/test-runner/full-e2e.test.js</code></p>
+<p>Four call sites with the soft-skip pattern — harden all of them:</p>
+<table>
+<thead>
+<tr>
+<th>Line</th>
+<th>Test</th>
+<th>What to assert</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>~1139</td>
+<td>R5 owner action: log-action entry in history</td>
+<td><code>actionLog</code> is defined (already asserted inside the if-block, just remove the guard)</td>
+</tr>
+<tr>
+<td>~1167</td>
+<td>R5 guest action: no log-action entry</td>
+<td><code>actionLog</code> is undefined (same)</td>
+</tr>
+<tr>
+<td>~1545</td>
+<td>send_message failed: error logged to history</td>
+<td><code>errorEntry</code> is defined (same)</td>
+</tr>
+</tbody>
+</table>
+<p>For each: remove the <code>if (historyResp.status === 200)</code> wrapper; let the
+inner assertions run unconditionally.</p>
+<p>Gate: full-tier suite green.</p>
+<h2 id="open-questions-resolved">Open questions resolved<a class="headerlink" href="#open-questions-resolved" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>No <code>/history</code> route before this PR</strong>: confirmed — <code>readLatestChat</code> is
+  unused in any route.</li>
+<li><strong>Auth</strong>: covered automatically by existing <code>router.use(authMiddleware)</code>.</li>
+<li><strong>Path traversal on read side</strong>: <code>readLatestChat</code> → <code>_charDirFor</code> throws;
+  we catch and return 400. The existing unit test at line ~265 covers the write
+  side; we don't need a new unit test for the read side (same function).</li>
+<li><strong>baseDir in Docker</strong>: <code>DEFAULT_CHATS_DIR</code> resolves correctly in container
+  because <code>process.cwd()</code> is the repo root and <code>sillytavern/data/...</code> exists.
+  The endpoint uses the same default, so reads and writes agree.</li>
+<li><strong>test_char_2 in ST</strong>: it's a real PNG card baked into the ST Docker image;
+  no manual setup needed.</li>
+<li><strong>Heartbeat user entry</strong>: confirm from code whether heartbeat writes one or
+  two JSONL entries before asserting in Phase 4.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "search.suggest", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
