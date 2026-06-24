@@ -20,7 +20,7 @@
         "test:all:skip-unit": "bash ./scripts/test-all.sh --skip-unit"
     },
     "devDependencies": {
-        "@playwright/test": "^1.56.1",
+        "@playwright/test": "1.60.0",
         "esbuild": "^0.28.1",
         "jest": "^29.7.0"
     },

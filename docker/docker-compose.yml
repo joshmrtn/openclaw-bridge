@@ -112,6 +112,9 @@ services:
       - OPENCLAW_BRIDGE_ST_URL=http://sillytavern:8000
       - OPENCLAW_BRIDGE_AUTH_TOKEN=e2e-test-token
       - OPENCLAW_BRIDGE_ENABLE_HEADLESS=false
+      # Propagate the host CI flag so playwright.config.js enables launch-crash
+      # retries inside the container (Docker does not inherit it automatically).
+      - CI=${CI:-}
     depends_on:
       sillytavern:
         condition: service_healthy
