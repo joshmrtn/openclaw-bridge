@@ -69,7 +69,10 @@ describe('outbound character actions (R5)', () => {
     const convId = `dm-r5-owner-${Date.now()}`;
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
       conversation: { id: convId, kind: 'direct' },
-      senderId: 'qa:owner-user',
+      // senderId must be the bare id: OC prefixes it with the channel type ("qa:") to
+      // form the user_id matched against owner_user_ids. A prefixed senderId here would
+      // double-prefix (qa:qa:owner-user) and silently demote the owner to guest.
+      senderId: 'owner-user',
       senderName: 'Owner',
       text: 'Please post something to the team channel.',
     });
@@ -85,24 +88,32 @@ describe('outbound character actions (R5)', () => {
     expect(outbound.message.text).not.toContain('<action>');
     expect(outbound.message.text).toContain(CLEAN_TEXT);
 
-    // OC should have called log-action; ST chat history should contain the entry.
-    const historyResp = await stFetch('/history?character=TestBot');
-    if (historyResp.status === 200) {
-      const messages = historyResp.body.messages || [];
-      const actionLog = messages.find(m =>
-        m.content && m.content.includes('[Autonomous action') && m.content.includes('discord_post')
-      );
-      expect(actionLog).toBeDefined();
-    }
+    // The action must be logged to ST chat history (R5.3). The /generate handler
+    // writes one assistant entry per pending action: `[Character action queued]: <type>…`.
+    const messages = readChatMessages('TestBot');
+    const actionLog = messages.find(
+      m => typeof m.mes === 'string' && m.mes.includes('[Character action queued]') && m.mes.includes('discord_post'),
+    );
+    expect(actionLog).toBeDefined();
   }, 120000);
 
   test('guest sender cannot trigger outbound actions (R5.4)', async () => {
     await post(`${FAKE_OPENAI_URL}/scenario`, { response: ACTION_RESPONSE });
 
+    // TestBot history accumulates across tests (the owner test above logs an
+    // action entry), so assert on the delta: a guest-triggered message must add
+    // no action-log entry — not that none exists at all.
+    const countActionLogs = () => readChatMessages('TestBot').filter(
+      m => typeof m.mes === 'string' && m.mes.includes('[Character action queued]') && m.mes.includes('discord_post'),
+    ).length;
+    const actionLogsBefore = countActionLogs();
+
     const convId = `dm-r5-guest-${Date.now()}`;
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
       conversation: { id: convId, kind: 'direct' },
-      senderId: 'qa:guest-user',
+      // Bare senderId (see owner test) → user_id 'qa:guest-user', which is not in
+      // owner_user_ids, so this sender is correctly treated as a guest.
+      senderId: 'guest-user',
       senderName: 'Guest',
       text: 'Please post something to the team channel.',
     });
@@ -113,15 +124,8 @@ describe('outbound character actions (R5)', () => {
       return (state.body.events || []).find(e => e.kind === 'outbound-message') || null;
     }, { timeoutMs: 90000, intervalMs: 1000, label: 'R5 guest action outbound message' });
 
-    // No action log should appear in history for a guest-triggered message.
-    const historyResp = await stFetch('/history?character=TestBot');
-    if (historyResp.status === 200) {
-      const messages = historyResp.body.messages || [];
-      const actionLog = messages.find(m =>
-        m.content && m.content.includes('[Autonomous action') && m.content.includes('discord_post')
-      );
-      expect(actionLog).toBeUndefined();
-    }
+    // The guest's action is blocked (R5.4), so no new action-log entry is written.
+    expect(countActionLogs()).toBe(actionLogsBefore);
   }, 120000);
 
   test('malformed JSON inside action block: pipeline delivers clean text without crashing (#195)', async () => {
@@ -494,15 +498,13 @@ describe('send_message action and loop prevention (#111)', () => {
     );
     expect(channelPost).toBeUndefined();
 
-    // Error must be logged to ST chat history.
-    const histResp = await stFetch('/history?character=TestBot');
-    if (histResp.status === 200) {
-      const messages = histResp.body.messages || [];
-      const errorEntry = messages.find(m =>
-        m.content && m.content.includes('send_message failed') && m.content.includes('content')
-      );
-      expect(errorEntry).toBeDefined();
-    }
+    // Error must be logged to ST chat history:
+    // `[send_message failed]: 'content' is required but was missing or empty for …`.
+    const messages = readChatMessages('TestBot');
+    const errorEntry = messages.find(
+      m => typeof m.mes === 'string' && m.mes.includes('send_message failed') && m.mes.includes('content'),
+    );
+    expect(errorEntry).toBeDefined();
   }, 120000);
 });
 

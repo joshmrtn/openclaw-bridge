@@ -36,29 +36,52 @@ describe('full message path: qa-bus → OC → ST → fake-openai → qa-bus', (
     console.log('[test] Got response:', outboundMsg.message.text.slice(0, 100));
   }, 90000);
 
-  test('response is written to ST chat history', async () => {
-    const convId = `dm-${Date.now()}`;
+  test('inbound and outbound are both written to ST chat history with correct content and labels (#192)', async () => {
+    const stamp = Date.now();
+    const convId = `dm-hist-${stamp}`;
+    const inboundText = `history-inbound-${stamp}`;
+    const replySentinel = `history-reply-${stamp}`;
+
+    // Pin a unique assistant reply so we can find this exact exchange amid the
+    // TestBot history accumulated by earlier tests. ECHO_CHARACTER_MARKERS
+    // prepends the persona, so the reply is matched with includes, not equality.
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: replySentinel });
 
     await post(`${QA_BUS_URL}/v1/inbound/message`, {
       conversation: { id: convId, kind: 'direct' },
       senderId: 'test-user-2',
       senderName: 'HistoryTester',
-      text: 'Write something in my history.',
+      text: inboundText,
     });
 
-    // Wait for response to arrive
+    // The /generate handler writes history BEFORE returning to OC (which then
+    // posts outbound), so seeing the outbound guarantees the history write is done.
     await waitFor(async () => {
       const state = await fetch(`${QA_BUS_URL}/v1/state`);
       return (state.body.events || []).some(e => e.kind === 'outbound-message');
     }, { timeoutMs: 90000, intervalMs: 1000, label: 'outbound message for history test' });
 
-    // Verify chat history was written in ST
-    const historyResp = await stFetch('/history?character=TestBot');
-    // History endpoint may not exist yet — skip if 404
-    if (historyResp.status === 200) {
-      const msgs = historyResp.body.messages || [];
-      expect(msgs.length).toBeGreaterThan(0);
-    }
+    // Assert on the raw chat JSONL straight from the ST container — both sides of
+    // the exchange must land with the right content, role, label, and timestamp.
+    const messages = readChatMessages('TestBot');
+
+    const userEntry = messages.find(
+      m => m.is_user === true && typeof m.mes === 'string' && m.mes.includes(inboundText),
+    );
+    expect(userEntry).toBeDefined();
+    // The qa-bus path does not forward the sender's display name to /generate, so the
+    // user entry carries ST's external-source label, not the inbound senderName. (When
+    // user_name IS supplied — e.g. a direct /generate call — it is used instead; covered
+    // by the R5/R11 blocks below.)
+    expect(userEntry.name).toBe('ExternalChat');
+    expect(userEntry.send_date).toBeTruthy();
+
+    const assistantEntry = messages.find(
+      m => m.is_user === false && typeof m.mes === 'string' && m.mes.includes(replySentinel),
+    );
+    expect(assistantEntry).toBeDefined();
+    expect(assistantEntry.name).toBe('TestBot');
+    expect(assistantEntry.send_date).toBeTruthy();
   }, 90000);
 
   test('multiple sequential messages are handled correctly', async () => {
@@ -273,15 +296,6 @@ describe('large LLM responses', () => {
 // failure this project could cause, so this asserts on the raw bytes — not the
 // parsed /history view, which could mask a malformed line.
 describe('chat-file integrity under load (full path)', () => {
-  // Filename contains spaces, so the command substitution must be quoted.
-  function readRawTestBotChat() {
-    return execSync(
-      `docker exec ${SILLYTAVERN_CONTAINER} sh -c ` +
-      `'cat "$(ls -t /home/node/app/data/default-user/chats/TestBot/*.jsonl | head -1)"'`,
-      { timeout: 15000 },
-    ).toString();
-  }
-
   test('a burst of qa-bus messages leaves a valid, uncorrupted TestBot chat JSONL', async () => {
     const N = 8;
     const stamp = Date.now();
@@ -310,7 +324,7 @@ describe('chat-file integrity under load (full path)', () => {
       return out.length >= N ? out : null;
     }, { timeoutMs: 150000, intervalMs: 1500, label: `${N} outbound messages for integrity burst` });
 
-    const raw = readRawTestBotChat();
+    const raw = readRawChatJsonl('TestBot');
     const lines = raw.split('\n').filter(Boolean);
     expect(lines.length).toBeGreaterThan(0);
 
