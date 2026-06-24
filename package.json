@@ -5,6 +5,7 @@
     "type": "commonjs",
     "scripts": {
         "build:extension": "esbuild st-extension/src/index.js --bundle --platform=browser --format=esm --outfile=st-extension/index.js",
+        "build:oc-plugin": "tsc --project oc-plugin/tsconfig.json",
         "test": "jest --runInBand --colors",
         "test:js": "jest --runInBand --colors",
         "test:e2e:fast": "docker compose -f docker/docker-compose.yml down --remove-orphans --rmi local 2>/dev/null; docker compose -f docker/docker-compose.yml --profile test run --build --rm test-runner",
@@ -21,8 +22,10 @@
     },
     "devDependencies": {
         "@playwright/test": "1.60.0",
+        "@types/node": "25.9.1",
         "esbuild": "^0.28.1",
-        "jest": "^29.7.0"
+        "jest": "^29.7.0",
+        "typescript": "6.0.3"
     },
     "dependencies": {
         "ws": "^8.21.0"

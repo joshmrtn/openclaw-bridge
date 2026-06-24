@@ -72,13 +72,13 @@ data/                   Runtime data (bridge token, character-links.json)
 
 OC loads the plugin from `~/.openclaw/extensions/openclaw-bridge/`, **not** from `oc-plugin/` in this repo. Changes to `oc-plugin/` are invisible to a running OC process until that installed copy is updated.
 
-`dev-setup.sh` handles this by replacing the installed copy with a symlink to `oc-plugin/` (OC still needs a restart to pick it up). Always run `dev-setup.sh` when setting up a new checkout. After making changes to `oc-plugin/src/index.ts`, recompile with:
+`dev-setup.sh` handles this by replacing the installed copy with a symlink to `oc-plugin/` (OC still needs a restart to pick it up). Always run `dev-setup.sh` when setting up a new checkout. After making changes to `oc-plugin/src/index.ts`, recompile the committed `dist` with:
 
 ```bash
-/path/to/openclaw/node_modules/typescript/bin/tsc --project oc-plugin/tsconfig.json
+npm run build:oc-plugin
 ```
 
-then restart OC. If an OC plugin fix appears to have no effect, check `~/.openclaw/extensions/openclaw-bridge/dist/index.js` — it may be a stale installed copy.
+then restart OC. The committed `oc-plugin/dist/index.js` is checked in and CI fails if it is stale (`build:oc-plugin` then `git diff --exit-code oc-plugin/dist`), mirroring the extension-bundle guard — so always rebuild and commit `dist` alongside any `oc-plugin/src` change. If an OC plugin fix appears to have no effect, check `~/.openclaw/extensions/openclaw-bridge/dist/index.js` — it may be a stale installed copy.
 
 ### Key files
 
