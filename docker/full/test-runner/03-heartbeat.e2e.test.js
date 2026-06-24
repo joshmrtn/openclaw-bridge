@@ -205,6 +205,18 @@ describe('heartbeat completeness (R10) (#196)', () => {
 
       expect(outbound.message.text).toBeTruthy();
       expect(outbound.message.text.length).toBeGreaterThan(0);
+
+      // History is written on the heartbeat path too (#192). The heartbeat handler
+      // writes history before returning, so the outbound above guarantees the write
+      // is done. It logs the generated text as an assistant entry (`[Heartbeat on …]:
+      // <text>`); with no inbound there is no user entry, so assert only the assistant side.
+      const messages = readChatMessages('test_char_1');
+      const hbEntry = messages.find(
+        m => m.is_user === false && typeof m.mes === 'string' && m.mes.includes(SENTINEL),
+      );
+      expect(hbEntry).toBeDefined();
+      expect(hbEntry.name).toBe('test_char_1');
+      expect(hbEntry.send_date).toBeTruthy();
     } finally {
       await stFetch('/characters/test_char_1/link', {
         method: 'POST',

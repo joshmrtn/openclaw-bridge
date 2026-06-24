@@ -203,6 +203,33 @@ async function waitForHeadlessReconnect() {
   }, { timeoutMs: 180000, intervalMs: 3000, label: 'headless to reconnect after chromium kill' });
 }
 
+// ── Chat-history reads (raw JSONL straight from the ST container) ───────────────
+
+// Read a character's newest chat JSONL straight from the ST container, as raw
+// text. Asserting on the raw bytes (rather than a parsed endpoint view) is the
+// only way to catch a torn/interleaved write — a malformed line would be hidden
+// by any reader that parses first. The chat filename contains spaces, so the
+// command substitution must stay quoted.
+function readRawChatJsonl(character) {
+  return execSync(
+    `docker exec ${SILLYTAVERN_CONTAINER} sh -c ` +
+    `'cat "$(ls -t /home/node/app/data/default-user/chats/${character}/*.jsonl | head -1)"'`,
+    { timeout: 15000 },
+  ).toString();
+}
+
+// Convenience over readRawChatJsonl: parse every line and drop the header
+// line(s) (chat_metadata carries no `mes`), returning just the message entries.
+// Use this for content/label assertions; use readRawChatJsonl directly when the
+// test needs to prove per-line integrity (no torn writes).
+function readChatMessages(character) {
+  return readRawChatJsonl(character)
+    .split('\n')
+    .filter(Boolean)
+    .map(line => JSON.parse(line))
+    .filter(o => o.mes !== undefined);
+}
+
 // ── One-time readiness (run once by globalSetup, not per test file) ─────────────
 
 async function waitForReady() {
@@ -240,5 +267,6 @@ module.exports = {
   fetchStCsrfState, getCsrfToken, getCsrfCookie, fetch, stFetch, post, sleep,
   waitFor, waitForQuiescence,
   ensureHeadlessRunning, killChromium, waitForHeadlessReconnect,
+  readRawChatJsonl, readChatMessages,
   waitForReady,
 };
