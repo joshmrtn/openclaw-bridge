@@ -122,7 +122,12 @@ run_build() {
 
 if [ "$SKIP_UNIT" = "false" ]; then
   echo "▶ Tier 1/4 — Unit tests..."
-  run_tier "Unit" env OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
+  run_tier "Unit (jest)" env OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
+  # oc-plugin ships its own vitest suite with a separate node_modules/lockfile, so it
+  # is not covered by the jest run above. Ensure its deps are present, then run it as
+  # part of the unit tier so the oc-plugin retry/format tests actually gate.
+  [ -x oc-plugin/node_modules/.bin/vitest ] || run_build "oc-plugin deps" npm --prefix oc-plugin ci
+  run_tier "Unit (oc-plugin vitest)" npm --prefix oc-plugin test
 fi
 
 # ── tier 2: fast E2E ──────────────────────────────────────────────────────────
