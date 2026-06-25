@@ -141,14 +141,25 @@ if [[ "${ARG_SKIP_OC}" == false ]]; then
     fi
 
     oc_install_dir="${HOME}/.openclaw/extensions/openclaw-bridge"
-    if [ -d "${oc_install_dir}" ]; then
-        echo "Copying compiled plugin to ${oc_install_dir}..."
+    if [ -L "${oc_install_dir}" ]; then
+        # Dev checkout: the install dir is a dev-setup.sh symlink back to the repo,
+        # so the freshly recompiled dist/ is already live — don't clobber it.
+        echo "OC plugin is a dev symlink (${oc_install_dir}) — edits are already live."
+        echo "  (Recompiled above; rebuild the committed output with: npm run build:oc-plugin)"
+    elif [ -d "${oc_install_dir}" ]; then
+        # Refresh the WHOLE plugin runtime (dist + package.json + openclaw.plugin.json),
+        # not just dist/ — a stale package.json/manifest would otherwise break the
+        # plugin after an update that touches deps or the openclaw manifest. A plain
+        # copy needs no openclaw CLI (a copy-installed plugin is just a real dir).
+        echo "Updating OC plugin at ${oc_install_dir}..."
+        mkdir -p "${oc_install_dir}/dist"
         cp -r "${script_dir}/oc-plugin/dist/." "${oc_install_dir}/dist/"
+        cp -f "${script_dir}/oc-plugin/package.json"          "${oc_install_dir}/package.json"
+        cp -f "${script_dir}/oc-plugin/openclaw.plugin.json"  "${oc_install_dir}/openclaw.plugin.json"
         echo "Done."
     else
         echo "Note: OC plugin install directory not found at ${oc_install_dir}."
-        echo "  If OpenClaw is installed, run manually:"
-        echo "    openclaw plugins install --path ${script_dir}/oc-plugin"
+        echo "  If OpenClaw is installed, run: openclaw plugins install --force ${script_dir}/oc-plugin"
     fi
 
     echo

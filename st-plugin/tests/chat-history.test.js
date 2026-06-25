@@ -296,6 +296,20 @@ describe('chat-history', () => {
         expect(msgs.length).toBe(6);
     });
 
+    test('constructStMessage role:system renders as a named, avatar-less system note (#233)', () => {
+        const sys = chatHistory.constructStMessage({ role: 'system', content: "[send_message failed]: nope" });
+        expect(sys.is_system).toBe(true);
+        expect(sys.is_user).toBe(false);
+        expect(sys.name).toBe('System');
+        expect(sys.extra).toEqual({ isSmallSys: true });
+        // A provided name is preserved.
+        const named = chatHistory.constructStMessage({ role: 'system', content: 'x', name: 'Bridge' });
+        expect(named.name).toBe('Bridge');
+        expect(named.is_system).toBe(true);
+        // Regression: non-system roles stay non-system.
+        expect(chatHistory.constructStMessage({ role: 'assistant', content: 'x' }).is_system).toBe(false);
+    });
+
     test('appendMessage rejects path traversal in characterName', async () => {
         const msg = chatHistory.constructStMessage({ role: 'assistant', content: 'Injected' });
         await expect(chatHistory.appendMessage('../escape', msg, tmpDir)).rejects.toThrow();

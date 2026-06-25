@@ -320,13 +320,17 @@ done
 echo
 if command -v openclaw >/dev/null 2>&1; then
     echo "Installing OC gateway plugin..."
-    # OC 2026.5.27 takes the path as a positional argument; --link mirrors the dev
-    # symlink so oc-plugin/ edits are picked up without re-installing.
-    openclaw plugins install --link "${script_dir}/oc-plugin" 2>&1 || \
-        echo "Warning: OC plugin install failed — run 'openclaw plugins install --link ${script_dir}/oc-plugin' manually."
+    # Copy-install (NOT --link): --link requires the linked target to live inside
+    # ~/.openclaw/extensions, so it rejects an external repo path. Copy mode copies
+    # the whole plugin into the extensions dir and records the enable entry — the
+    # same invocation the full-tier E2E uses (docker/full). --force lets a re-run
+    # overwrite a previously installed copy. (Dev checkouts keep using the
+    # dev-setup.sh symlink instead, so oc-plugin/ edits stay live.)
+    openclaw plugins install --force "${script_dir}/oc-plugin" 2>&1 || \
+        echo "Warning: OC plugin install failed — run 'openclaw plugins install --force ${script_dir}/oc-plugin' manually."
 else
     echo "Note: openclaw CLI not found — install the OC gateway plugin manually after starting the gateway:"
-    echo "  openclaw plugins install --link ${script_dir}/oc-plugin"
+    echo "  openclaw plugins install --force ${script_dir}/oc-plugin"
 fi
 
 # ─── Next steps ───────────────────────────────────────────────────────────────

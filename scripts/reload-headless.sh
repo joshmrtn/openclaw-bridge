@@ -39,9 +39,19 @@ if [[ -z "${TOKEN}" ]]; then
     exit 1
 fi
 
+# ST enforces CSRF on plugin POST routes even for Bearer clients, so fetch a
+# token (with a cookie jar) and send it — the same flow the OC plugin uses.
+# Harmless when CSRF is disabled: the token is simply empty and ignored.
+cookie_jar="$(mktemp)"
+trap 'rm -f "${cookie_jar}"' EXIT
+csrf_token="$(curl -sS -c "${cookie_jar}" "${PLUGIN_URL}/csrf-token" 2>/dev/null \
+    | python3 -c 'import sys,json; print(json.load(sys.stdin).get("token",""))' 2>/dev/null || true)"
+
 response=$(curl -sS -w "\n%{http_code}" -X POST \
     "${PLUGIN_URL}/api/plugins/openclaw-bridge/reload-headless" \
+    -b "${cookie_jar}" \
     -H "Authorization: Bearer ${TOKEN}" \
+    -H "X-CSRF-Token: ${csrf_token}" \
     -H "Content-Type: application/json")
 
 http_code="${response##*$'\n'}"

@@ -115,13 +115,19 @@ function constructStMessage({ role = 'user', content = '', name = null, user_id 
     const baseMessage = {
         name,
         is_user: role === 'user',
-        is_system: false,
+        is_system: role === 'system',
         send_date: sendDate,
         mes: content,
         ...(exchange_id ? { exchange_id } : {}),
     };
 
-    if (role === 'user') {
+    if (role === 'system') {
+        // System notes (e.g. failed-action logs) should render as subtle,
+        // avatar-less lines. Without is_system + a name, ST falls back to the
+        // active character's avatar and shows no name (see #233).
+        baseMessage.name = name || 'System';
+        baseMessage.extra = { isSmallSys: true };
+    } else if (role === 'user') {
         baseMessage.extra = {
             isSmallSys: false,
             reasoning: '',
