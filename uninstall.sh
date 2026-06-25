@@ -191,16 +191,18 @@ echo
 
 if command -v openclaw >/dev/null 2>&1; then
     echo "Uninstalling OC gateway plugin..."
-    if openclaw plugins uninstall openclaw-bridge 2>&1; then
+    # --force skips the confirmation prompt; without it the CLI aborts in a
+    # non-interactive shell (no TTY), leaving the plugin + config entry behind.
+    if openclaw plugins uninstall --force openclaw-bridge 2>&1; then
         echo "  OC plugin removed."
         removed+=("OC plugin")
     else
-        echo "  Note: OC plugin may not have been installed — skipping."
+        echo "  Note: OC plugin was not installed, or removal failed — skipping."
         skipped+=("OC plugin")
     fi
 else
     echo "Note: openclaw CLI not found — skipping OC plugin removal."
-    echo "If the plugin is installed, run 'openclaw plugins uninstall openclaw-bridge' manually."
+    echo "If the plugin is installed, run 'openclaw plugins uninstall --force openclaw-bridge' manually."
     skipped+=("OC plugin")
 fi
 
