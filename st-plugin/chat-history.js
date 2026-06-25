@@ -185,12 +185,24 @@ async function appendExternalChatToHistory(characterName, userMessage, response,
         }
     }
 
-    const { user_name = null, user_avatar = null, channel = null } = userMessage;
+    const { user_name = null, user_avatar = null, channel = null, user_id = null } = userMessage;
+    // Resolve the channel TYPE to show as the message source. Prefer the prefix of
+    // the channel-prefixed user_id ("discord:123" -> "discord"), the same token OC
+    // hands us for trust labels; fall back to the type segment of the channel account
+    // id ("discord-frog" -> "discord"). Whatever OC's channel is (discord/telegram/
+    // qa/...) is passed through and capitalised — no per-channel whitelist.
+    const channelType = (user_id && user_id.includes(':'))
+        ? user_id.slice(0, user_id.indexOf(':'))
+        : (channel ? String(channel).split('-')[0] : null);
+    const channelLabel = channelType
+        ? channelType.charAt(0).toUpperCase() + channelType.slice(1)
+        : null;
     let displayName = 'ExternalChat';
     if (user_name) {
-        displayName = channel
-            ? `${user_name} (${channel.charAt(0).toUpperCase() + channel.slice(1)})`
-            : user_name;
+        displayName = channelLabel ? `${user_name} (${channelLabel})` : user_name;
+    } else if (user_id) {
+        const bareId = user_id.includes(':') ? user_id.slice(user_id.indexOf(':') + 1) : user_id;
+        displayName = channelLabel ? `${channelLabel} user ${bareId}` : `user ${bareId}`;
     }
 
     const userContent = buildExternalChatContent(userMessage.message || '', userMessage.images || []);

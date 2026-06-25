@@ -45,6 +45,39 @@ function pruneExpiredSenderCache() {
             senderCache.delete(key);
     }
 }
+// Pull the display name out of a hook event. message_received carries it at
+// metadata.senderName; inbound_claim (legacy shape) at the top level. Returns a
+// trimmed non-empty string or null.
+export function extractSenderName(event) {
+    const raw = event?.metadata?.senderName ?? event?.senderName ?? null;
+    if (typeof raw !== "string")
+        return null;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+// Cache a sender's name (and optionally avatar) under the (channelId, senderId)
+// key that before_dispatch reads. A null name preserves any previously cached
+// name (e.g. an async avatar fill must not wipe the name). Returns the cache key,
+// or null when channelId/senderId are missing (nothing written).
+export function cacheSender(channelId, senderId, name, opts) {
+    if (!channelId || !senderId)
+        return null;
+    const cache = opts?.cache ?? senderCache;
+    const now = opts?.now ?? Date.now();
+    const key = senderCacheKey(channelId, senderId);
+    const existing = cache.get(key);
+    cache.set(key, {
+        name: name ?? existing?.name ?? null,
+        avatarUrl: opts?.avatarUrl ?? existing?.avatarUrl ?? null,
+        cachedAt: now,
+    });
+    return key;
+}
+export function lookupSender(channelId, senderId, cache = senderCache) {
+    if (!channelId || !senderId)
+        return null;
+    return cache.get(senderCacheKey(channelId, senderId)) ?? null;
+}
 const heartbeatState = new Map();
 const runningHeartbeats = new Set();
 let heartbeatTimer = null;
@@ -504,13 +537,16 @@ export default definePluginEntry({
     name: "OpenClaw Bridge",
     description: "Routes inbound messages to SillyTavern for character generation, bypassing the OC agent LLM",
     register(api) {
-        // inbound_claim fires when a message arrives and is claimed by an agent.
-        // It provides senderName — not available in before_dispatch — so we cache
-        // it here and fire an async Discord avatar fetch that resolves long before
-        // the ST generation cycle completes.
-        api.on("inbound_claim", (event, ctx) => {
-            const senderId = event.senderId ?? ctx.senderId;
-            const channelId = event.channel ?? ctx.channelId;
+        // message_received fires for EVERY inbound message (including first contact)
+        // and BEFORE before_dispatch, carrying the display name at
+        // event.metadata.senderName. We cache it here so before_dispatch can attach
+        // user_name to the /generate POST. (inbound_claim is unusable for this: OC only
+        // fires it for conversations already bound to the plugin, so it never runs on
+        // first contact — that was the "ExternalChat" bug, #224.) We also kick off an
+        // async Discord avatar fetch that resolves within the generation window.
+        api.on("message_received", (event, ctx) => {
+            const senderId = ctx.senderId ?? event.senderId;
+            const channelId = ctx.channelId ?? event.channel;
             if (!senderId || !channelId)
                 return;
             const accountId = ctx.accountId;
@@ -518,18 +554,9 @@ export default definePluginEntry({
                 return; // only cache for our characters
             if (senderCache.size > 500)
                 pruneExpiredSenderCache();
-            const key = senderCacheKey(channelId, senderId);
-            const existing = senderCache.get(key);
-            if (existing && Date.now() - existing.cachedAt < SENDER_CACHE_TTL_MS) {
-                existing.cachedAt = Date.now();
+            const key = cacheSender(channelId, senderId, extractSenderName(event));
+            if (!key)
                 return;
-            }
-            const entry = {
-                name: event.senderName ?? null,
-                avatarUrl: existing?.avatarUrl ?? null, // preserve cached avatar on name refresh
-                cachedAt: Date.now(),
-            };
-            senderCache.set(key, entry);
             // Kick off an async Discord avatar fetch. It resolves well within
             // the ST generation window (Discord API ≈ 100-500ms; generation ≥ 5s).
             const channelType = channelId.split("-")[0];
@@ -569,13 +596,13 @@ export default definePluginEntry({
             const senderId = ctx.senderId ?? event.senderId;
             const channelType = (ctx.channelId ?? event.channel ?? "").split("-")[0] || "unknown";
             const userId = senderId ? `${channelType}:${senderId}` : null;
-            // Resolve cached sender name and avatar (populated by inbound_claim hook)
-            const _cid = ctx.channelId ?? "";
-            const senderEntry = (senderId && _cid)
-                ? senderCache.get(senderCacheKey(_cid, senderId)) ?? null
-                : null;
+            // Resolve cached sender name and avatar (populated by message_received hook)
+            const senderEntry = lookupSender(ctx.channelId, senderId);
             const resolvedUserName = senderEntry?.name ?? null;
             const resolvedUserAvatar = senderEntry?.avatarUrl ?? null;
+            // Record which source resolved the name so we can measure fall-through to
+            // the ST "<Channel> user <id>" safety net (#224).
+            console.log(`[openclaw-bridge] sender-name source=${resolvedUserName ? "cache" : "none"} character=${character} userId=${userId ?? "unknown"}`);
             const token = getToken();
             if (!token) {
                 console.error("[openclaw-bridge] No auth token configured — cannot intercept message");
