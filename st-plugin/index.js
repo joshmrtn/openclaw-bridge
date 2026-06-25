@@ -101,7 +101,29 @@ function getAuthToken() {
     return '';
 }
 
-function requireBearerToken(request, response, next) {
+// Endpoints only OC (a machine caller) hits — never the browser UI. These stay
+// Bearer-only. Everything else is a UI endpoint and also accepts ST's same-origin
+// session + CSRF token (see requireBridgeAuth).
+const MACHINE_ONLY_ENDPOINTS = new Set([
+    '/generate', '/log-action', '/reload-headless', '/http-message', '/http-response',
+]);
+
+function hasValidBearer(request, expectedToken) {
+    const authorization = request.get('authorization') || '';
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    return !!match && match[1] === expectedToken;
+}
+
+// A remote UI browser holds ST's session cookie + CSRF token but has no bridge
+// token. This is the exact check ST's own csrf-sync performs: a request proving it
+// can read the session CSRF token is a logged-in same-origin ST user. No new
+// exposure vs ST itself, and only works with CSRF enabled (project policy).
+function hasValidSessionCsrf(request) {
+    const tok = request.session && request.session.csrfToken;
+    return !!tok && request.get('x-csrf-token') === tok;
+}
+
+function requireBridgeAuth(request, response, next) {
     const expectedToken = getAuthToken();
 
     if (!expectedToken) {
@@ -109,15 +131,22 @@ function requireBearerToken(request, response, next) {
         return;
     }
 
-    const authorization = request.get('authorization') || '';
-    const match = authorization.match(/^Bearer\s+(.+)$/i);
-
-    if (!match || match[1] !== expectedToken) {
-        response.status(401).json({ error: 'Unauthorized' });
+    // Bearer (OC) is accepted on every endpoint.
+    if (hasValidBearer(request, expectedToken)) {
+        next();
         return;
     }
 
-    next();
+    // UI endpoints additionally accept a valid same-origin session + CSRF token, so
+    // a tunneled UI browser (no bridge token) can reach /events and the panel.
+    // Machine endpoints remain Bearer-only.
+    const routePath = request.path || '';
+    if (!MACHINE_ONLY_ENDPOINTS.has(routePath) && hasValidSessionCsrf(request)) {
+        next();
+        return;
+    }
+
+    response.status(401).json({ error: 'Unauthorized' });
 }
 
 function parseDebugFlag(request) {
@@ -152,7 +181,7 @@ async function ensureCharacterExists(characterName) {
 
 async function init(router) {
     console.info('[openclaw-bridge-plugin] ===== PLUGIN INIT CALLED =====');
-    router.use(requireBearerToken);
+    router.use(requireBridgeAuth);
 
     if (!wsBundle) {
         console.info('[openclaw-bridge-plugin] Starting WebSocket server...');
