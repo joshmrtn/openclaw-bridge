@@ -92,6 +92,21 @@ echo
 if [ -d "${script_dir}/st-plugin" ]; then
     echo "Installing plugin dependencies..."
     (cd "${script_dir}/st-plugin" && npm install --no-audit --no-fund --quiet)
+    # The headless generation service requires Playwright's chromium binary, which
+    # the npm package alone does not provide. Without it, getClient() finds no
+    # headless client and OC->ST messages are never generated. Skip the download when
+    # a system Chromium is already provided (CHROMIUM_EXECUTABLE_PATH) or when it is
+    # explicitly disabled. Non-fatal: a clean install should still complete (with a
+    # clear hint) if the download fails.
+    if [ -n "${CHROMIUM_EXECUTABLE_PATH:-}" ]; then
+        echo "Using system Chromium at ${CHROMIUM_EXECUTABLE_PATH} — skipping Playwright browser download."
+    elif [ "${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-}" = "1" ]; then
+        echo "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 — skipping Playwright browser download."
+    else
+        echo "Installing Playwright chromium for the headless service..."
+        (cd "${script_dir}/st-plugin" && npx --yes playwright install chromium) || \
+            echo "Warning: 'playwright install chromium' failed — run it manually in the installed plugin dir, or the headless service stays disabled."
+    fi
     echo "Done."
 fi
 
@@ -305,11 +320,13 @@ done
 echo
 if command -v openclaw >/dev/null 2>&1; then
     echo "Installing OC gateway plugin..."
-    openclaw plugins install --path "${script_dir}/oc-plugin" 2>&1 || \
-        echo "Warning: OC plugin install failed — run 'openclaw plugins install --path ${script_dir}/oc-plugin' manually."
+    # OC 2026.5.27 takes the path as a positional argument; --link mirrors the dev
+    # symlink so oc-plugin/ edits are picked up without re-installing.
+    openclaw plugins install --link "${script_dir}/oc-plugin" 2>&1 || \
+        echo "Warning: OC plugin install failed — run 'openclaw plugins install --link ${script_dir}/oc-plugin' manually."
 else
     echo "Note: openclaw CLI not found — install the OC gateway plugin manually after starting the gateway:"
-    echo "  openclaw plugins install --path ${script_dir}/oc-plugin"
+    echo "  openclaw plugins install --link ${script_dir}/oc-plugin"
 fi
 
 # ─── Next steps ───────────────────────────────────────────────────────────────

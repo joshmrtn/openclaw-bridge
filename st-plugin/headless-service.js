@@ -108,7 +108,11 @@ async function _reconnect(options) {
  */
 async function start(options = {}) {
     if (!checkPlaywrightAvailable()) {
-        console.info('[openclaw-bridge-headless] Playwright not installed, headless service disabled');
+        console.warn(
+            '[openclaw-bridge-headless] Playwright not installed — headless service DISABLED. ' +
+            'OC→ST messages will NOT be generated (only headless clients process them). ' +
+            "Run 'npm install' then 'npx playwright install chromium' in the plugin dir, or re-run setup.sh."
+        );
         STATE.lastError = new Error('Playwright not installed');
         return;
     }
