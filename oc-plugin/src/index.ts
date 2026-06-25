@@ -893,8 +893,8 @@ export default definePluginEntry({
         // Unref so the timer doesn't prevent clean process exit
         if ((heartbeatTimer as any).unref) (heartbeatTimer as any).unref();
 
-        // Cleanup on plugin deactivation
-        api.on("deactivate", () => {
+        // Cleanup on gateway stop
+        api.on("gateway_stop", () => {
             if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
             heartbeatState.clear();
             runningHeartbeats.clear();
