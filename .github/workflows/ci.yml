@@ -36,6 +36,12 @@ jobs:
       - name: Run unit tests
         run: OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
 
+      - name: Install oc-plugin deps
+        run: npm --prefix oc-plugin ci
+
+      - name: Run oc-plugin unit tests (vitest)
+        run: npm --prefix oc-plugin test
+
   e2e-fast:
     name: E2E fast tier
     runs-on: ubuntu-latest
@@ -126,3 +132,9 @@ jobs:
 
       - name: Unit tests
         run: OPENCLAW_BRIDGE_ENABLE_HEADLESS=false npm test -- --forceExit
+
+      - name: Install oc-plugin deps
+        run: npm --prefix oc-plugin ci
+
+      - name: Run oc-plugin unit tests (vitest)
+        run: npm --prefix oc-plugin test

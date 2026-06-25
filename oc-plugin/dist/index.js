@@ -45,6 +45,39 @@ function pruneExpiredSenderCache() {
             senderCache.delete(key);
     }
 }
+// Pull the display name out of a hook event. message_received carries it at
+// metadata.senderName; inbound_claim (legacy shape) at the top level. Returns a
+// trimmed non-empty string or null.
+export function extractSenderName(event) {
+    const raw = event?.metadata?.senderName ?? event?.senderName ?? null;
+    if (typeof raw !== "string")
+        return null;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+// Cache a sender's name (and optionally avatar) under the (channelId, senderId)
+// key that before_dispatch reads. A null name preserves any previously cached
+// name (e.g. an async avatar fill must not wipe the name). Returns the cache key,
+// or null when channelId/senderId are missing (nothing written).
+export function cacheSender(channelId, senderId, name, opts) {
+    if (!channelId || !senderId)
+        return null;
+    const cache = opts?.cache ?? senderCache;
+    const now = opts?.now ?? Date.now();
+    const key = senderCacheKey(channelId, senderId);
+    const existing = cache.get(key);
+    cache.set(key, {
+        name: name ?? existing?.name ?? null,
+        avatarUrl: opts?.avatarUrl ?? existing?.avatarUrl ?? null,
+        cachedAt: now,
+    });
+    return key;
+}
+export function lookupSender(channelId, senderId, cache = senderCache) {
+    if (!channelId || !senderId)
+        return null;
+    return cache.get(senderCacheKey(channelId, senderId)) ?? null;
+}
 const heartbeatState = new Map();
 const runningHeartbeats = new Set();
 let heartbeatTimer = null;
@@ -302,6 +335,71 @@ async function postJson(url, authToken, body) {
     return result;
 }
 // ---------------------------------------------------------------------------
+// Generation retry & failure handling (#223)
+// ---------------------------------------------------------------------------
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Transient upstream failures worth retrying against ST (vs deterministic
+// declines/bugs). 429=rate limit, 502/503/504=gateway/overload/timeout.
+export function isTransientGenerateStatus(status) {
+    return status === 429 || status === 502 || status === 503 || status === 504;
+}
+const DEFAULT_BACKOFF_SCHEDULE = [1000, 3000];
+// Parses OPENCLAW_BRIDGE_GENERATE_BACKOFF_MS ("1000,3000") into a backoff
+// schedule. The number of retries equals the schedule length.
+export function parseBackoffSchedule(raw) {
+    if (!raw)
+        return [...DEFAULT_BACKOFF_SCHEDULE];
+    const parsed = raw
+        .split(",")
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0);
+    return parsed.length > 0 ? parsed : [...DEFAULT_BACKOFF_SCHEDULE];
+}
+// Runs `post` with bounded retry/backoff. Retries only on transient HTTP
+// statuses or thrown network/timeout errors; returns immediately on 200 or a
+// deterministic failure. A persistent failure returns the last result (a thrown
+// error becomes a synthetic { status: 0 }) so the caller can ALWAYS claim the
+// message rather than fall through to the (expensive) OC agent (#223).
+export async function generateWithRetry(post, opts) {
+    const { schedule, sleep: sleepFn } = opts;
+    let last = { status: 0, body: {} };
+    for (let attempt = 0; attempt <= schedule.length; attempt++) {
+        try {
+            const result = await post();
+            if (result.status === 200 || !isTransientGenerateStatus(result.status)) {
+                return result;
+            }
+            last = result; // transient — fall through to retry/backoff
+        }
+        catch (err) {
+            last = { status: 0, body: { error: err?.message ?? String(err) } };
+        }
+        if (attempt < schedule.length) {
+            await sleepFn(schedule[attempt]);
+        }
+    }
+    return last;
+}
+// Builds the "character unavailable" reply OC delivers itself when generation
+// fails. Uses the link's fallback_message when configured, else a default.
+export function buildUnavailableText(character, status, linkEntry) {
+    if (linkEntry.fallback_message)
+        return linkEntry.fallback_message;
+    const detail = status > 0 ? `error ${status}` : "a connection error";
+    return `⚠️ ${character} is unavailable right now (${detail}). Please try again in a moment.`;
+}
+// Decides what to deliver for an inbound message given the (post-retry) ST
+// result. Every outcome is a claim — the OC agent never runs a generation for a
+// linked character; it is only ever activated when the ST character chooses to
+// perform an action (#223).
+export function decideInboundDelivery(result, character, linkEntry) {
+    if (result.status === 200) {
+        const response = typeof result.body?.response === "string" ? result.body.response : "";
+        return response.length > 0 ? { kind: "reply", text: response } : { kind: "silent" };
+    }
+    return { kind: "unavailable", text: buildUnavailableText(character, result.status, linkEntry) };
+}
+// ---------------------------------------------------------------------------
 // Heartbeat execution (R10)
 // ---------------------------------------------------------------------------
 export function withTimeout(ms, label, promise) {
@@ -439,13 +537,16 @@ export default definePluginEntry({
     name: "OpenClaw Bridge",
     description: "Routes inbound messages to SillyTavern for character generation, bypassing the OC agent LLM",
     register(api) {
-        // inbound_claim fires when a message arrives and is claimed by an agent.
-        // It provides senderName — not available in before_dispatch — so we cache
-        // it here and fire an async Discord avatar fetch that resolves long before
-        // the ST generation cycle completes.
-        api.on("inbound_claim", (event, ctx) => {
-            const senderId = event.senderId ?? ctx.senderId;
-            const channelId = event.channel ?? ctx.channelId;
+        // message_received fires for EVERY inbound message (including first contact)
+        // and BEFORE before_dispatch, carrying the display name at
+        // event.metadata.senderName. We cache it here so before_dispatch can attach
+        // user_name to the /generate POST. (inbound_claim is unusable for this: OC only
+        // fires it for conversations already bound to the plugin, so it never runs on
+        // first contact — that was the "ExternalChat" bug, #224.) We also kick off an
+        // async Discord avatar fetch that resolves within the generation window.
+        api.on("message_received", (event, ctx) => {
+            const senderId = ctx.senderId ?? event.senderId;
+            const channelId = ctx.channelId ?? event.channel;
             if (!senderId || !channelId)
                 return;
             const accountId = ctx.accountId;
@@ -453,18 +554,9 @@ export default definePluginEntry({
                 return; // only cache for our characters
             if (senderCache.size > 500)
                 pruneExpiredSenderCache();
-            const key = senderCacheKey(channelId, senderId);
-            const existing = senderCache.get(key);
-            if (existing && Date.now() - existing.cachedAt < SENDER_CACHE_TTL_MS) {
-                existing.cachedAt = Date.now();
+            const key = cacheSender(channelId, senderId, extractSenderName(event));
+            if (!key)
                 return;
-            }
-            const entry = {
-                name: event.senderName ?? null,
-                avatarUrl: existing?.avatarUrl ?? null, // preserve cached avatar on name refresh
-                cachedAt: Date.now(),
-            };
-            senderCache.set(key, entry);
             // Kick off an async Discord avatar fetch. It resolves well within
             // the ST generation window (Discord API ≈ 100-500ms; generation ≥ 5s).
             const channelType = channelId.split("-")[0];
@@ -504,13 +596,13 @@ export default definePluginEntry({
             const senderId = ctx.senderId ?? event.senderId;
             const channelType = (ctx.channelId ?? event.channel ?? "").split("-")[0] || "unknown";
             const userId = senderId ? `${channelType}:${senderId}` : null;
-            // Resolve cached sender name and avatar (populated by inbound_claim hook)
-            const _cid = ctx.channelId ?? "";
-            const senderEntry = (senderId && _cid)
-                ? senderCache.get(senderCacheKey(_cid, senderId)) ?? null
-                : null;
+            // Resolve cached sender name and avatar (populated by message_received hook)
+            const senderEntry = lookupSender(ctx.channelId, senderId);
             const resolvedUserName = senderEntry?.name ?? null;
             const resolvedUserAvatar = senderEntry?.avatarUrl ?? null;
+            // Record which source resolved the name so we can measure fall-through to
+            // the ST "<Channel> user <id>" safety net (#224).
+            console.log(`[openclaw-bridge] sender-name source=${resolvedUserName ? "cache" : "none"} character=${character} userId=${userId ?? "unknown"}`);
             const token = getToken();
             if (!token) {
                 console.error("[openclaw-bridge] No auth token configured — cannot intercept message");
@@ -531,57 +623,52 @@ export default definePluginEntry({
                 console.log(`[openclaw-bridge] Self-message from bot account ${senderId} — dropping to prevent loop`);
                 return { handled: true, text: "" };
             }
-            const deliverFallback = async (reason) => {
-                const msg = linkEntry.fallback_message;
-                if (!msg)
-                    return undefined;
-                console.log(`[openclaw-bridge] ${reason} — delivering fallback message for ${character}`);
-                try {
-                    await postJson(`${ST_BASE}/api/plugins/openclaw-bridge/log-action`, token, {
-                        character,
-                        action_description: `Generation failed (${reason}) — fallback message sent`,
-                        channel: channelId || null,
-                    });
+            // Generate with bounded retry/backoff on transient failures. The OC
+            // agent must NEVER run a generation for a linked character — a transient
+            // upstream 503 used to fall through to a full (expensive) agent turn and
+            // burn quota. Every outcome below claims the message (#223).
+            const schedule = parseBackoffSchedule(process.env.OPENCLAW_BRIDGE_GENERATE_BACKOFF_MS);
+            const result = await generateWithRetry(() => postJson(`${ST_BASE}/api/plugins/openclaw-bridge/generate`, token, {
+                character,
+                message: messageText,
+                user_id: userId,
+                ...(resolvedUserName ? { user_name: resolvedUserName } : {}),
+                ...(resolvedUserAvatar ? { user_avatar: resolvedUserAvatar } : {}),
+                channel: channelId || null,
+                ...(linkEntry.timeout_ms ? { timeout_ms: linkEntry.timeout_ms } : {}),
+            }), { schedule, sleep });
+            const delivery = decideInboundDelivery(result, character, linkEntry);
+            if (delivery.kind === "reply") {
+                console.log(`[openclaw-bridge] ST responded (${delivery.text.length} chars) — delivering synthetic reply`);
+                // R5.1: execute any actions the character requested during generation
+                const actions = Array.isArray(result.body?.actions) ? result.body.actions : [];
+                if (actions.length > 0) {
+                    console.log(`[openclaw-bridge] Executing ${actions.length} character action(s)`);
+                    await executeCharacterActions(actions, character, token, api, ctx, linkEntry);
                 }
-                catch (logErr) {
-                    console.warn(`[openclaw-bridge] Failed to log fallback to history: ${logErr.message}`);
-                }
-                return { handled: true, text: formatOutboundText(msg, channelId, linkEntry) };
-            };
+                return { handled: true, text: formatOutboundText(delivery.text, channelId, linkEntry) };
+            }
+            if (delivery.kind === "silent") {
+                // Empty 200 shouldn't happen — it smells of an ST/link misconfig
+                // (model not set up, character not linked). Claim and stay silent
+                // rather than emit a confusing "no text" message or run the agent.
+                console.warn(`[openclaw-bridge] ST returned an empty 200 response for ${character} — claiming and staying silent (possible ST/link misconfig)`);
+                return { handled: true, text: "" };
+            }
+            // delivery.kind === "unavailable": generation failed after retries.
+            // Deliver our own "unavailable" reply and claim — never invoke the agent.
+            console.warn(`[openclaw-bridge] ST generation failed for ${character} (status ${result.status}) after retries — delivering unavailable reply, NOT invoking agent`);
             try {
-                const result = await postJson(`${ST_BASE}/api/plugins/openclaw-bridge/generate`, token, {
+                await postJson(`${ST_BASE}/api/plugins/openclaw-bridge/log-action`, token, {
                     character,
-                    message: messageText,
-                    user_id: userId,
-                    ...(resolvedUserName ? { user_name: resolvedUserName } : {}),
-                    ...(resolvedUserAvatar ? { user_avatar: resolvedUserAvatar } : {}),
+                    action_description: `Generation failed (status ${result.status}) — unavailable reply sent`,
                     channel: channelId || null,
-                    ...(linkEntry.timeout_ms ? { timeout_ms: linkEntry.timeout_ms } : {}),
                 });
-                if (result.status === 200 && typeof result.body?.response === "string" && result.body.response.length > 0) {
-                    console.log(`[openclaw-bridge] ST responded (${result.body.response.length} chars) — delivering synthetic reply`);
-                    // R5.1: execute any actions the character requested during generation
-                    const actions = Array.isArray(result.body.actions) ? result.body.actions : [];
-                    if (actions.length > 0) {
-                        console.log(`[openclaw-bridge] Executing ${actions.length} character action(s)`);
-                        await executeCharacterActions(actions, character, token, api, ctx, linkEntry);
-                    }
-                    return {
-                        handled: true,
-                        text: formatOutboundText(result.body.response, channelId, linkEntry),
-                    };
-                }
-                if (result.status === 200 && result.body?.response?.length === 0) {
-                    console.warn("[openclaw-bridge] ST returned empty response — not claiming, agent will handle");
-                    return;
-                }
-                console.warn(`[openclaw-bridge] ST returned ${result.status} — not intercepting, agent will handle with skill`);
-                return await deliverFallback(`ST returned ${result.status}`);
             }
-            catch (err) {
-                console.error(`[openclaw-bridge] ST request failed (${err.message}) — not intercepting, agent will handle with skill`);
-                return await deliverFallback(err.message);
+            catch (logErr) {
+                console.warn(`[openclaw-bridge] Failed to log unavailable notice to history: ${logErr.message}`);
             }
+            return { handled: true, text: formatOutboundText(delivery.text, channelId, linkEntry) };
         });
         // R10: heartbeat polling loop (interval configurable via OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS)
         const heartbeatLoopMs = parseInt(process.env.OPENCLAW_BRIDGE_HEARTBEAT_LOOP_MS || "60000", 10);

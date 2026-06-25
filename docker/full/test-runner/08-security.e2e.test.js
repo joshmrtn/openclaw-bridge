@@ -175,12 +175,12 @@ describe('trust label injection (#191)', () => {
 });
 
 // ── Auth middleware: bearer token and CSRF enforcement (#191, #96) ────────────
-// Confirms that requireBearerToken and ST's CSRF middleware work correctly and
+// Confirms that requireBridgeAuth and ST's CSRF middleware work correctly and
 // that the CSRF-bypass path described in #96 is not present in the current code.
 //
 // Middleware ordering on POST requests:
 //   CSRF middleware fires first (before plugin routes).
-//   requireBearerToken fires second (inside plugin routes).
+//   requireBridgeAuth fires second (inside plugin routes).
 //
 // All requests below use raw fetch() — stFetch() adds auth headers automatically
 // and would defeat the purpose of these rejection tests.
@@ -251,5 +251,19 @@ describe('auth middleware (#191, #96)', () => {
       body: GENERATE_BODY,
     });
     expect(r.status).toBe(401);
+  });
+
+  // #225 — a remote UI browser holds ST's session + CSRF token but no Bearer. UI
+  // endpoints must accept that pair so the panel and /events live-update work. This
+  // is the positive counterpart to the #96 machine-endpoint guard above, and proves
+  // ST's real session wiring populates req.session.csrfToken for the plugin to read.
+  test('GET /status with valid session CSRF and no Bearer returns 200 (#225)', async () => {
+    const r = await fetch(`${PLUGIN_URL}/status`, {
+      headers: {
+        'x-csrf-token': getCsrfToken(),
+        ...(getCsrfCookie() ? { Cookie: getCsrfCookie() } : {}),
+      },
+    });
+    expect(r.status).toBe(200);
   });
 });

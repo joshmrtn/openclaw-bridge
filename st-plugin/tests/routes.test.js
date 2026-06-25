@@ -170,6 +170,125 @@ describe('plugin routes', () => {
         expect(res.body.error).toMatch(/Unauthorized/);
     });
 
+    // A remote UI browser holds ST's session cookie + CSRF token but no bridge token.
+    // UI endpoints must accept that pair so the panel and /events live-update work (#225).
+    function mockSessionManagerForInit() {
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+        }));
+    }
+
+    test('session+CSRF authenticates a UI endpoint without a bearer token (#225)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        mockSessionManagerForInit();
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/status');
+        const res = makeRes();
+        const req = {
+            path: '/status',
+            session: { csrfToken: 'csrf-abc' },
+            get(header) {
+                if (header.toLowerCase() === 'x-csrf-token') return 'csrf-abc';
+                return '';
+            },
+        };
+
+        await callRoute(router, handler, req, res);
+        expect(res.statusCode).toBe(200);
+    });
+
+    test('session+CSRF is rejected on a machine-only endpoint (#225)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        mockSessionManagerForInit();
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            path: '/generate',
+            session: { csrfToken: 'csrf-abc' },
+            get(header) {
+                if (header.toLowerCase() === 'x-csrf-token') return 'csrf-abc';
+                return '';
+            },
+        };
+
+        await callRoute(router, handler, req, res);
+        expect(res.statusCode).toBe(401);
+        expect(res.body.error).toMatch(/Unauthorized/);
+    });
+
+    test('mismatched session CSRF token is rejected on a UI endpoint (#225)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        mockSessionManagerForInit();
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/status');
+        const res = makeRes();
+        const req = {
+            path: '/status',
+            session: { csrfToken: 'csrf-abc' },
+            get(header) {
+                if (header.toLowerCase() === 'x-csrf-token') return 'csrf-WRONG';
+                return '';
+            },
+        };
+
+        await callRoute(router, handler, req, res);
+        expect(res.statusCode).toBe(401);
+    });
+
+    test('GET /events is reachable with session+CSRF and no bearer (#225)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        const registerSseClient = jest.fn();
+        jest.doMock('../session-manager', () => ({
+            requestGenerate: jest.fn(),
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 0),
+            getSseClientCount: jest.fn(() => 0),
+            broadcast: jest.fn(),
+            registerSseClient,
+            unregisterSseClient: jest.fn(),
+        }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.getHandlers.get('/events');
+        let nextCalled = false;
+        await router.middleware(
+            {
+                path: '/events',
+                session: { csrfToken: 'csrf-abc' },
+                get(header) { return header.toLowerCase() === 'x-csrf-token' ? 'csrf-abc' : ''; },
+            },
+            makeRes(),
+            () => { nextCalled = true; },
+        );
+        expect(nextCalled).toBe(true);
+    });
+
     test('POST /characters/:name/link validates and saves link state', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
         const upsertLink = jest.fn(() => ({ oc_agent_id: 'frog', active: true, owner_user_ids: [] }));

@@ -69,11 +69,12 @@ describe('full message path: qa-bus → OC → ST → fake-openai → qa-bus', (
       m => m.is_user === true && typeof m.mes === 'string' && m.mes.includes(inboundText),
     );
     expect(userEntry).toBeDefined();
-    // The qa-bus path does not forward the sender's display name to /generate, so the
-    // user entry carries ST's external-source label, not the inbound senderName. (When
-    // user_name IS supplied — e.g. a direct /generate call — it is used instead; covered
-    // by the R5/R11 blocks below.)
-    expect(userEntry.name).toBe('ExternalChat');
+    // The real sender name now survives the whole path: OC's message_received hook
+    // (which fires on first contact, unlike inbound_claim) caches event.metadata.senderName,
+    // before_dispatch attaches it as user_name, and ST renders "<name> (<Channel>)" (#224).
+    // The full-tier channel is qa-channel, so the source label is "(Qa)" here; a real
+    // Discord deployment would read "(Discord)".
+    expect(userEntry.name).toBe('HistoryTester (Qa)');
     expect(userEntry.send_date).toBeTruthy();
 
     const assistantEntry = messages.find(

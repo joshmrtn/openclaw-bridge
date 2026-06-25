@@ -112,7 +112,7 @@ describe('chat-history', () => {
         expect(assistant.name).toBe('Frog');
     });
 
-    test('appendExternalChatToHistory uses ExternalChat as name when no user_name provided', async () => {
+    test('appendExternalChatToHistory falls back to "<Channel> user <id>" when no user_name (derives channel from user_id prefix)', async () => {
         await chatHistory.appendExternalChatToHistory(
             'Frog',
             { message: 'Hello', images: [], user_id: 'discord:123' },
@@ -120,10 +120,32 @@ describe('chat-history', () => {
             tmpDir,
         );
         const msgs = await chatHistory.readLatestChat('Frog', tmpDir);
+        expect(msgs[2].name).toBe('Discord user 123');
+    });
+
+    test('appendExternalChatToHistory falls back to "user <id>" when no user_name and no channel info', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Frog',
+            { message: 'Hello', images: [], user_id: '123' },
+            'Hi',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Frog', tmpDir);
+        expect(msgs[2].name).toBe('user 123');
+    });
+
+    test('appendExternalChatToHistory uses ExternalChat only when neither user_name nor user_id present', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Frog',
+            { message: 'Hello', images: [], user_id: null },
+            'Hi',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Frog', tmpDir);
         expect(msgs[2].name).toBe('ExternalChat');
     });
 
-    test('appendExternalChatToHistory builds display name from user_name and channel', async () => {
+    test('appendExternalChatToHistory builds display name from user_name and explicit channel', async () => {
         await chatHistory.appendExternalChatToHistory(
             'Frog',
             { message: 'Hello', images: [], user_id: 'discord:123', user_name: 'Josh', channel: 'discord' },
@@ -134,10 +156,32 @@ describe('chat-history', () => {
         expect(msgs[2].name).toBe('Josh (Discord)');
     });
 
-    test('appendExternalChatToHistory uses user_name alone when no channel provided', async () => {
+    test('appendExternalChatToHistory derives channel suffix from user_id prefix when no channel field', async () => {
         await chatHistory.appendExternalChatToHistory(
             'Frog',
-            { message: 'Hello', images: [], user_id: 'discord:123', user_name: 'Josh' },
+            { message: 'Hello', images: [], user_id: 'telegram:456', user_name: 'Josh' },
+            'Hi',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Frog', tmpDir);
+        expect(msgs[2].name).toBe('Josh (Telegram)');
+    });
+
+    test('appendExternalChatToHistory reduces a full channel account id to its type segment', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Frog',
+            { message: 'Hello', images: [], user_id: 'discord:123', user_name: 'Josh', channel: 'discord-frog' },
+            'Hi',
+            tmpDir,
+        );
+        const msgs = await chatHistory.readLatestChat('Frog', tmpDir);
+        expect(msgs[2].name).toBe('Josh (Discord)');
+    });
+
+    test('appendExternalChatToHistory uses user_name alone when no channel info at all', async () => {
+        await chatHistory.appendExternalChatToHistory(
+            'Frog',
+            { message: 'Hello', images: [], user_id: '123', user_name: 'Josh' },
             'Hi',
             tmpDir,
         );
