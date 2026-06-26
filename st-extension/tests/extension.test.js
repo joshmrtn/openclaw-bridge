@@ -603,3 +603,111 @@ describe('pendingActions reset ordering under concurrent requests (#125)', () =>
         expect(resultA.actions).toEqual(['action-from-A']);
     });
 });
+
+// ── #235: live chat incremental append (decision logic) ──────────────────────
+// Pure copies of the decision helpers from src/index.js — keep these identical to
+// the source. They decide whether a chat_updated event appends incrementally,
+// reloads, badges, or is skipped, without touching the browser.
+function decideChatUpdate({ updatedChid, currentChid, atBottom, canAppend, alreadyApplied }) {
+    if (updatedChid === -1 || currentChid !== updatedChid) return 'skip';
+    if (alreadyApplied) return 'duplicate';
+    if (!atBottom) return 'badge';
+    return canAppend ? 'append' : 'reload';
+}
+
+function canAppendIncrementally(payload, context) {
+    return Array.isArray(payload?.appended)
+        && payload.appended.length > 0
+        && Array.isArray(context?.chat)
+        && typeof context?.addOneMessage === 'function';
+}
+
+function isUpdateAlreadyApplied(payload, context) {
+    const appended = payload?.appended;
+    const chat = context?.chat;
+    if (!Array.isArray(appended) || appended.length === 0) return false;
+    if (!Array.isArray(chat) || chat.length === 0) return false;
+    const lastAppendedId = appended[appended.length - 1]?.exchange_id;
+    if (!lastAppendedId) return false;
+    return chat[chat.length - 1]?.exchange_id === lastAppendedId;
+}
+
+describe('decideChatUpdate (#235)', () => {
+    const base = { updatedChid: 2, currentChid: 2, atBottom: true, canAppend: true, alreadyApplied: false };
+
+    it('skips when not viewing the updated character', () => {
+        expect(decideChatUpdate({ ...base, currentChid: 1 })).toBe('skip');
+    });
+
+    it('skips when the character is not found (chid -1)', () => {
+        expect(decideChatUpdate({ ...base, updatedChid: -1, currentChid: -1 })).toBe('skip');
+    });
+
+    it('reports duplicate when the update is already applied', () => {
+        expect(decideChatUpdate({ ...base, alreadyApplied: true })).toBe('duplicate');
+    });
+
+    it('badges when scrolled up', () => {
+        expect(decideChatUpdate({ ...base, atBottom: false })).toBe('badge');
+    });
+
+    it('appends when at bottom and append is safe', () => {
+        expect(decideChatUpdate(base)).toBe('append');
+    });
+
+    it('reloads when at bottom but append is not safe', () => {
+        expect(decideChatUpdate({ ...base, canAppend: false })).toBe('reload');
+    });
+
+    it('prefers duplicate over badge even when scrolled up', () => {
+        expect(decideChatUpdate({ ...base, atBottom: false, alreadyApplied: true })).toBe('duplicate');
+    });
+});
+
+describe('canAppendIncrementally (#235)', () => {
+    const ctx = { chat: [], addOneMessage() {} };
+
+    it('true when payload has entries and context supports it', () => {
+        expect(canAppendIncrementally({ appended: [{ mes: 'a' }] }, ctx)).toBe(true);
+    });
+
+    it('false when appended is empty (e.g. a deduped write)', () => {
+        expect(canAppendIncrementally({ appended: [] }, ctx)).toBe(false);
+    });
+
+    it('false when appended is missing (older plugin payload)', () => {
+        expect(canAppendIncrementally({}, ctx)).toBe(false);
+    });
+
+    it('false when context lacks addOneMessage', () => {
+        expect(canAppendIncrementally({ appended: [{ mes: 'a' }] }, { chat: [] })).toBe(false);
+    });
+
+    it('false when context.chat is not an array', () => {
+        expect(canAppendIncrementally({ appended: [{ mes: 'a' }] }, { addOneMessage() {} })).toBe(false);
+    });
+});
+
+describe('isUpdateAlreadyApplied (#235)', () => {
+    it('true when the chat tail already has the last appended exchange_id', () => {
+        const payload = { appended: [{ exchange_id: 'x1' }, { exchange_id: 'x1' }] };
+        const context = { chat: [{ exchange_id: 'old' }, { exchange_id: 'x1' }] };
+        expect(isUpdateAlreadyApplied(payload, context)).toBe(true);
+    });
+
+    it('false when the chat tail has a different exchange_id', () => {
+        const payload = { appended: [{ exchange_id: 'x2' }] };
+        const context = { chat: [{ exchange_id: 'x1' }] };
+        expect(isUpdateAlreadyApplied(payload, context)).toBe(false);
+    });
+
+    it('false when appended entries have no exchange_id (e.g. heartbeat lines)', () => {
+        const payload = { appended: [{ mes: '[Heartbeat]' }] };
+        const context = { chat: [{ mes: '[Heartbeat]' }] };
+        expect(isUpdateAlreadyApplied(payload, context)).toBe(false);
+    });
+
+    it('false when chat is empty', () => {
+        expect(isUpdateAlreadyApplied({ appended: [{ exchange_id: 'x1' }] }, { chat: [] })).toBe(false);
+    });
+});

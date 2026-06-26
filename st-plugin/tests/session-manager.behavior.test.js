@@ -137,6 +137,18 @@ describe('session-manager behavior', () => {
         expect(sessionManager.popHttpOutboundMessage()).toBeNull();
     });
 
+    test('queueChatUpdated carries appended entries for incremental append (#235)', () => {
+        const appended = [{ is_user: true, mes: 'hi' }, { is_user: false, mes: 'yo' }];
+        sessionManager.queueChatUpdated('Frog', 'discord:user1', appended);
+        const msg = sessionManager.popHttpOutboundMessage('ui');
+        expect(msg).toMatchObject({
+            type: 'chat_updated',
+            character: 'Frog',
+            user_id: 'discord:user1',
+            appended,
+        });
+    });
+
     test('popHttpOutboundMessage headless client skips chat_updated, returns generate', () => {
         sessionManager.queueChatUpdated('Frog', null);
         // headless skips chat_updated — queue still has it

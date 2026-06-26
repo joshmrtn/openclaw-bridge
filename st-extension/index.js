@@ -1137,6 +1137,30 @@ function stopHttpPollingFallback() {
   STATE.pollingInterval = null;
   console.info("[openclaw-bridge] Stopped HTTP polling fallback");
 }
+function decideChatUpdate({ updatedChid, currentChid, atBottom, canAppend, alreadyApplied }) {
+  if (updatedChid === -1 || currentChid !== updatedChid) return "skip";
+  if (alreadyApplied) return "duplicate";
+  if (!atBottom) return "badge";
+  return canAppend ? "append" : "reload";
+}
+function canAppendIncrementally(payload, context) {
+  return Array.isArray(payload?.appended) && payload.appended.length > 0 && Array.isArray(context?.chat) && typeof context?.addOneMessage === "function";
+}
+function isUpdateAlreadyApplied(payload, context) {
+  const appended = payload?.appended;
+  const chat = context?.chat;
+  if (!Array.isArray(appended) || appended.length === 0) return false;
+  if (!Array.isArray(chat) || chat.length === 0) return false;
+  const lastAppendedId = appended[appended.length - 1]?.exchange_id;
+  if (!lastAppendedId) return false;
+  return chat[chat.length - 1]?.exchange_id === lastAppendedId;
+}
+async function appendMessagesIncrementally(appended, context) {
+  for (const entry of appended) {
+    context.chat.push(entry);
+    await context.addOneMessage(entry, { scroll: true });
+  }
+}
 async function handleChatUpdatedMessage(payload) {
   if (globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE === "headless") return;
   if (payload.timestamp && payload.timestamp === STATE.lastChatUpdatedTs) {
@@ -1149,27 +1173,57 @@ async function handleChatUpdatedMessage(payload) {
     const updatedChid = findCharacterIndex(payload.character);
     const currentChid = typeof context?.characterId === "number" ? context.characterId : getCurrentCharacterIndex(context);
     const reloadFn = context?.reloadCurrentChat || (typeof reloadCurrentChat === "function" ? reloadCurrentChat : null);
+    const atBottom = isAtChatBottom();
+    const canAppend = canAppendIncrementally(payload, context);
+    const alreadyApplied = isUpdateAlreadyApplied(payload, context);
+    const action = decideChatUpdate({ updatedChid, currentChid, atBottom, canAppend, alreadyApplied });
     console.info("[openclaw-bridge] chat_updated check:", {
+      action,
       updatedChid,
       currentChid,
       contextCharacterId: context?.characterId,
       hasReloadFn: typeof reloadFn === "function",
-      charactersCount: context?.characters?.length
+      atBottom,
+      canAppend,
+      alreadyApplied,
+      appendedCount: Array.isArray(payload?.appended) ? payload.appended.length : 0
     });
-    if (updatedChid !== -1 && currentChid === updatedChid) {
-      if (typeof reloadFn !== "function") {
-        console.warn("[openclaw-bridge] reloadCurrentChat() is not available in this context");
-      } else if (isAtChatBottom()) {
+    switch (action) {
+      case "skip":
+        console.info("[openclaw-bridge] Not viewing updated character; skipping reload");
+        return;
+      case "duplicate":
+        console.info("[openclaw-bridge] chat_updated already applied; skipping");
+        return;
+      case "append":
+        hideNewMessageBadge();
+        try {
+          await appendMessagesIncrementally(payload.appended, context);
+          console.info("[openclaw-bridge] chat_updated appended incrementally:", payload.appended.length);
+        } catch (appendErr) {
+          console.warn("[openclaw-bridge] incremental append failed; falling back to reload:", appendErr);
+          if (typeof reloadFn === "function") await reloadFn();
+        }
+        return;
+      case "badge":
+        if (typeof reloadFn !== "function") {
+          console.warn("[openclaw-bridge] reloadCurrentChat() unavailable; cannot show new-message badge");
+          return;
+        }
+        console.info("[openclaw-bridge] Scrolled up; showing new message badge");
+        showNewMessageBadge(payload.character, reloadFn);
+        return;
+      case "reload":
+      default:
+        if (typeof reloadFn !== "function") {
+          console.warn("[openclaw-bridge] reloadCurrentChat() is not available in this context");
+          return;
+        }
         console.info("[openclaw-bridge] At chat bottom; reloading");
         hideNewMessageBadge();
         await reloadFn();
         console.info("[openclaw-bridge] reloadCurrentChat completed");
-      } else {
-        console.info("[openclaw-bridge] Scrolled up; showing new message badge");
-        showNewMessageBadge(payload.character, reloadFn);
-      }
-    } else {
-      console.info("[openclaw-bridge] Not viewing updated character; skipping reload");
+        return;
     }
   } catch (e) {
     console.warn("[openclaw-bridge] Error handling chat_updated:", e);

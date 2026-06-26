@@ -582,7 +582,56 @@ describe('plugin routes', () => {
             type: 'chat_updated',
             character: 'Frog',
         }));
-        expect(queueChatUpdated).toHaveBeenCalledWith('Frog', 'discord:user1');
+        // appended defaults to [] when the history write returns nothing (#235).
+        expect(queueChatUpdated).toHaveBeenCalledWith('Frog', 'discord:user1', []);
+    });
+
+    test('POST /generate carries appended entries in chat_updated payload (#235)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        const requestGenerate = jest.fn().mockResolvedValue({ response: 'Hello back', actions: [] });
+        const userEntry = { is_user: true, mes: 'Ribbit', name: 'Josh (Discord)', exchange_id: 'x1' };
+        const assistantEntry = { is_user: false, mes: 'Hello back', name: 'Frog', exchange_id: 'x1' };
+        const appendExternalChatToHistory = jest.fn().mockResolvedValue([userEntry, assistantEntry]);
+        const broadcast = jest.fn();
+        const queueChatUpdated = jest.fn();
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../session-manager', () => ({
+            requestGenerate,
+            registerClient: jest.fn(),
+            unregisterClient: jest.fn(),
+            getConnectedClientCount: jest.fn(() => 1),
+            broadcast,
+            queueChatUpdated,
+        }));
+        jest.doMock('../link-state', () => ({
+            getLink: jest.fn(() => null),
+        }));
+        jest.doMock('../chat-history', () => {
+            const actual = jest.requireActual('../chat-history');
+            return { ...actual, appendExternalChatToHistory };
+        });
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/generate');
+        const res = makeRes();
+        const req = {
+            get(header) {
+                return header.toLowerCase() === 'authorization' ? 'Bearer token' : '';
+            },
+            body: { character: 'Frog', message: 'Ribbit', user_id: 'discord:user1' },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'chat_updated',
+            character: 'Frog',
+            appended: [userEntry, assistantEntry],
+        }));
+        expect(queueChatUpdated).toHaveBeenCalledWith('Frog', 'discord:user1', [userEntry, assistantEntry]);
     });
 
     test('POST /generate prefixes non-owner messages with [GUEST]', async () => {
@@ -1311,8 +1360,15 @@ describe('plugin routes', () => {
         expect(appendMessage).toHaveBeenCalledWith('Frog', expect.objectContaining({
             mes: expect.stringContaining('[Heartbeat on discord-bot]'),
         }));
-        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ type: 'chat_updated' }));
-        expect(queueChatUpdated).toHaveBeenCalledWith('Frog', null);
+        // Heartbeat broadcast carries the appended log entry for incremental append (#235).
+        const heartbeatEntry = expect.objectContaining({
+            mes: expect.stringContaining('[Heartbeat on discord-bot]'),
+        });
+        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'chat_updated',
+            appended: expect.arrayContaining([heartbeatEntry]),
+        }));
+        expect(queueChatUpdated).toHaveBeenCalledWith('Frog', null, expect.arrayContaining([heartbeatEntry]));
         expect(res.body.response).toBe('Hello from the void!');
         expect(res.body.actions).toEqual([]);
     });

@@ -563,16 +563,21 @@ async function init(router) {
                 }
 
                 if (generatedText) {
-                    // R10.6: log heartbeat response as autonomous action entry
+                    // R10.6: log heartbeat response as autonomous action entry.
+                    // Collect the written entries so the broadcast can carry them for
+                    // incremental UI append instead of a full reload (#235).
+                    const appended = [];
                     try {
                         const msg = `[Heartbeat on ${channel || 'unknown channel'}]: ${generatedText}`;
                         const entry = chatHistory.constructStMessage({ role: 'assistant', name: character, content: msg });
                         await chatHistory.appendMessage(character, entry);
+                        appended.push(entry);
                         for (const action of actions) {
                             try {
                                 const actionMsg = `[Character action queued]: ${action.type}${action.content ? ` — "${action.content}"` : ''}`;
                                 const aEntry = chatHistory.constructStMessage({ role: 'assistant', name: character, content: actionMsg });
                                 await chatHistory.appendMessage(character, aEntry);
+                                appended.push(aEntry);
                             } catch (actionLogErr) {
                                 console.warn('[openclaw-bridge-plugin] Failed to log heartbeat action to history:', actionLogErr?.message);
                             }
@@ -581,8 +586,8 @@ async function init(router) {
                         console.warn('[openclaw-bridge-plugin] Failed to write heartbeat history:', histErr?.message);
                     }
                     try {
-                        sessionManager.broadcast({ type: 'chat_updated', character, user_id: null, timestamp: Date.now() });
-                        sessionManager.queueChatUpdated(character, null);
+                        sessionManager.broadcast({ type: 'chat_updated', character, user_id: null, appended, timestamp: Date.now() });
+                        sessionManager.queueChatUpdated(character, null, appended);
                     } catch (bcastErr) {
                         console.warn('[openclaw-bridge-plugin] Failed to notify chat_updated:', bcastErr?.message || bcastErr);
                     }
@@ -691,7 +696,9 @@ async function init(router) {
             }
 
             if (shouldWriteHistory) {
-                await chatHistory.appendExternalChatToHistory(character, { message, images, user_id, user_name, user_avatar, channel }, generatedText, chatHistory.DEFAULT_CHATS_DIR, null, exchangeId);
+                // Collect the exact entries written so the chat_updated broadcast can carry
+                // them for incremental DOM append in the UI instead of a full reload (#235).
+                const appended = await chatHistory.appendExternalChatToHistory(character, { message, images, user_id, user_name, user_avatar, channel }, generatedText, chatHistory.DEFAULT_CHATS_DIR, null, exchangeId) || [];
 
                 // R5.3: log each character-initiated action as an autonomous history entry
                 for (const action of pendingActions) {
@@ -699,6 +706,7 @@ async function init(router) {
                         const actionMsg = `[Character action queued]: ${action.type}${action.content ? ` — "${action.content}"` : ''}`;
                         const entry = chatHistory.constructStMessage({ role: 'assistant', name: character, content: actionMsg });
                         await chatHistory.appendMessage(character, entry);
+                        appended.push(entry);
                     } catch (actionLogErr) {
                         console.warn('[openclaw-bridge-plugin] Failed to log action to history:', actionLogErr?.message);
                     }
@@ -707,14 +715,16 @@ async function init(router) {
                 // Notify extension clients that the chat file was updated.
                 // WS broadcast reaches headless clients; HTTP queue reaches UI browsers that can't
                 // connect to the WS port directly (e.g. when ST runs on a remote server).
+                // `appended` is empty on a deduped write — the UI then falls back to a reload.
                 try {
                     sessionManager.broadcast({
                         type: 'chat_updated',
                         character,
                         user_id: user_id || null,
+                        appended,
                         timestamp: Date.now(),
                     });
-                    sessionManager.queueChatUpdated(character, user_id);
+                    sessionManager.queueChatUpdated(character, user_id, appended);
                 } catch (bcastErr) {
                     console.warn('[openclaw-bridge-plugin] Failed to notify chat_updated:', bcastErr?.message || bcastErr);
                 }

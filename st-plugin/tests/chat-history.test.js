@@ -112,6 +112,55 @@ describe('chat-history', () => {
         expect(assistant.name).toBe('Frog');
     });
 
+    test('appendExternalChatToHistory returns the appended [user, assistant] entries (#235)', async () => {
+        const appended = await chatHistory.appendExternalChatToHistory(
+            'Frog',
+            { message: 'Hey Frog', images: [], user_id: 'discord:123', user_name: 'Josh', channel: 'discord' },
+            'Hello back',
+            tmpDir,
+            null,
+            'exch-235-a',
+        );
+        expect(Array.isArray(appended)).toBe(true);
+        expect(appended).toHaveLength(2);
+        const [user, assistant] = appended;
+        expect(user.is_user).toBe(true);
+        expect(user.mes).toBe('Hey Frog');
+        expect(user.name).toBe('Josh (Discord)');
+        expect(user.exchange_id).toBe('exch-235-a');
+        expect(assistant.is_user).toBe(false);
+        expect(assistant.mes).toBe('Hello back');
+        expect(assistant.name).toBe('Frog');
+        expect(assistant.exchange_id).toBe('exch-235-a');
+        // The returned objects must be the same shape written to disk.
+        const msgs = await chatHistory.readLatestChat('Frog', tmpDir);
+        expect(msgs[msgs.length - 2].mes).toBe(user.mes);
+        expect(msgs[msgs.length - 1].mes).toBe(assistant.mes);
+    });
+
+    test('appendExternalChatToHistory returns [] when the write is deduped (#235)', async () => {
+        const exchangeId = 'exch-235-dedup';
+        const first = await chatHistory.appendExternalChatToHistory(
+            'Frog',
+            { message: 'Once', images: [], user_id: 'discord:1' },
+            'Response once',
+            tmpDir,
+            null,
+            exchangeId,
+        );
+        expect(first).toHaveLength(2);
+        // Retry with the same exchange_id — no write, so nothing appended.
+        const second = await chatHistory.appendExternalChatToHistory(
+            'Frog',
+            { message: 'Once', images: [], user_id: 'discord:1' },
+            'Response once',
+            tmpDir,
+            null,
+            exchangeId,
+        );
+        expect(second).toEqual([]);
+    });
+
     test('appendExternalChatToHistory falls back to "<Channel> user <id>" when no user_name (derives channel from user_id prefix)', async () => {
         await chatHistory.appendExternalChatToHistory(
             'Frog',
