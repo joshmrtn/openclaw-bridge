@@ -498,6 +498,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#two-ids-two-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two ids, two roles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#configure-channels" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -879,6 +890,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#two-ids-two-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two ids, two roles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#configure-channels" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1140,28 +1162,43 @@
 <hr />
 <h2 id="outbound-messaging-send_message">Outbound messaging (send_message)<a class="headerlink" href="#outbound-messaging-send_message" title="Permanent link">&para;</a></h2>
 <p>A character can send messages to a channel mid-generation using the <code>send_message</code> action — for example, posting an announcement, sending a DM to a user, or reacting to something autonomously during a heartbeat.</p>
-<p><code>send_message</code> routes by a logical channel name (e.g. <code>"discord"</code>) that you configure in <code>character-links.json</code>. The bridge looks up the matching entry, validates it, and pre-resolves the OC adapter details before the action reaches OC.</p>
+<p><code>send_message</code> routes by a logical channel name (e.g. <code>"dm"</code>, <code>"the-pond"</code>) that you configure in <code>character-links.json</code>. The bridge looks up the matching entry, validates it, and pre-resolves the OC adapter details before the action reaches OC.</p>
+<p>Each channel is either a <strong>DM</strong> (a direct message to a user) or a <strong>channel post</strong> (a message into a channel). This is set per entry with a <code>kind</code> of <code>dm</code> or <code>channel</code>. The bridge turns <code>kind</code> + the recipient <code>id</code> into OpenClaw's generic target grammar — <code>user:&lt;id&gt;</code> for a DM, <code>channel:&lt;id&gt;</code> for a post — which works across Discord, Telegram, and other OpenClaw channels.</p>
+<h3 id="two-ids-two-roles">Two ids, two roles<a class="headerlink" href="#two-ids-two-roles" title="Permanent link">&para;</a></h3>
+<p>Don't confuse the two ids on a channel entry:</p>
+<ul>
+<li><strong><code>channel_id</code></strong> — <em>which bot/platform to send through</em> (the OC channel/adapter id, e.g. <code>discord</code>). The same value whether you're DMing or posting.</li>
+<li><strong>recipient <code>id</code></strong> — <em>who/where on that platform</em>: your user id for a <code>dm</code>, the channel's id for a <code>channel</code>.</li>
+</ul>
+<blockquote>
+<p><strong>Finding Discord ids:</strong> enable <strong>Settings → Advanced → Developer Mode</strong>, then right-click a user (for a DM) or a channel (for a post) → <strong>Copy ID</strong>.</p>
+</blockquote>
 <h3 id="configure-channels">Configure channels<a class="headerlink" href="#configure-channels" title="Permanent link">&para;</a></h3>
-<p>Use <code>link-character.sh</code> with the <code>--channel</code> flags to add channels without editing <code>character-links.json</code> directly:</p>
+<p>Use <code>link-character.sh</code> with the <code>--channel</code> flags to add channels without editing <code>character-links.json</code> directly. Run with <code>--help</code> to see every flag plus worked examples.</p>
+<p>DM the owner — the character can send you a direct message:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--channel<span class="w"> </span>discord<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>--channel-id<span class="w"> </span>discord-mybotname<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>--channel-target<span class="w"> </span>YOUR_DISCORD_CHANNEL_ID
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--channel<span class="w"> </span>dm<span class="w"> </span>--channel-id<span class="w"> </span>discord<span class="w"> </span>--channel-kind<span class="w"> </span>dm<span class="w"> </span>--channel-recipient<span class="w"> </span>YOUR_DISCORD_USER_ID
 </code></pre></div>
-<p>Flags are repeatable — add multiple channels in one call:</p>
+<p>Post to a channel ("The Pond"):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--channel<span class="w"> </span>discord<span class="w"> </span>--channel-id<span class="w"> </span>discord-mybotname<span class="w"> </span>--channel-target<span class="w"> </span>CHANNEL_ID<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--channel<span class="w"> </span>telegram<span class="w"> </span>--channel-id<span class="w"> </span>telegram-mybotname
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--channel<span class="w"> </span>the-pond<span class="w"> </span>--channel-id<span class="w"> </span>discord<span class="w"> </span>--channel-kind<span class="w"> </span>channel<span class="w"> </span>--channel-recipient<span class="w"> </span>THE_POND_CHANNEL_ID
 </code></pre></div>
-<p>Each call <strong>merges</strong> into the existing channel list by name — running the script twice with different <code>--channel</code> values won't clobber the first entry. To remove a channel by name:</p>
+<p>Flags are repeatable — give the character both at once:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span>--remove-channel<span class="w"> </span>telegram
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span>--channel<span class="w"> </span>dm<span class="w">       </span>--channel-id<span class="w"> </span>discord<span class="w"> </span>--channel-kind<span class="w"> </span>dm<span class="w">      </span>--channel-recipient<span class="w"> </span>YOUR_DISCORD_USER_ID<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span>--channel<span class="w"> </span>the-pond<span class="w"> </span>--channel-id<span class="w"> </span>discord<span class="w"> </span>--channel-kind<span class="w"> </span>channel<span class="w"> </span>--channel-recipient<span class="w"> </span>THE_POND_CHANNEL_ID
+</code></pre></div>
+<p>Each call <strong>merges</strong> into the existing channel list by name — running the script twice with different <code>--channel</code> values won't clobber the first entry. To remove a channel by name:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span>--remove-channel<span class="w"> </span>the-pond
 </code></pre></div>
 <table>
 <thead>
@@ -1173,15 +1210,19 @@
 <tbody>
 <tr>
 <td><code>--channel NAME</code></td>
-<td>Logical name the character uses in the <code>channel</code> parameter (e.g. <code>"discord"</code>, <code>"telegram"</code>)</td>
+<td>Logical name the character uses in the <code>channel</code> parameter (e.g. <code>"dm"</code>, <code>"the-pond"</code>)</td>
 </tr>
 <tr>
 <td><code>--channel-id ID</code></td>
-<td>OC channel account ID (e.g. <code>"discord-mybotname"</code>); required when <code>--channel</code> is used</td>
+<td>OC channel/adapter id — which bot/platform to send through (e.g. <code>"discord"</code>); required when <code>--channel</code> is used</td>
 </tr>
 <tr>
-<td><code>--channel-target TARGET</code></td>
-<td>Default destination for this channel — Discord channel ID, Telegram chat ID, etc. (optional)</td>
+<td><code>--channel-kind dm\|channel</code></td>
+<td><code>dm</code> = direct-message the recipient; <code>channel</code> = post into the channel</td>
+</tr>
+<tr>
+<td><code>--channel-recipient ID</code></td>
+<td>Raw recipient id: your user id for <code>dm</code>, the channel id for <code>channel</code></td>
 </tr>
 <tr>
 <td><code>--remove-channel NAME</code></td>
@@ -1200,25 +1241,29 @@
 <tbody>
 <tr>
 <td><code>name</code></td>
-<td>Logical label the character uses in the <code>channel</code> parameter (e.g. <code>"discord"</code>, <code>"telegram"</code>)</td>
+<td>Logical label the character uses in the <code>channel</code> parameter (e.g. <code>"dm"</code>, <code>"the-pond"</code>)</td>
 </tr>
 <tr>
 <td><code>channel_id</code></td>
-<td>OC channel account ID — the same value used for <code>--heartbeat-channel</code> (e.g. <code>"discord-mybotname"</code>)</td>
+<td>OC channel/adapter id — which bot/platform to send through (e.g. <code>"discord"</code>)</td>
 </tr>
 <tr>
-<td><code>target</code></td>
-<td>Platform-specific default destination: Discord channel ID, Telegram chat ID, etc.</td>
+<td><code>kind</code></td>
+<td><code>"dm"</code> or <code>"channel"</code> — direct message vs channel post</td>
+</tr>
+<tr>
+<td><code>id</code></td>
+<td>Raw recipient id: the user id for a <code>dm</code>, the channel id for a <code>channel</code></td>
 </tr>
 </tbody>
 </table>
-<p>A character can have multiple entries for different platforms.</p>
+<p>A character can have multiple entries — DM you <em>and</em> post to a channel, on one or several platforms.</p>
 <h3 id="how-the-character-uses-it">How the character uses it<a class="headerlink" href="#how-the-character-uses-it" title="Permanent link">&para;</a></h3>
 <p>The LLM can output a <code>send_message</code> action block in its response:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>&lt;action&gt;{&quot;type&quot;:&quot;send_message&quot;,&quot;channel&quot;:&quot;discord&quot;,&quot;content&quot;:&quot;Hello from Frog!&quot;}&lt;/action&gt;
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>&lt;action&gt;{&quot;type&quot;:&quot;send_message&quot;,&quot;channel&quot;:&quot;discord&quot;,&quot;content&quot;:&quot;Hello from Frog!&quot;}&lt;/action&gt;
 </code></pre></div>
 <p>To send a direct message instead, include <code>recipient</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>&lt;action&gt;{&quot;type&quot;:&quot;send_message&quot;,&quot;channel&quot;:&quot;discord&quot;,&quot;recipient&quot;:&quot;USER_ID&quot;,&quot;content&quot;:&quot;Just for you.&quot;}&lt;/action&gt;
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>&lt;action&gt;{&quot;type&quot;:&quot;send_message&quot;,&quot;channel&quot;:&quot;discord&quot;,&quot;recipient&quot;:&quot;USER_ID&quot;,&quot;content&quot;:&quot;Just for you.&quot;}&lt;/action&gt;
 </code></pre></div>
 <p>The <code>channel</code> value is the <strong>logical <code>name</code></strong> you gave the channel above (e.g. <code>discord</code>) — <strong>not</strong> the platform's own display name for the destination (e.g. a Discord channel called <code>#general</code>). The character is told its configured channel names as part of the generation prompt, so it should use one of them directly.</p>
 <p>If the character specifies a channel name that isn't in the <code>channels</code> list, the action is dropped (it is never sent) and:</p>
@@ -1236,14 +1281,14 @@
 </ul>
 <p>Both triggers run inside the OC plugin's 60-second polling loop.</p>
 <h3 id="enable-heartbeat">Enable heartbeat<a class="headerlink" href="#enable-heartbeat" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span>--owner<span class="w"> </span><span class="s2">&quot;discord:YOUR_USER_ID&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span>--heartbeat-channel<span class="w"> </span><span class="s2">&quot;discord-mybotname&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span>--heartbeat-interval-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span>--heartbeat-idle-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">  </span>--heartbeat-prompt<span class="w"> </span><span class="s2">&quot;You have been quiet for a while. Reflect on what you know and share something meaningful.&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span>--owner<span class="w"> </span><span class="s2">&quot;discord:YOUR_USER_ID&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span>--heartbeat-channel<span class="w"> </span><span class="s2">&quot;discord-mybotname&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">  </span>--heartbeat-interval-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">  </span>--heartbeat-idle-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">  </span>--heartbeat-prompt<span class="w"> </span><span class="s2">&quot;You have been quiet for a while. Reflect on what you know and share something meaningful.&quot;</span>
 </code></pre></div>
 <p><code>--heartbeat-channel</code> is required when enabling heartbeat. It must be the OC channel account ID (e.g. <code>discord-mybotname</code>) — the same value shown in <code>openclaw.json</code> under <code>channels</code>.</p>
 <table>
@@ -1278,7 +1323,12 @@
 <tr>
 <td><code>--heartbeat-target ID</code></td>
 <td>—</td>
-<td>Target channel or user ID within the OC channel (platform-specific)</td>
+<td>Raw recipient: the channel id, or your user id when <code>--heartbeat-kind dm</code></td>
+</tr>
+<tr>
+<td><code>--heartbeat-kind dm\|channel</code></td>
+<td>channel</td>
+<td><code>dm</code> = the heartbeat DMs you; <code>channel</code> = posts into the channel</td>
 </tr>
 <tr>
 <td><code>--heartbeat-account ID</code></td>
@@ -1303,7 +1353,7 @@
 <hr />
 <h2 id="character-memory">Character memory<a class="headerlink" href="#character-memory" title="Permanent link">&para;</a></h2>
 <p>During generation, a character can call the <code>openclaw_write_memory</code> tool to persist a fact to a dedicated per-character lorebook. The file is created automatically on the first memory write:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>data/default-user/worlds/{character}-auto-memory.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>data/default-user/worlds/{character}-auto-memory.json
 </code></pre></div>
 <h3 id="one-time-setup-link-the-lorebook-in-st">One-time setup: link the lorebook in ST<a class="headerlink" href="#one-time-setup-link-the-lorebook-in-st" title="Permanent link">&para;</a></h3>
 <p>For lorebook entries to be injected into future generations, SillyTavern must know about the file:</p>
@@ -1343,19 +1393,19 @@
 <h2 id="maintenance">Maintenance<a class="headerlink" href="#maintenance" title="Permanent link">&para;</a></h2>
 <h3 id="after-changing-st-model-or-api-settings">After changing ST model or API settings<a class="headerlink" href="#after-changing-st-model-or-api-settings" title="Permanent link">&para;</a></h3>
 <p>The headless browser caches its session at startup. If you change the LLM, API endpoint, or character settings in the ST UI, reload it from the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>./scripts/reload-headless.sh
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1"># Expected: {&quot;reloaded&quot;:true}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>./scripts/reload-headless.sh
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="c1"># Expected: {&quot;reloaded&quot;:true}</span>
 </code></pre></div>
 <p>The script reads the bridge token automatically — no need to look it up or <code>cd</code> first.</p>
 <h3 id="removing-a-character">Removing a character<a class="headerlink" href="#removing-a-character" title="Permanent link">&para;</a></h3>
 <p>To disable the link temporarily, toggle the <strong>External Presence</strong> panel off in ST's character editor and click <strong>Save link</strong>. The character stops responding on external channels but all config is preserved.</p>
 <p>To remove it entirely:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Unlink from ST plugin</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>./scripts/link-character.sh<span class="w"> </span>--character<span class="w"> </span><span class="s2">&quot;{STCharacterName}&quot;</span><span class="w"> </span>--unlink
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Remove OC agent and workspace</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>openclaw<span class="w"> </span>agents<span class="w"> </span>remove<span class="w"> </span><span class="o">{</span>agentname<span class="o">}</span>
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>rm<span class="w"> </span>-rf<span class="w"> </span>~/.openclaw/workspace-<span class="o">{</span>agentname<span class="o">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Unlink from ST plugin</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>./scripts/link-character.sh<span class="w"> </span>--character<span class="w"> </span><span class="s2">&quot;{STCharacterName}&quot;</span><span class="w"> </span>--unlink
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1"># Remove OC agent and workspace</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>openclaw<span class="w"> </span>agents<span class="w"> </span>remove<span class="w"> </span><span class="o">{</span>agentname<span class="o">}</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>rm<span class="w"> </span>-rf<span class="w"> </span>~/.openclaw/workspace-<span class="o">{</span>agentname<span class="o">}</span>
 </code></pre></div>
 
 
