@@ -155,3 +155,14 @@
 .openclaw-bridge-status.is-success {
     color: #8be08b;
 }
+
+.openclaw-bridge-channel-warning {
+    margin-top: 6px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #ffd7d7;
+    background: rgba(200, 40, 40, 0.25);
+    border: 1px solid #ff9b9b;
+}

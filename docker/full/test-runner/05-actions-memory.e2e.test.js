@@ -344,6 +344,35 @@ describe('send_message action and loop prevention (#111)', () => {
     expect(r.body.actions[0].content).toBe(ACTION_TEXT);
   }, 30000);
 
+  // #234: the character's configured channel names must reach the LLM prompt so it targets a
+  // valid channel instead of guessing a platform display name. Driven through the REAL path
+  // (qa-bus inbound -> OC -> ST) and asserted on fake-openai's verbatim captured prompt — the
+  // same sanctioned /last-prompt style as the trust-label test, not a direct /generate call.
+  test("action prompt lists the character's configured channel names (#234)", async () => {
+    await post(`${FAKE_OPENAI_URL}/reset`, {});
+    const sentinel = `chan-list-234-${Date.now()}`;
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: sentinel });
+    const marker = `Channel list test ${sentinel}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: `dm-chan-${Date.now()}`, kind: 'direct' },
+      senderId: OWNER_SENDER_ID,
+      senderName: 'Channel Tester',
+      text: marker,
+    });
+
+    const raw = await waitFor(async () => {
+      const prompt = await fetch(`${FAKE_OPENAI_URL}/last-prompt`);
+      if (prompt.status === 200 && (prompt.body.raw || '').includes(marker)) {
+        return prompt.body.raw;
+      }
+      return null;
+    }, { timeoutMs: 60000, intervalMs: 1000, label: 'captured prompt for channel list' });
+
+    // TestBot has a single configured channel named "qa" (set in beforeEach).
+    expect(raw).toContain('Configured channels');
+    expect(raw).toContain('qa');
+  }, 90000);
+
   test('send_message action does not trigger a second generation (no loop)', async () => {
     const REPLY_TEXT = 'Sure, posting to channel.';
     const ACTION_TEXT = 'Hello from character!';
