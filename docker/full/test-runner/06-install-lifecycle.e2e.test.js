@@ -336,7 +336,7 @@ describe('update.sh lifecycle (#69)', () => {
     // Run update.sh without --skip-oc so the dist copy step fires.
     execSync(
       `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/update.sh ${UPDATE_FLAGS}`,
-      { timeout: 120000 },
+      { timeout: 200000 },
     );
 
     // The copied file must be the real compiled output, not our "stale" sentinel.
@@ -346,7 +346,79 @@ describe('update.sh lifecycle (#69)', () => {
     ).toString();
     expect(content).not.toBe('stale');
     expect(content.length).toBeGreaterThan(100);
-  }, 150000);
+  }, 240000);
+
+  test('OC update mirrors the whole tree: stale src refreshed and orphans removed (#242)', () => {
+    const ocRoot = '/home/node/.openclaw/extensions/openclaw-bridge';
+
+    // Simulate a real installed plugin gone stale: an out-of-date src/index.ts
+    // (which OC's security scanner reads) plus an orphan dist file that no
+    // longer exists upstream. A whole-install-dir copy from a fresh
+    // `openclaw plugins install --force` lays down src/, dist/, configs, etc.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} sh -c ` +
+      `'mkdir -p ${ocRoot}/src ${ocRoot}/dist && ` +
+      `printf "stale-sentinel" > ${ocRoot}/src/index.ts && ` +
+      `printf "orphan" > ${ocRoot}/dist/orphan.js && ` +
+      `printf "stale" > ${ocRoot}/dist/index.js'`,
+      { timeout: 5000 },
+    );
+
+    // Run update.sh without --skip-oc so the OC mirror step fires.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/update.sh ${UPDATE_FLAGS}`,
+      { timeout: 200000 },
+    );
+
+    // src/index.ts must be refreshed to the real source, not our stale sentinel.
+    const src = execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} cat ${ocRoot}/src/index.ts`,
+      { timeout: 5000 },
+    ).toString();
+    expect(src).not.toContain('stale-sentinel');
+    expect(src.length).toBeGreaterThan(100);
+
+    // The orphan dist file must be gone (deletion-aware mirror).
+    expect(() => execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f ${ocRoot}/dist/orphan.js`,
+      { timeout: 5000 },
+    )).toThrow();
+
+    // The real compiled dist must be present, not our stale sentinel.
+    const dist = execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} cat ${ocRoot}/dist/index.js`,
+      { timeout: 5000 },
+    ).toString();
+    expect(dist).not.toBe('stale');
+    expect(dist.length).toBeGreaterThan(100);
+  }, 240000);
+
+  test('ST update removes orphaned plugin files (#242)', () => {
+    const pluginDir = '/home/node/app/plugins/openclaw-bridge';
+
+    // Pre-seed an orphan file that does not exist in the repo.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} sh -c 'printf "orphan" > ${pluginDir}/orphan-file.js'`,
+      { timeout: 5000 },
+    );
+
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/update.sh ${UPDATE_FLAGS} --skip-oc`,
+      { timeout: 120000 },
+    );
+
+    // The orphan must be gone (deletion-aware mirror).
+    expect(() => execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f ${pluginDir}/orphan-file.js`,
+      { timeout: 5000 },
+    )).toThrow();
+
+    // A real plugin file must still be present.
+    execSync(
+      `docker exec ${SILLYTAVERN_CONTAINER} test -f ${pluginDir}/index.js`,
+      { timeout: 5000 },
+    );
+  }, 180000);
 
   test('idempotency — second run exits 0 and schema version is unchanged', () => {
     // First run: everything already current.

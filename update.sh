@@ -21,6 +21,40 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 data_dir="${script_dir}/data/openclaw-bridge"
 
+# ─── Deletion-aware tree mirror ───────────────────────────────────────────────
+# Converge an install directory to match a source tree, the same end-state a
+# fresh install produces (update == reinstall). Unlike `cp -r src/. dst/`, this
+# removes files that no longer exist upstream (orphans) instead of letting them
+# linger. The caller is responsible for the dev-symlink guard — never call this
+# on a `[ -L ]` symlink target or it would replace a live dev checkout.
+#
+#   mirror_tree SRC DST MODE
+#     MODE=full        mirror everything, including node_modules
+#     MODE=no-modules  mirror everything EXCEPT node_modules, and preserve any
+#                      node_modules already present in DST (the installer owns
+#                      it; e.g. OC regenerates it via `npm install` afterwards)
+mirror_tree() {
+    local src="$1" dst="$2" mode="$3"
+    mkdir -p "${dst}"
+    if [[ "${mode}" == "full" ]]; then
+        # Remove all existing content, then copy the whole source tree.
+        find "${dst}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        cp -r "${src}/." "${dst}/"
+    else
+        # Remove orphans but keep DST's node_modules, then copy every top-level
+        # entry from SRC except node_modules (dotfiles included).
+        find "${dst}" -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} +
+        (
+            shopt -s dotglob
+            local entry
+            for entry in "${src}"/*; do
+                [[ "$(basename "${entry}")" == node_modules ]] && continue
+                cp -r "${entry}" "${dst}/"
+            done
+        )
+    fi
+}
+
 # ─── Argument parsing ─────────────────────────────────────────────────────────
 
 ARG_ST_PATH=""
@@ -147,15 +181,18 @@ if [[ "${ARG_SKIP_OC}" == false ]]; then
         echo "OC plugin is a dev symlink (${oc_install_dir}) — edits are already live."
         echo "  (Recompiled above; rebuild the committed output with: npm run build:oc-plugin)"
     elif [ -d "${oc_install_dir}" ]; then
-        # Refresh the WHOLE plugin runtime (dist + package.json + openclaw.plugin.json),
-        # not just dist/ — a stale package.json/manifest would otherwise break the
-        # plugin after an update that touches deps or the openclaw manifest. A plain
-        # copy needs no openclaw CLI (a copy-installed plugin is just a real dir).
+        # Mirror the WHOLE plugin tree, the same end-state a fresh
+        # `openclaw plugins install --force` produces — so a stale src/ (which
+        # OC's security scanner reads), package.json, manifest, or a removed
+        # dist file can never linger. node_modules is excluded from the copy and
+        # regenerated below: OC has zero runtime deps today (the gateway SDK is
+        # host-provided), but running npm here means a future runtime dep lands
+        # automatically on update. A plain filesystem mirror needs no openclaw
+        # CLI (a copy-installed plugin is just a real dir).
         echo "Updating OC plugin at ${oc_install_dir}..."
-        mkdir -p "${oc_install_dir}/dist"
-        cp -r "${script_dir}/oc-plugin/dist/." "${oc_install_dir}/dist/"
-        cp -f "${script_dir}/oc-plugin/package.json"          "${oc_install_dir}/package.json"
-        cp -f "${script_dir}/oc-plugin/openclaw.plugin.json"  "${oc_install_dir}/openclaw.plugin.json"
+        mirror_tree "${script_dir}/oc-plugin" "${oc_install_dir}" no-modules
+        (cd "${oc_install_dir}" && npm install --omit=dev --no-audit --no-fund --quiet) \
+            || echo "Warning: npm install in ${oc_install_dir} failed (OC has no runtime deps today, so this is non-fatal)."
         echo "Done."
     else
         echo "Note: OC plugin install directory not found at ${oc_install_dir}."
@@ -222,10 +259,25 @@ if [[ "${ARG_SKIP_ST}" == false ]]; then
 
         local shared_dst="${st_path}/plugins/shared"
 
-        mkdir -p "${plugin_dst}" "${ext_dst}" "${shared_dst}"
-        cp -r "${script_dir}/shared/."       "${shared_dst}/"
-        cp -r "${script_dir}/st-plugin/."    "${plugin_dst}/"
-        cp -r "${script_dir}/st-extension/." "${ext_dst}/"
+        # Mirror each tree (deletion-aware) so files removed upstream don't
+        # linger as orphans in the install. ST plugins have no installer CLI, so
+        # the repo tree is the source of truth — full mode carries st-plugin's
+        # real runtime node_modules (playwright, ws), so a new ST runtime dep
+        # always lands. Skip any target that is a dev-setup.sh symlink: those
+        # point back at the repo, so edits are already live and a mirror would
+        # clobber the live checkout.
+        mirror_st_target() {
+            local src="$1" dst="$2"
+            if [ -L "${dst}" ]; then
+                echo "  Dev symlink (${dst}) — edits already live, skipping."
+                return
+            fi
+            mirror_tree "${src}" "${dst}" full
+        }
+
+        mirror_st_target "${script_dir}/shared"       "${shared_dst}"
+        mirror_st_target "${script_dir}/st-plugin"    "${plugin_dst}"
+        mirror_st_target "${script_dir}/st-extension" "${ext_dst}"
 
         echo "  Plugin:    ${plugin_dst}"
         echo "  Extension: ${ext_dst}"
