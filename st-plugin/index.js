@@ -25,11 +25,29 @@ function sanitizeTrustTokens(message) {
         : message;
 }
 
+// Read the character's configured channel names for prompt injection (#234). Never throws —
+// a link-state read failure must not break generation, it just yields no channel hints.
+// Kept separate from the trust-labelling getLink read so that read's fallback logic is
+// untouched; both are cheap in-memory reads.
+function getConfiguredChannelNames(character) {
+    try {
+        const link = linkState.getLink(character);
+        const channels = Array.isArray(link?.channels) ? link.channels : [];
+        return channels.map(c => c?.name).filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
 // Validate and resolve send_message actions against the character's configured channels.
 // Unknown channel names are dropped and written to chat history so the operator can see them.
+// Returns { actions, warnings }: resolved outbound actions, plus human-readable reason
+// strings for any send_message that was dropped. Callers surface warnings to the user as a
+// transient toast (#234) so a misconfig is visible without digging through chat history.
 async function resolveActions(actions, link, character) {
     const channels = Array.isArray(link?.channels) ? link.channels : [];
     const resolved = [];
+    const warnings = [];
     for (const action of actions) {
         if (action.type !== 'send_message') {
             resolved.push(action);
@@ -40,6 +58,7 @@ async function resolveActions(actions, link, character) {
             const configured = channels.map(c => c.name).join(', ') || '(none)';
             const errMsg = `[send_message failed]: channel '${action.channel}' is not configured for ${character}. Configured channels: ${configured}.`;
             console.warn(`[openclaw-bridge-plugin] ${errMsg}`);
+            warnings.push(errMsg);
             try {
                 const entry = chatHistory.constructStMessage({ role: 'system', content: errMsg });
                 await chatHistory.appendMessage(character, entry);
@@ -49,6 +68,7 @@ async function resolveActions(actions, link, character) {
         } else if (!ch.channel_id || !ch.target) {
             const errMsg = `[send_message failed]: channel '${ch.name ?? action.channel}' is missing channel_id or target for ${character}.`;
             console.warn(`[openclaw-bridge-plugin] ${errMsg}`);
+            warnings.push(errMsg);
             try {
                 const entry = chatHistory.constructStMessage({ role: 'system', content: errMsg });
                 await chatHistory.appendMessage(character, entry);
@@ -58,6 +78,7 @@ async function resolveActions(actions, link, character) {
         } else if (!action.content) {
             const errMsg = `[send_message failed]: 'content' is required but was missing or empty for ${character}.`;
             console.warn(`[openclaw-bridge-plugin] ${errMsg}`);
+            warnings.push(errMsg);
             try {
                 const entry = chatHistory.constructStMessage({ role: 'system', content: errMsg });
                 await chatHistory.appendMessage(character, entry);
@@ -70,7 +91,22 @@ async function resolveActions(actions, link, character) {
             resolved.push(resolvedAction);
         }
     }
-    return resolved;
+    return { actions: resolved, warnings };
+}
+
+// Surface send_message misconfig warnings to the user's UI tab as a transient toast (#234).
+// Mirrors the chat_updated fan-out: broadcast reaches all connected WS/SSE clients directly,
+// the queue covers HTTP-poll-only clients. Best-effort — the persistent panel badge handles
+// the case where no UI tab is connected. Never throws into the generation path.
+function emitConfigWarnings(character, warnings) {
+    for (const message of warnings || []) {
+        try {
+            sessionManager.broadcast({ type: 'config_warning', character, message, timestamp: Date.now() });
+            sessionManager.queueConfigWarning(character, message);
+        } catch (e) {
+            console.warn('[openclaw-bridge-plugin] Failed to emit config_warning:', e?.message);
+        }
+    }
 }
 
 let wsBundle = null;
@@ -526,7 +562,7 @@ async function init(router) {
         // R10: heartbeat path — autonomous scheduled trigger, bypasses trust labels (R10.3)
         if (isHeartbeat) {
             try {
-                const heartbeatActionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS]);
+                const heartbeatActionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS], { channels: getConfiguredChannelNames(character) });
                 const safeHbMessage = sanitizeTrustTokens(message);
                 const heartbeatMessage = heartbeatActionPrompt
                     ? `[HEARTBEAT]\n${safeHbMessage}\n\n${heartbeatActionPrompt}`
@@ -543,7 +579,8 @@ async function init(router) {
                 const parsedHbOcActions = parsedHeartbeatActions.filter(a => !ST_SIDE_TYPES.has(a.type));
                 const parsedHbStActions = parsedHeartbeatActions.filter(a => ST_SIDE_TYPES.has(a.type));
                 const hbLink = (() => { try { return linkState.getLink(character); } catch { return null; } })();
-                const actions = await resolveActions([...(genResult.actions || []), ...parsedHbOcActions], hbLink, character);
+                const { actions, warnings: hbWarnings } = await resolveActions([...(genResult.actions || []), ...parsedHbOcActions], hbLink, character);
+                emitConfigWarnings(character, hbWarnings);
                 const stSideActions = [...(genResult.st_side_actions || []), ...parsedHbStActions];
 
                 // R11.6: process memory writes synchronously before returning
@@ -606,7 +643,7 @@ async function init(router) {
             let pendingActions = [];
             let stSideActions = [];
 
-            const actionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS]);
+            const actionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS], { channels: getConfiguredChannelNames(character) });
             const sanitizedMessage = sanitizeTrustTokens(message);
 
             // Try to label message with owner/guest if link exists.
@@ -637,7 +674,11 @@ async function init(router) {
                     const parsedStActions = parsedActions.filter(a => ST_SIDE_TYPES.has(a.type));
                     // R5.4: only forward OC outbound actions for owner-initiated requests
                     const rawPendingActions = isOwner ? [...(genResult.actions || []), ...parsedOcActions] : [];
-                    pendingActions = rawPendingActions.length > 0 ? await resolveActions(rawPendingActions, links, character) : [];
+                    if (rawPendingActions.length > 0) {
+                        const { actions: resolvedActions, warnings } = await resolveActions(rawPendingActions, links, character);
+                        pendingActions = resolvedActions;
+                        emitConfigWarnings(character, warnings);
+                    }
                     // R11: ST-side actions (memory writes) are processed by the plugin, not forwarded to OC.
                     // Only execute for owner-initiated requests — guests must not poison persistent memory (#169).
                     stSideActions = isOwner ? [...(genResult.st_side_actions || []), ...parsedStActions] : [];

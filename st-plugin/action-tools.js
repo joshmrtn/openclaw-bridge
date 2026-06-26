@@ -12,8 +12,13 @@ function _toOcPathFormat(defs) {
 
 const ACTION_TOOLS = _toOcPathFormat(ACTION_TOOL_DEFS);
 
-function buildActionPrompt(tools) {
+// options.channels — the character's configured channel names (#234). Surfaced in the
+// send_message block so the model targets a valid channel instead of guessing a platform
+// display name. send_message is the only channel-aware tool, so the listing is special-cased
+// to its block; all other tools render unchanged.
+function buildActionPrompt(tools, options = {}) {
     if (!tools || tools.length === 0) return '';
+    const channels = Array.isArray(options.channels) ? options.channels.filter(Boolean) : [];
     const lines = [
         '---',
         'You may take outbound actions by including action blocks anywhere in your response.',
@@ -27,8 +32,17 @@ function buildActionPrompt(tools) {
         const exampleParams = Object.fromEntries(
             tool.parameters.map(p => [p.name, p.name.toUpperCase()])
         );
+        // Make the send_message example directly copyable by using a real configured channel.
+        if (tool.type === 'send_message' && channels.length > 0) {
+            exampleParams.channel = channels[0];
+        }
         const example = JSON.stringify({ type: tool.type, ...exampleParams });
         lines.push(`  <action>${example}</action>`);
+        if (tool.type === 'send_message') {
+            lines.push(channels.length > 0
+                ? `  Configured channels: ${channels.join(', ')}. Use one of these exact names for the "channel" parameter.`
+                : '  No channels are configured — send_message will fail until a channel is set up.');
+        }
         lines.push('');
     }
     lines.push('---');

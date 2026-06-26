@@ -211,6 +211,17 @@ function queueChatUpdated(character, userId, appended = []) {
     });
 }
 
+// Queue a config_warning notification for UI clients that use HTTP polling instead of WS.
+// Called alongside broadcast() so browsers that can't reach the WS port still get the toast (#234).
+function queueConfigWarning(character, message) {
+    httpOutboundQueue.push({
+        type: 'config_warning',
+        character,
+        message,
+        timestamp: Date.now(),
+    });
+}
+
 function requestGenerate(payload, timeoutMs = 900000) { // 15 minutes for local Ollama models
     const waitForClientMs = Number(process.env.OPENCLAW_BRIDGE_WAIT_FOR_CLIENT_MS || 5000);
 
@@ -380,6 +391,7 @@ module.exports = {
     broadcast,
     broadcastSse,
     queueChatUpdated,
+    queueConfigWarning,
     requestGenerate,
     handleMessage,
     reset,

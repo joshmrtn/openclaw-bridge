@@ -233,6 +233,24 @@ function parseOwnerIds(rawValue) {
         .filter(Boolean);
 }
 
+// #234: warn when External Presence is enabled but the character has no channels
+// configured — send_message actions would fail with nowhere to send. Pure so it can be
+// unit-tested via the pure-copy pattern. Gated on `active` so reply-only characters that
+// intentionally have no channels aren't nagged before they're enabled.
+function shouldWarnNoChannels({ active, channelCount }) {
+    return Boolean(active) && channelCount === 0;
+}
+
+// Recompute the no-channels warning visibility from the live panel state. Called whenever
+// channels are loaded, added, removed, or the enable toggle changes.
+function updateChannelWarning() {
+    const fields = STATE.managementFields;
+    if (!fields || !fields.channelWarning) return;
+    const channelCount = fields.channelsContainer.querySelectorAll('.openclaw-bridge-channel-row').length;
+    const active = Boolean(fields.toggleInput.checked);
+    fields.channelWarning.style.display = shouldWarnNoChannels({ active, channelCount }) ? '' : 'none';
+}
+
 function renderChannelRow(entry = {}) {
     const row = document.createElement('div');
     row.className = 'openclaw-bridge-channel-row';
@@ -259,7 +277,7 @@ function renderChannelRow(entry = {}) {
     removeButton.type = 'button';
     removeButton.className = 'openclaw-bridge-button openclaw-bridge-button--small';
     removeButton.textContent = 'Remove';
-    removeButton.addEventListener('click', () => row.remove());
+    removeButton.addEventListener('click', () => { row.remove(); updateChannelWarning(); });
 
     row.append(nameInput, idInput, targetInput, removeButton);
     return row;
@@ -332,10 +350,15 @@ function ensureManagementPanel() {
     addChannelButton.textContent = 'Add channel';
     addChannelButton.addEventListener('click', () => {
         channelsContainer.append(renderChannelRow());
+        updateChannelWarning();
     });
     const channelsHint = document.createElement('small');
     channelsHint.textContent = 'Each channel needs a name and channel_id. Target is optional.';
-    channelsField.append(channelsLabel, channelsContainer, addChannelButton, channelsHint);
+    const channelWarning = document.createElement('div');
+    channelWarning.className = 'openclaw-bridge-channel-warning';
+    channelWarning.textContent = "No channels configured — this character can't send proactive messages. Add one below.";
+    channelWarning.style.display = 'none';
+    channelsField.append(channelsLabel, channelsContainer, addChannelButton, channelsHint, channelWarning);
 
     const actions = document.createElement('div');
     actions.className = 'openclaw-bridge-actions';
@@ -368,11 +391,13 @@ function ensureManagementPanel() {
         ocAgentInput,
         ownerIdsInput,
         channelsContainer,
+        channelWarning,
         saveButton,
         testButton,
     };
 
     toggleInput.addEventListener('change', () => {
+        updateChannelWarning();
         saveLinkState();
     });
 
@@ -440,6 +465,7 @@ async function loadLinkState(characterName) {
         setManagementStatus(error?.message || 'Failed to load link state.', 'error');
     } finally {
         setManagementLoading(false);
+        updateChannelWarning();
     }
 }
 
@@ -1199,6 +1225,9 @@ function startHttpPollingFallback() {
                     console.info('[openclaw-bridge] chat_updated received via HTTP poll:', { character: msg.character });
                     await handleChatUpdatedMessage(msg);
                 }
+            } else if (msg.type === 'config_warning') {
+                console.info('[openclaw-bridge] config_warning received via HTTP poll:', { character: msg.character });
+                handleConfigWarning(msg);
             }
         } catch (e) {
             console.warn('[openclaw-bridge] HTTP polling error:', e);
@@ -1259,6 +1288,17 @@ async function appendMessagesIncrementally(appended, context) {
     for (const entry of appended) {
         context.chat.push(entry);
         await context.addOneMessage(entry, { scroll: true });
+    }
+}
+
+// #234: surface a send_message misconfig as a transient toast so the user gets a clue that
+// something isn't configured, without it being persisted to chat history. Headless has no UI.
+function handleConfigWarning(payload) {
+    if (globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE === 'headless') return;
+    const message = payload && payload.message;
+    if (!message) return;
+    if (globalThis.toastr && typeof globalThis.toastr.warning === 'function') {
+        globalThis.toastr.warning(message, 'OpenClaw Bridge');
     }
 }
 
@@ -1386,6 +1426,9 @@ async function handleSseMessage(payload) {
     if (payload.type === 'chat_updated') {
         console.info('[openclaw-bridge] chat_updated received via SSE:', { character: payload.character });
         await handleChatUpdatedMessage(payload);
+    } else if (payload.type === 'config_warning') {
+        console.info('[openclaw-bridge] config_warning received via SSE:', { character: payload.character });
+        handleConfigWarning(payload);
     } else if (payload.type === 'notification') {
         addNotification(payload);
     }
@@ -1588,6 +1631,12 @@ function connect() {
                 if (payload.type === 'chat_updated') {
                     console.info('[openclaw-bridge] chat_updated received via WS:', { character: payload.character });
                     await handleChatUpdatedMessage(payload);
+                    return;
+                }
+
+                if (payload.type === 'config_warning') {
+                    console.info('[openclaw-bridge] config_warning received via WS:', { character: payload.character });
+                    handleConfigWarning(payload);
                     return;
                 }
 

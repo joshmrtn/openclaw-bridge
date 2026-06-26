@@ -151,6 +151,52 @@ describe('buildActionPrompt', () => {
         expect(parsed).toHaveProperty('foo');
     });
 
+    test('lists configured channel names in the send_message block (#234)', () => {
+        const prompt = buildActionPrompt(ACTION_TOOLS, { channels: ['discord', 'telegram'] });
+        expect(prompt).toContain('Configured channels');
+        expect(prompt).toContain('discord');
+        expect(prompt).toContain('telegram');
+    });
+
+    test('send_message example uses a real configured channel name when provided (#234)', () => {
+        const prompt = buildActionPrompt(ACTION_TOOLS, { channels: ['discord', 'telegram'] });
+        const blockRe = /<action>(\{[^}]*"type":"send_message"[^}]*\})<\/action>/;
+        const match = blockRe.exec(prompt);
+        expect(match).not.toBeNull();
+        const parsed = JSON.parse(match[1]);
+        expect(parsed.channel).toBe('discord');
+    });
+
+    test('warns when no channels are configured (#234)', () => {
+        const prompt = buildActionPrompt(ACTION_TOOLS, { channels: [] });
+        expect(prompt).toMatch(/No channels are configured/i);
+        // No channel-name list line in this case
+        expect(prompt).not.toContain('Configured channels:');
+    });
+
+    test('no-options call still works and warns (no channels) (#234)', () => {
+        const prompt = buildActionPrompt(ACTION_TOOLS);
+        expect(prompt).toContain('send_message');
+        expect(prompt).toMatch(/No channels are configured/i);
+        // Backward-compatible example with the generic placeholder
+        const blockRe = /<action>(\{[^}]*"type":"send_message"[^}]*\})<\/action>/;
+        const parsed = JSON.parse(blockRe.exec(prompt)[1]);
+        expect(parsed.channel).toBe('CHANNEL');
+    });
+
+    test('only the send_message block carries the channels line, not other tools (#234)', () => {
+        const prompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS], { channels: ['discord'] });
+        const lines = prompt.split('\n');
+        const channelLineIdx = lines.findIndex(l => l.includes('Configured channels'));
+        expect(channelLineIdx).toBeGreaterThan(-1);
+        // The channels line must sit within the send_message block — i.e. after the
+        // send_message header and before the next tool header (file_write/write_memory).
+        const sendIdx = lines.findIndex(l => l.startsWith('send_message —'));
+        const fileWriteIdx = lines.findIndex(l => l.startsWith('file_write —'));
+        expect(channelLineIdx).toBeGreaterThan(sendIdx);
+        expect(channelLineIdx).toBeLessThan(fileWriteIdx);
+    });
+
     test('combined ACTION_TOOLS + ST_SIDE_TOOLS produces a single prompt with all types', () => {
         const combined = [...ACTION_TOOLS, ...ST_SIDE_TOOLS];
         const prompt = buildActionPrompt(combined);

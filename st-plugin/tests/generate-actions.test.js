@@ -57,6 +57,7 @@ describe('/generate action injection and parsing', () => {
             getConnectedClientCount: jest.fn(() => 1),
             broadcast: jest.fn(),
             queueChatUpdated: jest.fn(),
+            queueConfigWarning: jest.fn(),
         }));
         jest.doMock('../chat-history', () => {
             const actual = jest.requireActual('../chat-history');
@@ -363,6 +364,68 @@ describe('/generate action injection and parsing', () => {
         const allTypes = capturedArgs[0].map(t => t.type);
         expect(allTypes).toContain('discord_post');
         expect(allTypes).toContain('write_memory');
+    });
+
+    describe('configured channel injection into action prompt (#234)', () => {
+        // Capture the options arg passed to buildActionPrompt so we can assert the
+        // character's configured channel names are forwarded on both paths.
+        function captureChannelsSetup(requestGenerate, getLinkImpl) {
+            const capturedOptions = [];
+            makeBaseSetup(requestGenerate, jest.fn().mockResolvedValue());
+            jest.doMock('../action-tools', () => ({
+                ACTION_TOOLS: [{ type: 'send_message', description: 'test', parameters: [] }],
+                ST_SIDE_TOOLS: [],
+                buildActionPrompt: jest.fn((tools, options) => { capturedOptions.push(options); return ACTION_PROMPT_SENTINEL; }),
+                parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+            }));
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory: jest.fn().mockResolvedValue(), appendMessage: jest.fn().mockResolvedValue() };
+            });
+            jest.doMock('../link-state', () => ({ getLink: jest.fn(getLinkImpl) }));
+            return capturedOptions;
+        }
+
+        test('main path forwards configured channel names', async () => {
+            const capturedOptions = captureChannelsSetup(
+                jest.fn().mockResolvedValue({ response: 'Ribbit!', actions: [] }),
+                () => ({ owner_user_ids: ['discord:owner1'], channels: [{ name: 'discord', channel_id: 'd', target: 't' }, { name: 'telegram', channel_id: 'tg' }] }),
+            );
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+            const handler = router.postHandlers.get('/generate');
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hi', user_id: 'discord:owner1' }), makeRes());
+            expect(capturedOptions[0]).toEqual({ channels: ['discord', 'telegram'] });
+        });
+
+        test('heartbeat path forwards configured channel names', async () => {
+            const capturedOptions = captureChannelsSetup(
+                jest.fn().mockResolvedValue({ response: 'Checking in!', actions: [] }),
+                () => ({ channels: [{ name: 'discord', channel_id: 'd' }] }),
+            );
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+            const handler = router.postHandlers.get('/generate');
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), makeRes());
+            expect(capturedOptions[0]).toEqual({ channels: ['discord'] });
+        });
+
+        test('link-state read failure yields empty channels and does not throw', async () => {
+            const capturedOptions = captureChannelsSetup(
+                jest.fn().mockResolvedValue({ response: 'Ribbit!', actions: [] }),
+                () => { throw new Error('boom'); },
+            );
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hi', user_id: 'discord:owner1' }), res);
+            expect(capturedOptions[0]).toEqual({ channels: [] });
+            expect(res.statusCode).toBe(200);
+        });
     });
 
     test('heartbeat path injects action prompt and parses action blocks', async () => {
@@ -745,6 +808,51 @@ describe('/generate action injection and parsing', () => {
             await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
 
             expect(res.body.actions).toEqual([]);
+        });
+
+        test('send_message with unconfigured channel broadcasts a config_warning (#234)', async () => {
+            const rawResponse = 'Posting! <action>{"type":"send_message","channel":"telegram","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), makeRes());
+
+            const sm = require('../session-manager');
+            const warningCall = sm.broadcast.mock.calls.find(([p]) => p && p.type === 'config_warning');
+            expect(warningCall).toBeDefined();
+            expect(warningCall[0].character).toBe('Frog');
+            expect(warningCall[0].message).toContain('telegram');
+            expect(sm.queueConfigWarning).toHaveBeenCalled();
+        });
+
+        test('send_message with valid channel does not broadcast a config_warning (#234)', async () => {
+            const rawResponse = 'On it! <action>{"type":"send_message","channel":"discord","content":"Hello!"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), makeRes());
+
+            const sm = require('../session-manager');
+            const warningCall = sm.broadcast.mock.calls.find(([p]) => p && p.type === 'config_warning');
+            expect(warningCall).toBeUndefined();
         });
 
         test('send_message with unconfigured channel writes error to chat history', async () => {

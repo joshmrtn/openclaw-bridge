@@ -196,7 +196,14 @@ To send a direct message instead, include `recipient`:
 <action>{"type":"send_message","channel":"discord","recipient":"USER_ID","content":"Just for you."}</action>
 ```
 
-If the character specifies a channel name that isn't in the `channels` list, the action is dropped and an error appears in ST chat history explaining which channels are configured.
+The `channel` value is the **logical `name`** you gave the channel above (e.g. `discord`) — **not** the platform's own display name for the destination (e.g. a Discord channel called `#general`). The character is told its configured channel names as part of the generation prompt, so it should use one of them directly.
+
+If the character specifies a channel name that isn't in the `channels` list, the action is dropped (it is never sent) and:
+
+- a one-off **warning toast** appears in SillyTavern naming the channel that failed and which names are configured, and
+- the **External Presence** panel shows a red warning whenever the link is enabled but has no channels configured at all.
+
+Both are there to make a missing or mistyped channel easy to spot. Add the channel (above) and the next attempt will resolve.
 
 ---
 

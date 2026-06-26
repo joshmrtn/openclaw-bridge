@@ -711,3 +711,81 @@ describe('isUpdateAlreadyApplied (#235)', () => {
         expect(isUpdateAlreadyApplied({ appended: [{ exchange_id: 'x1' }] }, { chat: [] })).toBe(false);
     });
 });
+
+// ── #234: External Presence "no channels configured" warning ─────────────────
+// Pure copy of the source helper (avoids browser globals), plus a source-presence
+// guard so this is a real red→green for the implementation.
+function shouldWarnNoChannels({ active, channelCount }) {
+    return Boolean(active) && channelCount === 0;
+}
+
+describe('shouldWarnNoChannels (#234)', () => {
+    it('warns when enabled with zero channels', () => {
+        expect(shouldWarnNoChannels({ active: true, channelCount: 0 })).toBe(true);
+    });
+
+    it('does not warn when channels are configured', () => {
+        expect(shouldWarnNoChannels({ active: true, channelCount: 2 })).toBe(false);
+    });
+
+    it('does not warn when not enabled, even with zero channels', () => {
+        expect(shouldWarnNoChannels({ active: false, channelCount: 0 })).toBe(false);
+    });
+
+    it('source defines shouldWarnNoChannels and an updateChannelWarning wiring', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
+        expect(src).toContain('function shouldWarnNoChannels');
+        expect(src).toContain('updateChannelWarning');
+    });
+});
+
+// ── #234: runtime toast on send_message misconfig ────────────────────────────
+// Pure copy of the source handler (reads globals, which the test stubs), plus a
+// source-presence guard that config_warning is dispatched on all three transports.
+function handleConfigWarning(payload) {
+    if (globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE === 'headless') return; // no UI in headless
+    const message = payload && payload.message;
+    if (!message) return;
+    if (globalThis.toastr && typeof globalThis.toastr.warning === 'function') {
+        globalThis.toastr.warning(message, 'OpenClaw Bridge');
+    }
+}
+
+describe('handleConfigWarning (#234)', () => {
+    const origType = globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE;
+    afterEach(() => {
+        globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = origType;
+        delete globalThis.toastr;
+    });
+
+    it('shows a warning toast with the message in a UI client', () => {
+        globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'ui';
+        const warning = jest.fn();
+        globalThis.toastr = { warning };
+        handleConfigWarning({ message: "channel 'general' is not configured" });
+        expect(warning).toHaveBeenCalledWith("channel 'general' is not configured", 'OpenClaw Bridge');
+    });
+
+    it('does nothing in a headless client', () => {
+        globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'headless';
+        const warning = jest.fn();
+        globalThis.toastr = { warning };
+        handleConfigWarning({ message: 'anything' });
+        expect(warning).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when the payload has no message', () => {
+        globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE = 'ui';
+        const warning = jest.fn();
+        globalThis.toastr = { warning };
+        handleConfigWarning({});
+        expect(warning).not.toHaveBeenCalled();
+    });
+
+    it('source defines handleConfigWarning and dispatches config_warning on WS/SSE/HTTP', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
+        expect(src).toContain('function handleConfigWarning');
+        const occurrences = (src.match(/config_warning/g) || []).length;
+        expect(occurrences).toBeGreaterThanOrEqual(3);
+    });
+});
