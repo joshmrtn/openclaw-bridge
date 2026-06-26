@@ -199,11 +199,14 @@ function broadcast(payload) {
 
 // Queue a chat_updated notification for UI clients that use HTTP polling instead of WS.
 // Called alongside broadcast() so browsers that can't reach the WS port still receive the event.
-function queueChatUpdated(character, userId) {
+// `appended` carries the message entries just written so the UI can append them incrementally
+// instead of reloading the whole chat (#235); defaults to [] for callers that don't supply it.
+function queueChatUpdated(character, userId, appended = []) {
     httpOutboundQueue.push({
         type: 'chat_updated',
         character,
         user_id: userId || null,
+        appended: appended || [],
         timestamp: Date.now(),
     });
 }

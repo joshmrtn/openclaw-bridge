@@ -1213,6 +1213,55 @@ function stopHttpPollingFallback() {
     console.info('[openclaw-bridge] Stopped HTTP polling fallback');
 }
 
+// Decide how the UI should react to a chat_updated event (#235). Pure (no browser
+// globals) so it can be unit-tested in isolation. Returns one of:
+//   'skip'      — not viewing the updated character; do nothing
+//   'duplicate' — this exact update is already on screen; do nothing
+//   'badge'     — user scrolled up; show the "new message" badge (existing behavior)
+//   'append'    — at the bottom and safe to append incrementally (no full re-render)
+//   'reload'    — at the bottom but can't append safely; fall back to a full reload
+// Note: a full reload reloads from disk (ground truth), so 'reload' is always the safe
+// fallback — we never risk a divergent view, only a momentary flash.
+function decideChatUpdate({ updatedChid, currentChid, atBottom, canAppend, alreadyApplied }) {
+    if (updatedChid === -1 || currentChid !== updatedChid) return 'skip';
+    if (alreadyApplied) return 'duplicate';
+    if (!atBottom) return 'badge';
+    return canAppend ? 'append' : 'reload';
+}
+
+// True when payload.appended can be rendered incrementally via ST's addOneMessage
+// without a full reload. Conservative: any missing piece falls back to reload.
+function canAppendIncrementally(payload, context) {
+    return Array.isArray(payload?.appended)
+        && payload.appended.length > 0
+        && Array.isArray(context?.chat)
+        && typeof context?.addOneMessage === 'function';
+}
+
+// True when the last appended entry's exchange_id already matches the tail of the
+// in-memory chat — i.e. this update was already applied (re-delivery guard). Entries
+// without an exchange_id (e.g. heartbeat log lines) are not deduped this way; the
+// timestamp guard in handleChatUpdatedMessage still covers exact duplicates.
+function isUpdateAlreadyApplied(payload, context) {
+    const appended = payload?.appended;
+    const chat = context?.chat;
+    if (!Array.isArray(appended) || appended.length === 0) return false;
+    if (!Array.isArray(chat) || chat.length === 0) return false;
+    const lastAppendedId = appended[appended.length - 1]?.exchange_id;
+    if (!lastAppendedId) return false;
+    return chat[chat.length - 1]?.exchange_id === lastAppendedId;
+}
+
+// Append the written entries straight into ST's chat without a full re-render.
+// The plugin already persisted these to disk, so we only update the in-memory chat
+// array and the DOM — never write back (that would double-write history).
+async function appendMessagesIncrementally(appended, context) {
+    for (const entry of appended) {
+        context.chat.push(entry);
+        await context.addOneMessage(entry, { scroll: true });
+    }
+}
+
 async function handleChatUpdatedMessage(payload) {
     if (globalThis.OPENCLAW_BRIDGE_CLIENT_TYPE === 'headless') return;
     // Deduplicate: two active WS sockets both receive the same broadcast.
@@ -1229,29 +1278,63 @@ async function handleChatUpdatedMessage(payload) {
             ? context.characterId
             : getCurrentCharacterIndex(context);
         const reloadFn = context?.reloadCurrentChat || (typeof reloadCurrentChat === 'function' ? reloadCurrentChat : null);
+        const atBottom = isAtChatBottom();
+        const canAppend = canAppendIncrementally(payload, context);
+        const alreadyApplied = isUpdateAlreadyApplied(payload, context);
+
+        const action = decideChatUpdate({ updatedChid, currentChid, atBottom, canAppend, alreadyApplied });
 
         console.info('[openclaw-bridge] chat_updated check:', {
+            action,
             updatedChid,
             currentChid,
             contextCharacterId: context?.characterId,
             hasReloadFn: typeof reloadFn === 'function',
-            charactersCount: context?.characters?.length,
+            atBottom,
+            canAppend,
+            alreadyApplied,
+            appendedCount: Array.isArray(payload?.appended) ? payload.appended.length : 0,
         });
 
-        if (updatedChid !== -1 && currentChid === updatedChid) {
-            if (typeof reloadFn !== 'function') {
-                console.warn('[openclaw-bridge] reloadCurrentChat() is not available in this context');
-            } else if (isAtChatBottom()) {
+        switch (action) {
+            case 'skip':
+                console.info('[openclaw-bridge] Not viewing updated character; skipping reload');
+                return;
+            case 'duplicate':
+                console.info('[openclaw-bridge] chat_updated already applied; skipping');
+                return;
+            case 'append':
+                hideNewMessageBadge();
+                try {
+                    await appendMessagesIncrementally(payload.appended, context);
+                    console.info('[openclaw-bridge] chat_updated appended incrementally:', payload.appended.length);
+                } catch (appendErr) {
+                    // Append failed partway — reload from disk (ground truth) to recover.
+                    // reloadCurrentChat clears and rebuilds from the JSONL, so any partial
+                    // in-memory push is discarded; we never persist a divergent state.
+                    console.warn('[openclaw-bridge] incremental append failed; falling back to reload:', appendErr);
+                    if (typeof reloadFn === 'function') await reloadFn();
+                }
+                return;
+            case 'badge':
+                if (typeof reloadFn !== 'function') {
+                    console.warn('[openclaw-bridge] reloadCurrentChat() unavailable; cannot show new-message badge');
+                    return;
+                }
+                console.info('[openclaw-bridge] Scrolled up; showing new message badge');
+                showNewMessageBadge(payload.character, reloadFn);
+                return;
+            case 'reload':
+            default:
+                if (typeof reloadFn !== 'function') {
+                    console.warn('[openclaw-bridge] reloadCurrentChat() is not available in this context');
+                    return;
+                }
                 console.info('[openclaw-bridge] At chat bottom; reloading');
                 hideNewMessageBadge();
                 await reloadFn();
                 console.info('[openclaw-bridge] reloadCurrentChat completed');
-            } else {
-                console.info('[openclaw-bridge] Scrolled up; showing new message badge');
-                showNewMessageBadge(payload.character, reloadFn);
-            }
-        } else {
-            console.info('[openclaw-bridge] Not viewing updated character; skipping reload');
+                return;
         }
     } catch (e) {
         console.warn('[openclaw-bridge] Error handling chat_updated:', e);

@@ -221,8 +221,10 @@ async function appendExternalChatToHistory(characterName, userMessage, response,
     return _enqueue(key, async () => {
         // R3.3: idempotency — skip the write if this exchange_id is already in the file
         // (handles retries after a crash mid-write or a duplicate delivery from OC).
+        // Returning [] (nothing appended) lets callers skip the chat_updated broadcast's
+        // incremental-append payload for a deduped write (#235).
         if (exchangeId && await _hasExchangeId(filePath, exchangeId)) {
-            return;
+            return [];
         }
 
         // R3.2: write both entries in a single appendFile call to minimise the crash
@@ -245,6 +247,9 @@ async function appendExternalChatToHistory(characterName, userMessage, response,
             prefix + JSON.stringify(userEntry) + '\n' + JSON.stringify(assistantEntry) + '\n',
             'utf8'
         );
+        // Return the exact entries written so the chat_updated broadcast can carry
+        // them for incremental DOM append in the extension instead of a full reload (#235).
+        return [userEntry, assistantEntry];
     });
 }
 
