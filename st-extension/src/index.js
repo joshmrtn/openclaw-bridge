@@ -861,24 +861,52 @@ async function generateForCharacter(characterName, message, pluginTimeoutMs) {
     });
 
     if (isHeadless) {
-        // Always reload via selectCharacterById in headless mode — even when chid hasn't changed.
-        // selectCharacterById calls getChat() internally, loading fresh chat from disk.
-        // Without this, ST's in-memory chat goes stale after every exchange: the plugin writes
-        // new messages to the JSONL file after generation returns, but the headless browser
-        // never sees them unless we explicitly reload before the next request.
+        // Reload chat from disk before generating, so the model never works from a stale
+        // in-memory history. The plugin appends new messages to the JSONL after each
+        // generation returns; the headless browser only picks them up if we reload first.
+        //
+        // selectCharacterById() reloads via getChat() ONLY on a real character switch.
+        // When the target character is already selected — every heartbeat, every
+        // consecutive same-character reply — ST short-circuits and skips getChat()
+        // entirely, leaving context.chat frozen at the last switch (#254; the #30 fix
+        // wrongly assumed selectCharacterById always reloads). So we force an explicit
+        // reloadCurrentChat() below for the no-switch case.
         if (needsCharacterSwitch) {
             console.info('[openclaw-bridge] Headless: switching active character before generation', { from: previousChid, to: chid, characterName });
         } else {
             console.info('[openclaw-bridge] Headless: reloading chat from disk before generation', { chid, characterName });
         }
 
-        // Primary: selectCharacterById (awaits getChat internally, sets name2 on completion)
+        // Primary: selectCharacterById (awaits getChat internally on a switch, sets name2 on completion)
         if (typeof selectCharacterById === 'function') {
             try {
                 await selectCharacterById(chid);
             } catch (switchErr) {
                 sendSocketMessage({ type: 'debug_log', level: 'error', event: 'char_switch_error',
                     method: 'selectCharacterById', error: switchErr?.message });
+            }
+        }
+
+        // selectCharacterById() above no-ops its getChat() reload when the character is
+        // already selected, so force a real disk reload to pull in any messages the plugin
+        // appended since the last switch. Gate on !needsCharacterSwitch to avoid a redundant
+        // double-reload on the switch path (selectCharacterById already loaded fresh there).
+        // This runs inside withGenerationLock, so the clear+rebuild of context.chat cannot
+        // race a concurrent generation for this character.
+        if (!needsCharacterSwitch) {
+            const reloadFn = context?.reloadCurrentChat
+                || (typeof reloadCurrentChat === 'function' ? reloadCurrentChat : null);
+            if (typeof reloadFn === 'function') {
+                try {
+                    await reloadFn();
+                    console.info('[openclaw-bridge] Headless: reloadCurrentChat completed before generation', { chid, characterName });
+                } catch (reloadErr) {
+                    sendSocketMessage({ type: 'debug_log', level: 'error', event: 'pre_generation_reload_error',
+                        error: reloadErr?.message });
+                }
+            } else {
+                sendSocketMessage({ type: 'debug_log', level: 'warn', event: 'pre_generation_reload_unavailable',
+                    note: 'reloadCurrentChat unavailable — generation may use stale history' });
             }
         }
 

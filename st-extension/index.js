@@ -806,6 +806,29 @@ async function generateForCharacter(characterName, message, pluginTimeoutMs) {
           });
         }
       }
+      if (!needsCharacterSwitch) {
+        const reloadFn = context?.reloadCurrentChat || (typeof reloadCurrentChat === "function" ? reloadCurrentChat : null);
+        if (typeof reloadFn === "function") {
+          try {
+            await reloadFn();
+            console.info("[openclaw-bridge] Headless: reloadCurrentChat completed before generation", { chid, characterName });
+          } catch (reloadErr) {
+            sendSocketMessage({
+              type: "debug_log",
+              level: "error",
+              event: "pre_generation_reload_error",
+              error: reloadErr?.message
+            });
+          }
+        } else {
+          sendSocketMessage({
+            type: "debug_log",
+            level: "warn",
+            event: "pre_generation_reload_unavailable",
+            note: "reloadCurrentChat unavailable \u2014 generation may use stale history"
+          });
+        }
+      }
       await new Promise((r) => setTimeout(r, 300));
       const postSwitchCtx = getStContext();
       const postSwitchChid = Number(postSwitchCtx?.characterId);
