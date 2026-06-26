@@ -1220,7 +1220,13 @@
 <p>To send a direct message instead, include <code>recipient</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>&lt;action&gt;{&quot;type&quot;:&quot;send_message&quot;,&quot;channel&quot;:&quot;discord&quot;,&quot;recipient&quot;:&quot;USER_ID&quot;,&quot;content&quot;:&quot;Just for you.&quot;}&lt;/action&gt;
 </code></pre></div>
-<p>If the character specifies a channel name that isn't in the <code>channels</code> list, the action is dropped and an error appears in ST chat history explaining which channels are configured.</p>
+<p>The <code>channel</code> value is the <strong>logical <code>name</code></strong> you gave the channel above (e.g. <code>discord</code>) — <strong>not</strong> the platform's own display name for the destination (e.g. a Discord channel called <code>#general</code>). The character is told its configured channel names as part of the generation prompt, so it should use one of them directly.</p>
+<p>If the character specifies a channel name that isn't in the <code>channels</code> list, the action is dropped (it is never sent) and:</p>
+<ul>
+<li>a one-off <strong>warning toast</strong> appears in SillyTavern naming the channel that failed and which names are configured, and</li>
+<li>the <strong>External Presence</strong> panel shows a red warning whenever the link is enabled but has no channels configured at all.</li>
+</ul>
+<p>Both are there to make a missing or mistyped channel easy to spot. Add the channel (above) and the next attempt will resolve.</p>
 <hr />
 <h2 id="heartbeat-autonomous-presence">Heartbeat / Autonomous presence<a class="headerlink" href="#heartbeat-autonomous-presence" title="Permanent link">&para;</a></h2>
 <p>A character can post on a schedule or when a conversation goes quiet, without waiting for a user to send a message. Two triggers are available:</p>
