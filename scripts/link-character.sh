@@ -17,13 +17,16 @@
 #   --heartbeat-interval-ms  Scheduled heartbeat interval in ms (default: 7200000 / 2h)
 #   --heartbeat-idle-ms      Idle-trigger threshold in ms; 0 = disabled (default: 7200000 / 2h)
 #   --heartbeat-prompt TEXT  Custom heartbeat prompt (default: set by skill)
-#   --heartbeat-target ID    Target channel or user for heartbeat posts (optional)
+#   --heartbeat-target ID    Raw recipient for heartbeat posts: channel id, or your user id when --heartbeat-kind dm
+#   --heartbeat-kind KIND    dm|channel — dm = the heartbeat DMs you; channel = posts to the channel (default: channel)
 #   --heartbeat-account ID   OC account ID for multi-account deployments (optional)
 #   --disable-heartbeat      Remove existing heartbeat config from this character
-#   --channel NAME           Logical channel name for send_message (e.g. "discord"); repeat for multiple
-#   --channel-id ID          OC channel account ID paired with --channel (e.g. "discord-frogbot")
-#   --channel-target TARGET  Platform-specific default destination for this channel (optional)
-#   --remove-channel NAME    Remove a channel entry by name; repeat for multiple
+#   --channel NAME              Logical channel name the character uses in send_message (e.g. "dm", "the-pond"); repeat for multiple
+#   --channel-id ID             OC channel/adapter id paired with --channel (e.g. "discord") — which bot/platform to send through
+#   --channel-kind dm|channel   How to deliver: "dm" = direct-message the recipient; "channel" = post to the channel
+#   --channel-recipient ID      Raw recipient id: your user id for dm, the channel id for channel
+#   --remove-channel NAME       Remove a channel entry by name; repeat for multiple
+#   --help, -h               Show this help with examples and exit
 
 set -euo pipefail
 
@@ -42,16 +45,42 @@ HEARTBEAT_INTERVAL_MS=""
 HEARTBEAT_IDLE_MS=""
 HEARTBEAT_PROMPT=""
 HEARTBEAT_TARGET=""
+HEARTBEAT_KIND=""
 HEARTBEAT_ACCOUNT=""
 DISABLE_HEARTBEAT=false
 
-# Channel flags — parallel arrays: CHANNEL_NAMES[i] pairs with CHANNEL_IDS[i] and CHANNEL_TARGETS[i]
+# Channel flags — parallel arrays: CHANNEL_NAMES[i] pairs with CHANNEL_IDS[i],
+# CHANNEL_KINDS[i] (dm|channel), and CHANNEL_RECIPIENTS[i] (raw recipient id).
 declare -a CHANNEL_NAMES=()
 declare -a CHANNEL_IDS=()
-declare -a CHANNEL_TARGETS=()
+declare -a CHANNEL_KINDS=()
+declare -a CHANNEL_RECIPIENTS=()
 declare -a REMOVE_CHANNELS=()
-# Tracks whether --channel-target was supplied for each entry ("" means not supplied)
-declare -a CHANNEL_TARGET_SET=()
+
+usage() {
+    sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    cat <<'EOF'
+
+Examples:
+  # DM the owner: the character can send a direct message to your Discord user id.
+  ./scripts/link-character.sh --character "Frog" --agent frog \
+    --owner "discord:1509676499979079794" \
+    --channel dm --channel-id discord --channel-kind dm --channel-recipient 1509676499979079794
+
+  # Post to a channel ("The Pond"): the character can post into a Discord channel.
+  ./scripts/link-character.sh --character "Frog" --agent frog \
+    --channel the-pond --channel-id discord --channel-kind channel --channel-recipient 1122334455667788
+
+  # Both at once (repeat the --channel group):
+  ./scripts/link-character.sh --character "Frog" --agent frog \
+    --channel dm       --channel-id discord --channel-kind dm      --channel-recipient 1509676499979079794 \
+    --channel the-pond --channel-id discord --channel-kind channel --channel-recipient 1122334455667788
+
+Finding Discord ids: enable Settings → Advanced → Developer Mode, then right-click a
+user or channel → "Copy ID". The user id is for --channel-kind dm; the channel id is for
+--channel-kind channel.
+EOF
+}
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -66,13 +95,16 @@ while [[ $# -gt 0 ]]; do
         --heartbeat-idle-ms)     HEARTBEAT_IDLE_MS="$2"; shift 2 ;;
         --heartbeat-prompt)      HEARTBEAT_PROMPT="$2"; shift 2 ;;
         --heartbeat-target)      HEARTBEAT_TARGET="$2"; shift 2 ;;
+        --heartbeat-kind)        HEARTBEAT_KIND="$2"; shift 2 ;;
         --heartbeat-account)     HEARTBEAT_ACCOUNT="$2"; shift 2 ;;
         --disable-heartbeat)     DISABLE_HEARTBEAT=true; shift ;;
-        --channel)        CHANNEL_NAMES+=("$2"); CHANNEL_IDS+=(""); CHANNEL_TARGETS+=(""); CHANNEL_TARGET_SET+=(""); shift 2 ;;
-        --channel-id)     CHANNEL_IDS[${#CHANNEL_IDS[@]}-1]="$2"; shift 2 ;;
-        --channel-target) CHANNEL_TARGETS[${#CHANNEL_TARGETS[@]}-1]="$2"; CHANNEL_TARGET_SET[${#CHANNEL_TARGET_SET[@]}-1]="yes"; shift 2 ;;
-        --remove-channel) REMOVE_CHANNELS+=("$2"); shift 2 ;;
-        *) echo "Unknown option: $1" >&2; exit 1 ;;
+        --channel)           CHANNEL_NAMES+=("$2"); CHANNEL_IDS+=(""); CHANNEL_KINDS+=(""); CHANNEL_RECIPIENTS+=(""); shift 2 ;;
+        --channel-id)        CHANNEL_IDS[${#CHANNEL_IDS[@]}-1]="$2"; shift 2 ;;
+        --channel-kind)      CHANNEL_KINDS[${#CHANNEL_KINDS[@]}-1]="$2"; shift 2 ;;
+        --channel-recipient) CHANNEL_RECIPIENTS[${#CHANNEL_RECIPIENTS[@]}-1]="$2"; shift 2 ;;
+        --remove-channel)    REMOVE_CHANNELS+=("$2"); shift 2 ;;
+        --help|-h)   usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; echo "Run with --help for usage." >&2; exit 1 ;;
     esac
 done
 
@@ -143,20 +175,34 @@ if [[ -z "${AGENT_ID}" ]]; then
 fi
 
 # Validate heartbeat flags
-if [[ "${DISABLE_HEARTBEAT}" == false && -n "${HEARTBEAT_CHANNEL}${HEARTBEAT_INTERVAL_MS}${HEARTBEAT_IDLE_MS}${HEARTBEAT_PROMPT}${HEARTBEAT_TARGET}${HEARTBEAT_ACCOUNT}" ]]; then
+if [[ "${DISABLE_HEARTBEAT}" == false && -n "${HEARTBEAT_CHANNEL}${HEARTBEAT_INTERVAL_MS}${HEARTBEAT_IDLE_MS}${HEARTBEAT_PROMPT}${HEARTBEAT_TARGET}${HEARTBEAT_KIND}${HEARTBEAT_ACCOUNT}" ]]; then
     if [[ -z "${HEARTBEAT_CHANNEL}" ]]; then
         echo "Error: --heartbeat-channel is required when configuring heartbeat" >&2
         exit 1
     fi
 fi
 
-# Validate channel flag pairing: every --channel must have a --channel-id
+# Validate channel flag pairing: every --channel needs --channel-id, --channel-kind, --channel-recipient
 for i in "${!CHANNEL_NAMES[@]}"; do
     if [[ -z "${CHANNEL_IDS[$i]}" ]]; then
-        echo "Error: --channel '${CHANNEL_NAMES[$i]}' requires a matching --channel-id" >&2
+        echo "Error: --channel '${CHANNEL_NAMES[$i]}' requires a matching --channel-id (the OC channel/adapter id, e.g. discord)" >&2
+        exit 1
+    fi
+    if [[ "${CHANNEL_KINDS[$i]}" != "dm" && "${CHANNEL_KINDS[$i]}" != "channel" ]]; then
+        echo "Error: --channel '${CHANNEL_NAMES[$i]}' requires --channel-kind of 'dm' or 'channel'" >&2
+        exit 1
+    fi
+    if [[ -z "${CHANNEL_RECIPIENTS[$i]}" ]]; then
+        echo "Error: --channel '${CHANNEL_NAMES[$i]}' requires --channel-recipient (your user id for dm, the channel id for channel)" >&2
         exit 1
     fi
 done
+
+# Validate heartbeat kind if supplied
+if [[ -n "${HEARTBEAT_KIND}" && "${HEARTBEAT_KIND}" != "dm" && "${HEARTBEAT_KIND}" != "channel" ]]; then
+    echo "Error: --heartbeat-kind must be 'dm' or 'channel'" >&2
+    exit 1
+fi
 
 # Build owner_user_ids JSON array
 owner_json="["
@@ -175,7 +221,7 @@ owner_json+="]"
 HEARTBEAT_GIVEN=false
 if [[ "${DISABLE_HEARTBEAT}" == true || -n "${HEARTBEAT_CHANNEL}" || -n "${HEARTBEAT_INTERVAL_MS}" || \
       -n "${HEARTBEAT_IDLE_MS}" || -n "${HEARTBEAT_PROMPT}" || -n "${HEARTBEAT_TARGET}" || \
-      -n "${HEARTBEAT_ACCOUNT}" ]]; then
+      -n "${HEARTBEAT_KIND}" || -n "${HEARTBEAT_ACCOUNT}" ]]; then
     HEARTBEAT_GIVEN=true
 fi
 
@@ -203,22 +249,19 @@ fi
 # Build the channel add/remove lists as JSON for the Python builder
 channel_adds_json=$(python3 -c "
 import json, sys
-names   = json.loads(sys.argv[1])
-ids     = json.loads(sys.argv[2])
-targets = json.loads(sys.argv[3])
-tset    = json.loads(sys.argv[4])
+names      = json.loads(sys.argv[1])
+ids        = json.loads(sys.argv[2])
+kinds      = json.loads(sys.argv[3])
+recipients = json.loads(sys.argv[4])
 entries = []
 for i, name in enumerate(names):
-    entry = {'name': name, 'channel_id': ids[i]}
-    if tset[i]:
-        entry['target'] = targets[i]
-    entries.append(entry)
+    entries.append({'name': name, 'channel_id': ids[i], 'kind': kinds[i], 'id': recipients[i]})
 print(json.dumps(entries))
 " \
     "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "${CHANNEL_NAMES[@]+"${CHANNEL_NAMES[@]}"}")" \
     "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "${CHANNEL_IDS[@]+"${CHANNEL_IDS[@]}"}")" \
-    "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "${CHANNEL_TARGETS[@]+"${CHANNEL_TARGETS[@]}"}")" \
-    "$(python3 -c "import json,sys; print(json.dumps([bool(x) for x in sys.argv[1:]]))" "${CHANNEL_TARGET_SET[@]+"${CHANNEL_TARGET_SET[@]}"}")" \
+    "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "${CHANNEL_KINDS[@]+"${CHANNEL_KINDS[@]}"}")" \
+    "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" "${CHANNEL_RECIPIENTS[@]+"${CHANNEL_RECIPIENTS[@]}"}")" \
 2>/dev/null) || channel_adds_json="[]"
 
 channel_removes_json=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1:]))" \
@@ -242,6 +285,7 @@ ch_given       = sys.argv[11] == 'true'
 ch_current     = json.loads(sys.argv[12])
 ch_adds        = json.loads(sys.argv[13])
 ch_removes     = json.loads(sys.argv[14])
+hb_kind        = sys.argv[15] if len(sys.argv) > 15 else ''
 
 data = {'oc_agent_id': agent_id, 'owner_user_ids': owners}
 
@@ -254,6 +298,7 @@ if hb_given:
         if hb_idle:     hb['idle_threshold_ms'] = int(hb_idle)
         if hb_prompt:   hb['prompt'] = hb_prompt
         if hb_target:   hb['target'] = hb_target
+        if hb_kind:     hb['kind'] = hb_kind
         if hb_account:  hb['account_id'] = hb_account
         data['heartbeat'] = hb
 
@@ -281,7 +326,8 @@ print(json.dumps(data))
     "${CHANNELS_GIVEN}" \
     "${CHANNELS_JSON_CURRENT}" \
     "${channel_adds_json}" \
-    "${channel_removes_json}")
+    "${channel_removes_json}" \
+    "${HEARTBEAT_KIND}")
 
 echo "Linking '${CHARACTER}' → agent '${AGENT_ID}'..."
 if [[ ${#OWNER_IDS[@]} -gt 0 ]]; then

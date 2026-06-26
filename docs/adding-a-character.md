@@ -131,29 +131,49 @@ openclaw skills list --agent {agentname}
 
 A character can send messages to a channel mid-generation using the `send_message` action — for example, posting an announcement, sending a DM to a user, or reacting to something autonomously during a heartbeat.
 
-`send_message` routes by a logical channel name (e.g. `"discord"`) that you configure in `character-links.json`. The bridge looks up the matching entry, validates it, and pre-resolves the OC adapter details before the action reaches OC.
+`send_message` routes by a logical channel name (e.g. `"dm"`, `"the-pond"`) that you configure in `character-links.json`. The bridge looks up the matching entry, validates it, and pre-resolves the OC adapter details before the action reaches OC.
+
+Each channel is either a **DM** (a direct message to a user) or a **channel post** (a message into a channel). This is set per entry with a `kind` of `dm` or `channel`. The bridge turns `kind` + the recipient `id` into OpenClaw's generic target grammar — `user:<id>` for a DM, `channel:<id>` for a post — which works across Discord, Telegram, and other OpenClaw channels.
+
+### Two ids, two roles
+
+Don't confuse the two ids on a channel entry:
+
+- **`channel_id`** — *which bot/platform to send through* (the OC channel/adapter id, e.g. `discord`). The same value whether you're DMing or posting.
+- **recipient `id`** — *who/where on that platform*: your user id for a `dm`, the channel's id for a `channel`.
+
+> **Finding Discord ids:** enable **Settings → Advanced → Developer Mode**, then right-click a user (for a DM) or a channel (for a post) → **Copy ID**.
 
 ### Configure channels
 
-Use `link-character.sh` with the `--channel` flags to add channels without editing `character-links.json` directly:
+Use `link-character.sh` with the `--channel` flags to add channels without editing `character-links.json` directly. Run with `--help` to see every flag plus worked examples.
+
+DM the owner — the character can send you a direct message:
 
 ```bash
 ./scripts/link-character.sh \
   --character "Frog" \
   --agent frog \
-  --channel discord \
-  --channel-id discord-mybotname \
-  --channel-target YOUR_DISCORD_CHANNEL_ID
+  --channel dm --channel-id discord --channel-kind dm --channel-recipient YOUR_DISCORD_USER_ID
 ```
 
-Flags are repeatable — add multiple channels in one call:
+Post to a channel ("The Pond"):
 
 ```bash
 ./scripts/link-character.sh \
   --character "Frog" \
   --agent frog \
-  --channel discord --channel-id discord-mybotname --channel-target CHANNEL_ID \
-  --channel telegram --channel-id telegram-mybotname
+  --channel the-pond --channel-id discord --channel-kind channel --channel-recipient THE_POND_CHANNEL_ID
+```
+
+Flags are repeatable — give the character both at once:
+
+```bash
+./scripts/link-character.sh \
+  --character "Frog" \
+  --agent frog \
+  --channel dm       --channel-id discord --channel-kind dm      --channel-recipient YOUR_DISCORD_USER_ID \
+  --channel the-pond --channel-id discord --channel-kind channel --channel-recipient THE_POND_CHANNEL_ID
 ```
 
 Each call **merges** into the existing channel list by name — running the script twice with different `--channel` values won't clobber the first entry. To remove a channel by name:
@@ -162,25 +182,27 @@ Each call **merges** into the existing channel list by name — running the scri
 ./scripts/link-character.sh \
   --character "Frog" \
   --agent frog \
-  --remove-channel telegram
+  --remove-channel the-pond
 ```
 
 | Flag | Description |
 |---|---|
-| `--channel NAME` | Logical name the character uses in the `channel` parameter (e.g. `"discord"`, `"telegram"`) |
-| `--channel-id ID` | OC channel account ID (e.g. `"discord-mybotname"`); required when `--channel` is used |
-| `--channel-target TARGET` | Default destination for this channel — Discord channel ID, Telegram chat ID, etc. (optional) |
+| `--channel NAME` | Logical name the character uses in the `channel` parameter (e.g. `"dm"`, `"the-pond"`) |
+| `--channel-id ID` | OC channel/adapter id — which bot/platform to send through (e.g. `"discord"`); required when `--channel` is used |
+| `--channel-kind dm\|channel` | `dm` = direct-message the recipient; `channel` = post into the channel |
+| `--channel-recipient ID` | Raw recipient id: your user id for `dm`, the channel id for `channel` |
 | `--remove-channel NAME` | Remove the channel entry with this name |
 
 The underlying `channels` schema stored in `character-links.json`:
 
 | Field | Description |
 |---|---|
-| `name` | Logical label the character uses in the `channel` parameter (e.g. `"discord"`, `"telegram"`) |
-| `channel_id` | OC channel account ID — the same value used for `--heartbeat-channel` (e.g. `"discord-mybotname"`) |
-| `target` | Platform-specific default destination: Discord channel ID, Telegram chat ID, etc. |
+| `name` | Logical label the character uses in the `channel` parameter (e.g. `"dm"`, `"the-pond"`) |
+| `channel_id` | OC channel/adapter id — which bot/platform to send through (e.g. `"discord"`) |
+| `kind` | `"dm"` or `"channel"` — direct message vs channel post |
+| `id` | Raw recipient id: the user id for a `dm`, the channel id for a `channel` |
 
-A character can have multiple entries for different platforms.
+A character can have multiple entries — DM you *and* post to a channel, on one or several platforms.
 
 ### How the character uses it
 
@@ -237,7 +259,8 @@ Both triggers run inside the OC plugin's 60-second polling loop.
 | `--heartbeat-interval-ms MS` | 7200000 (2h) | Scheduled heartbeat interval |
 | `--heartbeat-idle-ms MS` | 7200000 (2h) | Idle trigger threshold; set to `0` to disable idle heartbeats |
 | `--heartbeat-prompt TEXT` | _(skill default)_ | Custom prompt sent to the character for heartbeat generation |
-| `--heartbeat-target ID` | — | Target channel or user ID within the OC channel (platform-specific) |
+| `--heartbeat-target ID` | — | Raw recipient: the channel id, or your user id when `--heartbeat-kind dm` |
+| `--heartbeat-kind dm\|channel` | channel | `dm` = the heartbeat DMs you; `channel` = posts into the channel |
 | `--heartbeat-account ID` | — | OC account ID for multi-account deployments |
 | `--disable-heartbeat` | — | Remove heartbeat config from this character |
 

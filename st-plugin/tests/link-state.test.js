@@ -101,7 +101,7 @@ describe('link-state', () => {
         const linkState = require('../link-state');
 
         const channels = [
-            { name: 'discord', channel_id: 'discord-frog', target: '111222333' },
+            { name: 'discord', channel_id: 'discord', kind: 'channel', id: '111222333' },
         ];
         const written = await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true, channels });
 
@@ -112,7 +112,7 @@ describe('link-state', () => {
     test('upsertLink without channels field preserves existing channels (#59)', async () => {
         const linkState = require('../link-state');
 
-        const channels = [{ name: 'discord', channel_id: 'discord-frog', target: '111' }];
+        const channels = [{ name: 'discord', channel_id: 'discord', kind: 'channel', id: '111' }];
         await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true, channels });
 
         await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: false });
@@ -128,7 +128,7 @@ describe('link-state', () => {
         await linkState.upsertLink('Frog', {
             oc_agent_id: 'frog',
             active: true,
-            channels: [{ name: 'discord', channel_id: 'discord-frog', target: '111' }],
+            channels: [{ name: 'discord', channel_id: 'discord', kind: 'channel', id: '111' }],
         });
 
         await linkState.upsertLink('Frog', { oc_agent_id: 'frog', channels: null });

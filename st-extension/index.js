@@ -280,13 +280,22 @@ function renderChannelRow(entry = {}) {
   const idInput = document.createElement("input");
   idInput.type = "text";
   idInput.className = "text_pole openclaw-bridge-channel-id";
-  idInput.placeholder = "channel_id (e.g. discord-frogbot)";
+  idInput.placeholder = "channel_id (the bot/platform, e.g. discord)";
   idInput.value = entry.channel_id || "";
-  const targetInput = document.createElement("input");
-  targetInput.type = "text";
-  targetInput.className = "text_pole openclaw-bridge-channel-target";
-  targetInput.placeholder = "target (optional)";
-  targetInput.value = entry.target || "";
+  const kindSelect = document.createElement("select");
+  kindSelect.className = "text_pole openclaw-bridge-channel-kind";
+  for (const opt of [["channel", "channel (post)"], ["dm", "dm (direct message)"]]) {
+    const o = document.createElement("option");
+    o.value = opt[0];
+    o.textContent = opt[1];
+    kindSelect.appendChild(o);
+  }
+  kindSelect.value = entry.kind === "dm" ? "dm" : "channel";
+  const recipientInput = document.createElement("input");
+  recipientInput.type = "text";
+  recipientInput.className = "text_pole openclaw-bridge-channel-recipient";
+  recipientInput.placeholder = "recipient id (your user id for dm, channel id for channel)";
+  recipientInput.value = entry.id || "";
   const removeButton = document.createElement("button");
   removeButton.type = "button";
   removeButton.className = "openclaw-bridge-button openclaw-bridge-button--small";
@@ -295,7 +304,7 @@ function renderChannelRow(entry = {}) {
     row.remove();
     updateChannelWarning();
   });
-  row.append(nameInput, idInput, targetInput, removeButton);
+  row.append(nameInput, idInput, kindSelect, recipientInput, removeButton);
   return row;
 }
 function ensureManagementPanel() {
@@ -358,7 +367,7 @@ function ensureManagementPanel() {
     updateChannelWarning();
   });
   const channelsHint = document.createElement("small");
-  channelsHint.textContent = "Each channel needs a name and channel_id. Target is optional.";
+  channelsHint.textContent = "Each channel: a name, the channel_id (which bot/platform, e.g. discord), a kind (dm = direct-message, channel = post), and the recipient id (your user id for dm, the channel id for channel).";
   const channelWarning = document.createElement("div");
   channelWarning.className = "openclaw-bridge-channel-warning";
   channelWarning.textContent = "No channels configured \u2014 this character can't send proactive messages. Add one below.";
@@ -473,14 +482,13 @@ async function saveLinkState() {
   for (const row of fields.channelsContainer.querySelectorAll(".openclaw-bridge-channel-row")) {
     const name = row.querySelector(".openclaw-bridge-channel-name")?.value.trim() || "";
     const channelId = row.querySelector(".openclaw-bridge-channel-id")?.value.trim() || "";
-    const target = row.querySelector(".openclaw-bridge-channel-target")?.value.trim() || "";
-    if (!name || !channelId) {
-      setManagementStatus("Each channel requires a name and channel ID.", "error");
+    const kind = row.querySelector(".openclaw-bridge-channel-kind")?.value.trim() || "";
+    const id = row.querySelector(".openclaw-bridge-channel-recipient")?.value.trim() || "";
+    if (!name || !channelId || kind !== "dm" && kind !== "channel" || !id) {
+      setManagementStatus("Each channel needs a name, channel ID, kind (dm or channel), and recipient id.", "error");
       return;
     }
-    const entry = { name, channel_id: channelId };
-    if (target) entry.target = target;
-    channels.push(entry);
+    channels.push({ name, channel_id: channelId, kind, id });
   }
   setManagementLoading(true);
   try {
