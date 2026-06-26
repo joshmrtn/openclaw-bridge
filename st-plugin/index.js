@@ -65,8 +65,8 @@ async function resolveActions(actions, link, character) {
             } catch (logErr) {
                 console.warn('[openclaw-bridge-plugin] Failed to log send_message error to history:', logErr?.message);
             }
-        } else if (!ch.channel_id || !ch.target) {
-            const errMsg = `[send_message failed]: channel '${ch.name ?? action.channel}' is missing channel_id or target for ${character}.`;
+        } else if (!ch.channel_id || (ch.kind !== 'dm' && ch.kind !== 'channel') || !ch.id) {
+            const errMsg = `[send_message failed]: channel '${ch.name ?? action.channel}' is missing channel_id, kind (dm|channel), or id for ${character}.`;
             console.warn(`[openclaw-bridge-plugin] ${errMsg}`);
             warnings.push(errMsg);
             try {
@@ -86,7 +86,14 @@ async function resolveActions(actions, link, character) {
                 console.warn('[openclaw-bridge-plugin] Failed to log missing content error to history:', logErr?.message);
             }
         } else {
-            const resolvedAction = { type: 'send_message', channel_id: ch.channel_id, target: ch.target, content: action.content };
+            // #250: build the OpenClaw target from the channel's kind + raw recipient id.
+            // The `user:`/`channel:` prefix is OpenClaw's generic cross-channel target grammar
+            // (core's stripTargetKindPrefix understands user|channel|group|conversation|room|dm),
+            // so a `dm` channel DMs the recipient and a `channel` channel posts to it. OC passes
+            // this `target` straight to the adapter's sendText — no platform-specific logic on the OC side.
+            const to = ch.kind === 'dm' ? `user:${ch.id}` : `channel:${ch.id}`;
+            const resolvedAction = { type: 'send_message', channel_id: ch.channel_id, target: to, content: action.content };
+            // A recipient override must already be a fully-formed `user:`/`channel:` target (#250).
             if (action.recipient != null) resolvedAction.recipient = action.recipient;
             resolved.push(resolvedAction);
         }
@@ -366,6 +373,17 @@ async function init(router) {
                 }
                 if (typeof ch.channel_id !== 'string' || !ch.channel_id.trim()) {
                     response.status(400).json({ error: 'each channel entry must have a non-empty channel_id' });
+                    return;
+                }
+                // #250: kind decides DM vs channel-post; id is the raw recipient (owner user id
+                // for dm, channel id for channel). resolveActions turns these into the OpenClaw
+                // target (`user:<id>` / `channel:<id>`).
+                if (ch.kind !== 'dm' && ch.kind !== 'channel') {
+                    response.status(400).json({ error: "each channel entry must have a kind of 'dm' or 'channel'" });
+                    return;
+                }
+                if (typeof ch.id !== 'string' || !ch.id.trim()) {
+                    response.status(400).json({ error: 'each channel entry must have a non-empty id (the recipient user id or channel id)' });
                     return;
                 }
             }

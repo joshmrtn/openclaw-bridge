@@ -789,3 +789,47 @@ describe('handleConfigWarning (#234)', () => {
         expect(occurrences).toBeGreaterThanOrEqual(3);
     });
 });
+
+// #250: channel read-back builds { name, channel_id, kind, id } and requires all four.
+// Pure copy of the per-row build/validation logic in the management panel save handler.
+function buildChannelEntry(name, channelId, kind, id) {
+    name = (name || '').trim();
+    channelId = (channelId || '').trim();
+    kind = (kind || '').trim();
+    id = (id || '').trim();
+    if (!name || !channelId || (kind !== 'dm' && kind !== 'channel') || !id) {
+        return { ok: false };
+    }
+    return { ok: true, entry: { name, channel_id: channelId, kind, id } };
+}
+
+describe('management panel channel read-back (#250)', () => {
+    test('builds a dm entry from name + channel_id + kind + recipient id', () => {
+        expect(buildChannelEntry('dm', 'discord', 'dm', '1509')).toEqual({
+            ok: true,
+            entry: { name: 'dm', channel_id: 'discord', kind: 'dm', id: '1509' },
+        });
+    });
+
+    test('builds a channel entry', () => {
+        expect(buildChannelEntry('the-pond', 'discord', 'channel', '4455')).toEqual({
+            ok: true,
+            entry: { name: 'the-pond', channel_id: 'discord', kind: 'channel', id: '4455' },
+        });
+    });
+
+    test('rejects a missing recipient id', () => {
+        expect(buildChannelEntry('dm', 'discord', 'dm', '')).toEqual({ ok: false });
+    });
+
+    test('rejects an invalid kind', () => {
+        expect(buildChannelEntry('dm', 'discord', 'bogus', '1509')).toEqual({ ok: false });
+    });
+
+    test('source uses the kind selector + recipient input and builds the new shape', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
+        expect(src).toContain('openclaw-bridge-channel-kind');
+        expect(src).toContain('openclaw-bridge-channel-recipient');
+        expect(src).toContain('channels.push({ name, channel_id: channelId, kind, id })');
+    });
+});

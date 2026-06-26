@@ -138,11 +138,11 @@ describe('link-character.sh round-trip', () => {
   }, 30000);
 });
 
-// ── link-character.sh --channel flags (#60) ───────────────────────────────────
-// Verifies that --channel/--channel-id/--channel-target/--remove-channel flags
-// correctly mutate the channels array in character-links.json via the plugin API.
+// ── link-character.sh --channel flags (#60, #250) ─────────────────────────────
+// Verifies that --channel/--channel-id/--channel-kind/--channel-recipient/--remove-channel
+// flags correctly mutate the channels array in character-links.json via the plugin API.
 // Uses Narrator (already linked) so we don't disturb TestBot's message-path tests.
-describe('link-character.sh --channel flags (#60)', () => {
+describe('link-character.sh --channel flags (#60, #250)', () => {
   const BASE_CMD =
     `docker exec ${SILLYTAVERN_CONTAINER} bash /repo/scripts/link-character.sh ` +
     `--character Narrator --agent default --token e2e-test-token --plugin-url http://localhost:8000`;
@@ -161,9 +161,9 @@ describe('link-character.sh --channel flags (#60)', () => {
     });
   });
 
-  test('--channel adds a channel entry to the link (#60)', async () => {
+  test('--channel adds a channel-kind entry to the link (#60, #250)', async () => {
     execSync(
-      `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-target 111222333`,
+      `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-kind channel --channel-recipient 111222333`,
       { timeout: 15000 },
     );
 
@@ -172,31 +172,33 @@ describe('link-character.sh --channel flags (#60)', () => {
     const ch = link.channels.find(c => c.name === 'discord');
     expect(ch).toBeDefined();
     expect(ch.channel_id).toBe('discord-narratorbot');
-    expect(ch.target).toBe('111222333');
+    expect(ch.kind).toBe('channel');
+    expect(ch.id).toBe('111222333');
   }, 30000);
 
-  test('--channel without --channel-target omits target field (#60)', async () => {
+  test('--channel-kind dm stores a dm entry with the recipient id (#250)', async () => {
     execSync(
-      `${BASE_CMD} --channel telegram --channel-id telegram-narratorbot`,
+      `${BASE_CMD} --channel dm --channel-id discord --channel-kind dm --channel-recipient 999888777`,
       { timeout: 15000 },
     );
 
     const link = await getNarratorLink();
-    const ch = link.channels.find(c => c.name === 'telegram');
+    const ch = link.channels.find(c => c.name === 'dm');
     expect(ch).toBeDefined();
-    expect(ch.channel_id).toBe('telegram-narratorbot');
-    expect(ch).not.toHaveProperty('target');
+    expect(ch.channel_id).toBe('discord');
+    expect(ch.kind).toBe('dm');
+    expect(ch.id).toBe('999888777');
   }, 30000);
 
   test('second --channel call merges without clobbering existing channels (#60)', async () => {
     // Add discord first.
     execSync(
-      `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-target 111`,
+      `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-kind channel --channel-recipient 111`,
       { timeout: 15000 },
     );
     // Add telegram in a separate call — should not remove discord.
     execSync(
-      `${BASE_CMD} --channel telegram --channel-id telegram-narratorbot`,
+      `${BASE_CMD} --channel telegram --channel-id telegram-narratorbot --channel-kind dm --channel-recipient 222`,
       { timeout: 15000 },
     );
 
@@ -209,8 +211,8 @@ describe('link-character.sh --channel flags (#60)', () => {
   test('--remove-channel removes a single entry without clobbering others (#60)', async () => {
     // Set up two channels.
     execSync(
-      `${BASE_CMD} --channel discord --channel-id discord-narratorbot ` +
-      `--channel telegram --channel-id telegram-narratorbot`,
+      `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-kind channel --channel-recipient 111 ` +
+      `--channel telegram --channel-id telegram-narratorbot --channel-kind dm --channel-recipient 222`,
       { timeout: 15000 },
     );
 

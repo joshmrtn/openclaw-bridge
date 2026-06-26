@@ -301,7 +301,8 @@ describe('send_message action and loop prevention (#111)', () => {
       body: JSON.stringify({
         oc_agent_id: 'default',
         owner_user_ids: [OWNER_USER_ID],
-        channels: [{ name: 'qa', channel_id: 'qa-channel', target: CHANNEL_TARGET }],
+        // #250: kind=channel + id=qa-send-test → resolveActions builds target "channel:qa-send-test".
+        channels: [{ name: 'qa', channel_id: 'qa-channel', kind: 'channel', id: 'qa-send-test' }],
       }),
     });
   });
@@ -341,6 +342,45 @@ describe('send_message action and loop prevention (#111)', () => {
     expect(r.body.actions[0].type).toBe('send_message');
     expect(r.body.actions[0].channel_id).toBe('qa-channel');
     expect(r.body.actions[0].target).toBe(CHANNEL_TARGET);
+    expect(r.body.actions[0].content).toBe(ACTION_TEXT);
+  }, 30000);
+
+  test('send_message to a dm channel resolves target to user:<id> (#250)', async () => {
+    // Reconfigure TestBot with a dm-kind channel so a send_message DMs the recipient.
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({
+        oc_agent_id: 'default',
+        owner_user_ids: [OWNER_USER_ID],
+        channels: [{ name: 'owner-dm', channel_id: 'qa-channel', kind: 'dm', id: 'owner-uid' }],
+      }),
+    });
+
+    const REPLY_TEXT = 'Sending you a DM!';
+    const ACTION_TEXT = 'A private note for the owner.';
+    await post(`${FAKE_OPENAI_URL}/scenario`, {
+      response: `${REPLY_TEXT} <action>{"type":"send_message","channel":"owner-dm","content":"${ACTION_TEXT}"}</action>`,
+    });
+
+    // FULL-PATH-EXCEPTION: qa-channel is inbound-only (no OC outbound adapter for the action's
+    // target), so send_message resolution is asserted on the /generate response directly — the
+    // same sanctioned pattern as the sibling send_message resolution tests.
+    const r = await stFetch('/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        character: 'TestBot',
+        message: 'Please DM me privately.',
+        user_id: OWNER_USER_ID,
+        channel: 'qa-channel',
+      }),
+    });
+
+    expect(r.status).toBe(200);
+    expect(r.body.response).not.toContain('<action>');
+    expect(r.body.actions).toHaveLength(1);
+    expect(r.body.actions[0].type).toBe('send_message');
+    // The key #250 assertion: a dm channel produces a user:-prefixed target (a DM), not channel:.
+    expect(r.body.actions[0].target).toBe('user:owner-uid');
     expect(r.body.actions[0].content).toBe(ACTION_TEXT);
   }, 30000);
 

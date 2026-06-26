@@ -188,7 +188,7 @@ describe('character linking', () => {
     });
 
     test('GET /characters/:name/link returns the link for a linked character (#60)', async () => {
-        const channels = [{ name: 'discord', channel_id: 'discord-testbot', target: '999' }];
+        const channels = [{ name: 'discord', channel_id: 'discord-testbot', kind: 'channel', id: '999' }];
         await stFetch('/characters/TestBot/link', {
             method: 'POST',
             body: { oc_agent_id: 'testbot-agent', owner_user_ids: [], channels },
@@ -333,9 +333,9 @@ describe('link-character.sh', () => {
         expect(narrator.active).toBe(true);
     });
 
-    test('--channel adds a channel readable via GET /characters/:name/link (#60)', async () => {
+    test('--channel adds a channel readable via GET /characters/:name/link (#60, #250)', async () => {
         execSync(
-            `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-target 42`,
+            `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-kind channel --channel-recipient 42`,
             { stdio: 'pipe' },
         );
         const res = await stFetch('/characters/Narrator/link');
@@ -344,12 +344,13 @@ describe('link-character.sh', () => {
         const ch = (data.link.channels || []).find(c => c.name === 'discord');
         expect(ch).toBeDefined();
         expect(ch.channel_id).toBe('discord-narratorbot');
-        expect(ch.target).toBe('42');
+        expect(ch.kind).toBe('channel');
+        expect(ch.id).toBe('42');
     });
 
     test('second --channel call merges without clobbering existing channels (#60)', async () => {
-        execSync(`${BASE_CMD} --channel discord --channel-id discord-narratorbot`, { stdio: 'pipe' });
-        execSync(`${BASE_CMD} --channel telegram --channel-id telegram-narratorbot`, { stdio: 'pipe' });
+        execSync(`${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-kind channel --channel-recipient 1`, { stdio: 'pipe' });
+        execSync(`${BASE_CMD} --channel telegram --channel-id telegram-narratorbot --channel-kind dm --channel-recipient 2`, { stdio: 'pipe' });
         const res = await stFetch('/characters/Narrator/link');
         const data = await res.json();
         expect(data.link.channels.find(c => c.name === 'discord')).toBeDefined();
@@ -358,8 +359,8 @@ describe('link-character.sh', () => {
 
     test('--remove-channel removes one entry and leaves others (#60)', async () => {
         execSync(
-            `${BASE_CMD} --channel discord --channel-id discord-narratorbot` +
-            ` --channel telegram --channel-id telegram-narratorbot`,
+            `${BASE_CMD} --channel discord --channel-id discord-narratorbot --channel-kind channel --channel-recipient 1` +
+            ` --channel telegram --channel-id telegram-narratorbot --channel-kind dm --channel-recipient 2`,
             { stdio: 'pipe' },
         );
         execSync(`${BASE_CMD} --remove-channel telegram`, { stdio: 'pipe' });

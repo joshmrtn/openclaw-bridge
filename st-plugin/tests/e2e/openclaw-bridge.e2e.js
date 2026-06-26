@@ -285,7 +285,7 @@ test('management panel loads saved link state into fields', async ({ page, reque
                 oc_agent_id: 'toad-agent',
                 owner_user_ids: ['discord:owner1'],
                 active: true,
-                channels: [{ name: 'discord', channel_id: 'discord-toadbot', target: '#pond' }],
+                channels: [{ name: 'discord', channel_id: 'discord-toadbot', kind: 'channel', id: 'pond-channel-id' }],
             },
         },
     );
@@ -305,10 +305,12 @@ test('management panel loads saved link state into fields', async ({ page, reque
 
     const nameVal = await page.locator('.openclaw-bridge-channel-name').first().inputValue();
     const idVal = await page.locator('.openclaw-bridge-channel-id').first().inputValue();
-    const targetVal = await page.locator('.openclaw-bridge-channel-target').first().inputValue();
+    const kindVal = await page.locator('.openclaw-bridge-channel-kind').first().inputValue();
+    const recipientVal = await page.locator('.openclaw-bridge-channel-recipient').first().inputValue();
     expect(nameVal).toBe('discord');
     expect(idVal).toBe('discord-toadbot');
-    expect(targetVal).toBe('#pond');
+    expect(kindVal).toBe('channel');
+    expect(recipientVal).toBe('pond-channel-id');
 });
 
 test('management panel save posts link and persists channel to plugin', async ({ page, request, baseURL }) => {
@@ -341,7 +343,8 @@ test('management panel save posts link and persists channel to plugin', async ({
         [...root.querySelectorAll('button')].find(b => b.textContent === 'Add channel').click();
         root.querySelector('.openclaw-bridge-channel-name').value = 'telegram';
         root.querySelector('.openclaw-bridge-channel-id').value = 'telegram-toadbot';
-        root.querySelector('.openclaw-bridge-channel-target').value = '@pond';
+        root.querySelector('.openclaw-bridge-channel-kind').value = 'channel';
+        root.querySelector('.openclaw-bridge-channel-recipient').value = 'pond-chat-id';
         [...root.querySelectorAll('button')].find(b => b.textContent === 'Save link').click();
     });
 
@@ -357,7 +360,7 @@ test('management panel save posts link and persists channel to plugin', async ({
     expect(getResponse.ok()).toBeTruthy();
     const { link } = await getResponse.json();
     expect(link?.channels).toEqual([
-        { name: 'telegram', channel_id: 'telegram-toadbot', target: '@pond' },
+        { name: 'telegram', channel_id: 'telegram-toadbot', kind: 'channel', id: 'pond-chat-id' },
     ]);
 });
 
@@ -461,5 +464,5 @@ test('management panel shows error when channel row is missing name or channel_i
     });
 
     await expect(page.locator('#openclaw-bridge-management div.openclaw-bridge-status'))
-        .toContainText('channel requires', { timeout: 3000 });
+        .toContainText('Each channel needs', { timeout: 3000 });
 });

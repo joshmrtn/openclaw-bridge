@@ -52,7 +52,8 @@ type LinkEntry = {
         interval_ms?: number;        // default 7200000 (2h)
         idle_threshold_ms?: number;  // default 7200000 (2h); 0 = disabled
         channel_id: string;          // OC channel account ID to post to
-        target?: string;             // Discord channel ID / Telegram chat ID
+        target?: string;             // raw recipient id (channel id, or owner user id when kind=dm)
+        kind?: "dm" | "channel";     // #250: dm => DM the target (user:<id>); else post (channel:<id>)
         account_id?: string;         // OC account discriminator for multi-bot setups
         prompt?: string;             // custom prompt; omit for built-in default
     };
@@ -610,7 +611,8 @@ async function runHeartbeat(
             } else {
                 await adapter.sendText({
                     cfg: api.config,
-                    to: hb.target ?? "",
+                    // #250: kind=dm DMs the owner (user:<id>); otherwise post to the channel (channel:<id>).
+                    to: buildOutboundTarget(hb.kind, hb.target),
                     text: formatOutboundText(responseText, channelId, link),
                     ...(hb.account_id ? { accountId: hb.account_id } : {}),
                 });
@@ -634,6 +636,35 @@ async function runHeartbeat(
 // Outbound action execution
 // ---------------------------------------------------------------------------
 
+/**
+ * #250: build an OpenClaw outbound target from a kind + raw recipient id.
+ * `dm` => `user:<id>` (direct message); anything else => `channel:<id>` (channel post).
+ * `user:`/`channel:` is OpenClaw's generic cross-channel target grammar (core's
+ * stripTargetKindPrefix understands user|channel|group|conversation|room|dm), so this is not
+ * Discord-specific. Idempotent: an already-prefixed id passes through unchanged. Used for the
+ * heartbeat primary message, where OC reads the heartbeat config directly (ST is not in that path).
+ */
+export function buildOutboundTarget(kind: string | undefined, id: string | undefined): string {
+    const rawId = String(id ?? "").trim();
+    if (!rawId) return "";
+    if (/^(user|channel|group|conversation|room|dm):/i.test(rawId)) return rawId;
+    return kind === "dm" ? `user:${rawId}` : `channel:${rawId}`;
+}
+
+/**
+ * #250: resolve the outbound adapter channel id + recipient target for a send_message action.
+ * Prefer the live runtime channel (`ctx.channelId` — the real inbound adapter on the reply path, or
+ * the heartbeat channel on the autonomous path) over the action's configured `channel_id`, which may
+ * be stale/misconfigured (the original #250 bug: a configured "discord-frog" matched no adapter).
+ * `to` is the already-prefixed OpenClaw target built by ST's resolveActions; an explicit recipient
+ * override (itself a fully-formed `user:`/`channel:` target) wins.
+ */
+export function resolveSendTarget(action: any, ctx: any): { channelId: string; to: string } {
+    const channelId = String(ctx?.channelId ?? action?.channel_id ?? "");
+    const to = action?.recipient ? String(action.recipient) : String(action?.target ?? "");
+    return { channelId, to };
+}
+
 async function executeCharacterActions(
     actions: any[],
     character: string,
@@ -648,13 +679,15 @@ async function executeCharacterActions(
         try {
             switch (action.type) {
                 case "send_message": {
-                    const channelId = String(action.channel_id ?? ctx.channelId);
+                    const { channelId, to } = resolveSendTarget(action, ctx);
                     const adapter = await api.runtime.channel.outbound.loadAdapter(channelId);
                     if (!adapter?.sendText) {
+                        // #250: never fail silently. A wrong/stale channel id used to hit this branch and
+                        // vanish (the original bug). Surface it so adapter mismatches are visible in the log.
+                        console.warn(`[openclaw-bridge] send_message: no outbound adapter for channel '${channelId}' — message NOT delivered`);
                         outcome = "no outbound adapter";
                         break;
                     }
-                    const to = action.recipient ? String(action.recipient) : String(action.target ?? "");
                     await adapter.sendText({
                         cfg: api.config,
                         to,

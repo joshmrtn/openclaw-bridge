@@ -743,11 +743,16 @@ describe('/generate action injection and parsing', () => {
         expect(res.body.actions).toEqual([]);
     });
 
-    describe('send_message channel resolution (#59)', () => {
-        const channels = [{ name: 'discord', channel_id: 'discord-frog', target: '111222333' }];
+    describe('send_message channel resolution (#59, #250)', () => {
+        // #250: a channel entry carries { name, channel_id (adapter), kind: dm|channel, id (raw recipient) }.
+        // resolveActions builds the OpenClaw target: dm -> `user:<id>`, channel -> `channel:<id>`.
+        const channels = [
+            { name: 'dm', channel_id: 'discord', kind: 'dm', id: '111222333' },
+            { name: 'the-pond', channel_id: 'discord', kind: 'channel', id: '444555666' },
+        ];
 
-        test('send_message with valid channel resolves to channel_id and target in pending_actions', async () => {
-            const rawResponse = 'On it! <action>{"type":"send_message","channel":"discord","content":"Hello!"}</action>';
+        test('send_message to a dm channel resolves target to user:<id> (#250)', async () => {
+            const rawResponse = 'On it! <action>{"type":"send_message","channel":"dm","content":"Hello!"}</action>';
             const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
             const appendExternalChatToHistory = jest.fn().mockResolvedValue();
             makeBaseSetup(requestGenerate, appendExternalChatToHistory);
@@ -764,12 +769,12 @@ describe('/generate action injection and parsing', () => {
             await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
 
             expect(res.body.actions).toEqual([
-                { type: 'send_message', channel_id: 'discord-frog', target: '111222333', content: 'Hello!' },
+                { type: 'send_message', channel_id: 'discord', target: 'user:111222333', content: 'Hello!' },
             ]);
         });
 
-        test('send_message with recipient resolves and includes recipient in pending_actions', async () => {
-            const rawResponse = 'Messaging you! <action>{"type":"send_message","channel":"discord","recipient":"user999","content":"DM!"}</action>';
+        test('send_message to a channel-kind channel resolves target to channel:<id> (#250)', async () => {
+            const rawResponse = 'Posting! <action>{"type":"send_message","channel":"the-pond","content":"Hello pond!"}</action>';
             const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
             const appendExternalChatToHistory = jest.fn().mockResolvedValue();
             makeBaseSetup(requestGenerate, appendExternalChatToHistory);
@@ -786,8 +791,55 @@ describe('/generate action injection and parsing', () => {
             await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
 
             expect(res.body.actions).toEqual([
-                { type: 'send_message', channel_id: 'discord-frog', target: '111222333', recipient: 'user999', content: 'DM!' },
+                { type: 'send_message', channel_id: 'discord', target: 'channel:444555666', content: 'Hello pond!' },
             ]);
+        });
+
+        test('send_message with a fully-formed recipient override passes it through as target (#250)', async () => {
+            // Per #250: an LLM-supplied recipient must be a fully-formed user:/channel: target.
+            const rawResponse = 'Messaging! <action>{"type":"send_message","channel":"dm","recipient":"user:user999","content":"DM!"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([
+                { type: 'send_message', channel_id: 'discord', target: 'user:111222333', recipient: 'user:user999', content: 'DM!' },
+            ]);
+        });
+
+        test('send_message to a channel missing kind/id is filtered and warns (#250)', async () => {
+            const malformed = [{ name: 'broken', channel_id: 'discord' }]; // no kind, no id
+            const rawResponse = 'Posting! <action>{"type":"send_message","channel":"broken","content":"Hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const appendExternalChatToHistory = jest.fn().mockResolvedValue();
+            makeBaseSetup(requestGenerate, appendExternalChatToHistory);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], channels: malformed })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).toEqual([]);
+            const sm = require('../session-manager');
+            const warningCall = sm.broadcast.mock.calls.find(([p]) => p && p.type === 'config_warning');
+            expect(warningCall).toBeDefined();
         });
 
         test('send_message with unconfigured channel is filtered from pending_actions', async () => {
@@ -835,7 +887,7 @@ describe('/generate action injection and parsing', () => {
         });
 
         test('send_message with valid channel does not broadcast a config_warning (#234)', async () => {
-            const rawResponse = 'On it! <action>{"type":"send_message","channel":"discord","content":"Hello!"}</action>';
+            const rawResponse = 'On it! <action>{"type":"send_message","channel":"dm","content":"Hello!"}</action>';
             const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
             const appendExternalChatToHistory = jest.fn().mockResolvedValue();
             makeBaseSetup(requestGenerate, appendExternalChatToHistory);
@@ -880,7 +932,8 @@ describe('/generate action injection and parsing', () => {
                 entry.mes && entry.mes.includes('send_message failed') && entry.mes.includes('telegram')
             );
             expect(errorCall).toBeDefined();
-            expect(errorCall[1].mes).toContain('discord');
+            // The error lists the configured channel names so the operator can see valid options.
+            expect(errorCall[1].mes).toContain('dm');
         });
 
         test('send_message with no channels configured is filtered and error logged', async () => {
@@ -914,7 +967,7 @@ describe('/generate action injection and parsing', () => {
         });
 
         test('heartbeat path: send_message with valid channel resolves correctly', async () => {
-            const rawResponse = 'Checking in! <action>{"type":"send_message","channel":"discord","content":"Status update"}</action>';
+            const rawResponse = 'Checking in! <action>{"type":"send_message","channel":"dm","content":"Status update"}</action>';
             const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
             const appendExternalChatToHistory = jest.fn().mockResolvedValue();
             const appendMessage = jest.fn().mockResolvedValue();
@@ -936,12 +989,12 @@ describe('/generate action injection and parsing', () => {
             await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
 
             expect(res.body.actions).toEqual([
-                { type: 'send_message', channel_id: 'discord-frog', target: '111222333', content: 'Status update' },
+                { type: 'send_message', channel_id: 'discord', target: 'user:111222333', content: 'Status update' },
             ]);
         });
 
         test('extension-provided send_message action is resolved the same as a parsed block', async () => {
-            const extensionAction = { type: 'send_message', channel: 'discord', content: 'From extension' };
+            const extensionAction = { type: 'send_message', channel: 'dm', content: 'From extension' };
             const requestGenerate = jest.fn().mockResolvedValue({ response: 'Done.', actions: [extensionAction] });
             const appendExternalChatToHistory = jest.fn().mockResolvedValue();
             makeBaseSetup(requestGenerate, appendExternalChatToHistory);
@@ -958,7 +1011,7 @@ describe('/generate action injection and parsing', () => {
             await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Go', user_id: 'discord:owner1' }), res);
 
             expect(res.body.actions).toEqual([
-                { type: 'send_message', channel_id: 'discord-frog', target: '111222333', content: 'From extension' },
+                { type: 'send_message', channel_id: 'discord', target: 'user:111222333', content: 'From extension' },
             ]);
         });
 
@@ -1058,7 +1111,7 @@ describe('/generate action injection and parsing', () => {
         });
 
         test('send_message with missing content is filtered from pending_actions and error is logged (#195)', async () => {
-            const rawResponse = 'On it! <action>{"type":"send_message","channel":"discord"}</action>';
+            const rawResponse = 'On it! <action>{"type":"send_message","channel":"dm"}</action>';
             const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
             const appendExternalChatToHistory = jest.fn().mockResolvedValue();
             const appendMessage = jest.fn().mockResolvedValue();
@@ -1087,7 +1140,7 @@ describe('/generate action injection and parsing', () => {
         });
 
         test('heartbeat path: send_message with missing content is filtered and error is logged (#195)', async () => {
-            const rawResponse = 'Checking in! <action>{"type":"send_message","channel":"discord"}</action>';
+            const rawResponse = 'Checking in! <action>{"type":"send_message","channel":"dm"}</action>';
             const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
             const appendExternalChatToHistory = jest.fn().mockResolvedValue();
             const appendMessage = jest.fn().mockResolvedValue();
