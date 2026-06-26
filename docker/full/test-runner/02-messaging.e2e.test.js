@@ -369,3 +369,73 @@ describe('chat-file integrity under load (full path)', () => {
     }
   }, 200000);
 });
+
+// ── Headless reloads chat history before each generation (#254) ──────────────
+// The headless browser must reload chat history from disk before EVERY generation,
+// not only on a character switch. ST's selectCharacterById() short-circuits its
+// internal getChat() disk reload when the character is already selected, so for
+// consecutive same-character generations (every heartbeat, every follow-up DM) the
+// headless browser's in-memory context.chat froze at the last switch and the model
+// generated from stale history — e.g. asking "did you find the cookies?" minutes
+// after being told they were found. Same root cause as #30, whose fix wrongly relied
+// on selectCharacterById always reloading. The real fix forces reloadCurrentChat().
+//
+// This needs the REAL extension in REAL headless Playwright, which only the full tier
+// runs (the fast tier's fake-extension cannot reproduce it). Proof: send msg1 carrying
+// a unique marker M1 and let it round-trip so M1 + reply land in TestBot's JSONL on
+// disk. Then send a SECOND message to the same character whose own text does NOT
+// contain M1. The second generation's prompt can only contain M1 if the headless
+// reloaded history from disk between the two generations. The headless client returns
+// early on chat_updated (handleChatUpdatedMessage), so the #235 incremental-append
+// path cannot deliver M1 — a disk reload is the only route.
+describe('headless reloads chat history before each generation (#254)', () => {
+  test('a second same-character generation sees a message appended after the first', async () => {
+    await post(`${QA_BUS_URL}/v1/reset`, {});
+    await post(`${FAKE_OPENAI_URL}/reset`, {});
+
+    const stamp = Date.now();
+    const M1 = `history-marker-${stamp}`;
+    const M2 = `followup-marker-${stamp}`;
+
+    // First exchange: text carries M1. Let it round-trip — the /generate handler writes
+    // history before returning to OC, so seeing the outbound guarantees M1 + reply1 are
+    // persisted to TestBot's JSONL on disk.
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: `first-reply-${stamp}` });
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: `dm-254-a-${stamp}`, kind: 'direct' },
+      senderId: 'freshness-user-254',
+      senderName: 'FreshnessTester',
+      text: `Please remember this code: ${M1}`,
+    });
+    await waitFor(async () => {
+      const state = await fetch(`${QA_BUS_URL}/v1/state`);
+      return (state.body.events || []).some(e => e.kind === 'outbound-message');
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'first exchange round-trip (#254)' });
+
+    // Second exchange to the SAME character. Its own text must NOT contain M1, so M1 can
+    // only reach this prompt via reloaded history — the whole point of the test.
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: `second-reply-${stamp}` });
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: `dm-254-b-${stamp}`, kind: 'direct' },
+      senderId: 'freshness-user-254',
+      senderName: 'FreshnessTester',
+      text: `And then what happened next? ${M2}`,
+    });
+
+    // Poll for the SECOND generation's prompt — identified by its own unique marker M2,
+    // which disambiguates it from gen-1's captured prompt — then assert it ALSO contains
+    // M1. M1 can only be there if history was reloaded from disk between generations.
+    // PRE-FIX: M1 absent (context.chat frozen before M1 was appended) -> red.
+    // POST-FIX: M1 present (reloadCurrentChat pulled it from the JSONL) -> green.
+    const raw = await waitFor(async () => {
+      const prompt = await fetch(`${FAKE_OPENAI_URL}/last-prompt`);
+      if (prompt.status === 200 && (prompt.body.raw || '').includes(M2)) {
+        return prompt.body.raw;
+      }
+      return null;
+    }, { timeoutMs: 90000, intervalMs: 1000, label: 'second generation prompt (#254)' });
+
+    expect(raw).toContain(M2); // sanity: this is gen-2's prompt
+    expect(raw).toContain(M1); // regression assertion: gen-2 saw gen-1's appended history
+  }, 180000);
+});
