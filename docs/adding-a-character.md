@@ -238,30 +238,41 @@ A character can post on a schedule or when a conversation goes quiet, without wa
 
 Both triggers run inside the OC plugin's 60-second polling loop.
 
+> **⚠️ Each heartbeat is a real LLM generation.** Every time a heartbeat fires it runs a full generation through your model — so it costs tokens/quota and (on paid models) money, on a recurring schedule with no user in the loop. A 5-minute interval means ~288 generations/day, per character. Pick an interval that matches how present you want the character to feel **and** what you're willing to spend; the default 2 hours is deliberately conservative. Start long, shorten only if you want more presence.
+
+### `--heartbeat-channel` is the adapter id, not a per-bot name
+
+`--heartbeat-channel` is passed straight to OpenClaw's outbound adapter, so it must be the **channel/adapter id** (e.g. `discord`) — the top-level key under `channels` in `openclaw.json` — **not** an account-suffixed name like `discord-mybotname`. Which bot account sends is a separate dimension: set it with `--heartbeat-account` (e.g. `frog`). A wrong channel id fails silently (logged as `no outbound adapter`), exactly like a mistyped `send_message` channel.
+
 ### Enable heartbeat
+
+DM the owner on a schedule (a companion checking in):
 
 ```bash
 ./scripts/link-character.sh \
   --character "Frog" \
   --agent frog \
   --owner "discord:YOUR_USER_ID" \
-  --heartbeat-channel "discord-mybotname" \
+  --heartbeat-channel discord \
+  --heartbeat-kind dm \
+  --heartbeat-target YOUR_DISCORD_USER_ID \
+  --heartbeat-account frog \
   --heartbeat-interval-ms 7200000 \
-  --heartbeat-idle-ms 7200000 \
+  --heartbeat-idle-ms 0 \
   --heartbeat-prompt "You have been quiet for a while. Reflect on what you know and share something meaningful."
 ```
 
-`--heartbeat-channel` is required when enabling heartbeat. It must be the OC channel account ID (e.g. `discord-mybotname`) — the same value shown in `openclaw.json` under `channels`.
+Or post into a channel instead — use `--heartbeat-kind channel` and a channel id for `--heartbeat-target`.
 
 | Flag | Default | Description |
 |---|---|---|
-| `--heartbeat-channel ID` | — | OC channel account ID to post to (required) |
-| `--heartbeat-interval-ms MS` | 7200000 (2h) | Scheduled heartbeat interval |
+| `--heartbeat-channel ID` | — | OC channel/adapter id to send through (e.g. `discord`); required |
+| `--heartbeat-kind dm\|channel` | channel | `dm` = the heartbeat DMs the recipient; `channel` = posts into the channel |
+| `--heartbeat-target ID` | — | Raw recipient: your user id when `kind=dm`, the channel id when `kind=channel` |
+| `--heartbeat-account ID` | — | Which bot account sends (e.g. `frog`); required when the channel has no single default account |
+| `--heartbeat-interval-ms MS` | 7200000 (2h) | Scheduled heartbeat interval (see the cost note above) |
 | `--heartbeat-idle-ms MS` | 7200000 (2h) | Idle trigger threshold; set to `0` to disable idle heartbeats |
 | `--heartbeat-prompt TEXT` | _(skill default)_ | Custom prompt sent to the character for heartbeat generation |
-| `--heartbeat-target ID` | — | Raw recipient: the channel id, or your user id when `--heartbeat-kind dm` |
-| `--heartbeat-kind dm\|channel` | channel | `dm` = the heartbeat DMs you; `channel` = posts into the channel |
-| `--heartbeat-account ID` | — | OC account ID for multi-account deployments |
 | `--disable-heartbeat` | — | Remove heartbeat config from this character |
 
 ### What heartbeat does
