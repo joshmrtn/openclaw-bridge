@@ -548,6 +548,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#-heartbeat-channel-is-the-adapter-id-not-a-per-bot-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --heartbeat-channel is the adapter id, not a per-bot name
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#enable-heartbeat" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -940,6 +951,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#-heartbeat-channel-is-the-adapter-id-not-a-per-bot-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --heartbeat-channel is the adapter id, not a per-bot name
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#enable-heartbeat" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1280,17 +1302,26 @@
 <li><strong>Idle</strong>: fires once when no messages have arrived for <code>idle_threshold_ms</code> milliseconds (default: 2 hours), then resets after the next incoming message</li>
 </ul>
 <p>Both triggers run inside the OC plugin's 60-second polling loop.</p>
+<blockquote>
+<p><strong>⚠️ Each heartbeat is a real LLM generation.</strong> Every time a heartbeat fires it runs a full generation through your model — so it costs tokens/quota and (on paid models) money, on a recurring schedule with no user in the loop. A 5-minute interval means ~288 generations/day, per character. Pick an interval that matches how present you want the character to feel <strong>and</strong> what you're willing to spend; the default 2 hours is deliberately conservative. Start long, shorten only if you want more presence.</p>
+</blockquote>
+<h3 id="-heartbeat-channel-is-the-adapter-id-not-a-per-bot-name"><code>--heartbeat-channel</code> is the adapter id, not a per-bot name<a class="headerlink" href="#-heartbeat-channel-is-the-adapter-id-not-a-per-bot-name" title="Permanent link">&para;</a></h3>
+<p><code>--heartbeat-channel</code> is passed straight to OpenClaw's outbound adapter, so it must be the <strong>channel/adapter id</strong> (e.g. <code>discord</code>) — the top-level key under <code>channels</code> in <code>openclaw.json</code> — <strong>not</strong> an account-suffixed name like <code>discord-mybotname</code>. Which bot account sends is a separate dimension: set it with <code>--heartbeat-account</code> (e.g. <code>frog</code>). A wrong channel id fails silently (logged as <code>no outbound adapter</code>), exactly like a mistyped <code>send_message</code> channel.</p>
 <h3 id="enable-heartbeat">Enable heartbeat<a class="headerlink" href="#enable-heartbeat" title="Permanent link">&para;</a></h3>
+<p>DM the owner on a schedule (a companion checking in):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>./scripts/link-character.sh<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>--character<span class="w"> </span><span class="s2">&quot;Frog&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>--agent<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span>--owner<span class="w"> </span><span class="s2">&quot;discord:YOUR_USER_ID&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span>--heartbeat-channel<span class="w"> </span><span class="s2">&quot;discord-mybotname&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">  </span>--heartbeat-interval-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">  </span>--heartbeat-idle-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">  </span>--heartbeat-prompt<span class="w"> </span><span class="s2">&quot;You have been quiet for a while. Reflect on what you know and share something meaningful.&quot;</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span>--heartbeat-channel<span class="w"> </span>discord<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">  </span>--heartbeat-kind<span class="w"> </span>dm<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">  </span>--heartbeat-target<span class="w"> </span>YOUR_DISCORD_USER_ID<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">  </span>--heartbeat-account<span class="w"> </span>frog<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">  </span>--heartbeat-interval-ms<span class="w"> </span><span class="m">7200000</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">  </span>--heartbeat-idle-ms<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">  </span>--heartbeat-prompt<span class="w"> </span><span class="s2">&quot;You have been quiet for a while. Reflect on what you know and share something meaningful.&quot;</span>
 </code></pre></div>
-<p><code>--heartbeat-channel</code> is required when enabling heartbeat. It must be the OC channel account ID (e.g. <code>discord-mybotname</code>) — the same value shown in <code>openclaw.json</code> under <code>channels</code>.</p>
+<p>Or post into a channel instead — use <code>--heartbeat-kind channel</code> and a channel id for <code>--heartbeat-target</code>.</p>
 <table>
 <thead>
 <tr>
@@ -1303,12 +1334,27 @@
 <tr>
 <td><code>--heartbeat-channel ID</code></td>
 <td>—</td>
-<td>OC channel account ID to post to (required)</td>
+<td>OC channel/adapter id to send through (e.g. <code>discord</code>); required</td>
+</tr>
+<tr>
+<td><code>--heartbeat-kind dm\|channel</code></td>
+<td>channel</td>
+<td><code>dm</code> = the heartbeat DMs the recipient; <code>channel</code> = posts into the channel</td>
+</tr>
+<tr>
+<td><code>--heartbeat-target ID</code></td>
+<td>—</td>
+<td>Raw recipient: your user id when <code>kind=dm</code>, the channel id when <code>kind=channel</code></td>
+</tr>
+<tr>
+<td><code>--heartbeat-account ID</code></td>
+<td>—</td>
+<td>Which bot account sends (e.g. <code>frog</code>); required when the channel has no single default account</td>
 </tr>
 <tr>
 <td><code>--heartbeat-interval-ms MS</code></td>
 <td>7200000 (2h)</td>
-<td>Scheduled heartbeat interval</td>
+<td>Scheduled heartbeat interval (see the cost note above)</td>
 </tr>
 <tr>
 <td><code>--heartbeat-idle-ms MS</code></td>
@@ -1319,21 +1365,6 @@
 <td><code>--heartbeat-prompt TEXT</code></td>
 <td><em>(skill default)</em></td>
 <td>Custom prompt sent to the character for heartbeat generation</td>
-</tr>
-<tr>
-<td><code>--heartbeat-target ID</code></td>
-<td>—</td>
-<td>Raw recipient: the channel id, or your user id when <code>--heartbeat-kind dm</code></td>
-</tr>
-<tr>
-<td><code>--heartbeat-kind dm\|channel</code></td>
-<td>channel</td>
-<td><code>dm</code> = the heartbeat DMs you; <code>channel</code> = posts into the channel</td>
-</tr>
-<tr>
-<td><code>--heartbeat-account ID</code></td>
-<td>—</td>
-<td>OC account ID for multi-account deployments</td>
 </tr>
 <tr>
 <td><code>--disable-heartbeat</code></td>
