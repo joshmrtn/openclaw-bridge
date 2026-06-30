@@ -42,6 +42,38 @@ describe('link-state', () => {
         });
     });
 
+    test('persists and returns a per-character tools allowlist (#264)', async () => {
+        const linkState = require('../link-state');
+
+        const written = await linkState.upsertLink('Frog', {
+            oc_agent_id: 'frog',
+            active: true,
+            tools: { write_memory: false },
+        });
+
+        expect(written.tools).toEqual({ write_memory: false });
+        expect(linkState.getLink('Frog').tools).toEqual({ write_memory: false });
+    });
+
+    test('tools:null clears the allowlist (#264)', async () => {
+        const linkState = require('../link-state');
+
+        await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true, tools: { write_memory: false } });
+        const cleared = await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true, tools: null });
+
+        expect(cleared.tools).toBeUndefined();
+        expect(linkState.getLink('Frog').tools).toBeUndefined();
+    });
+
+    test('omitting tools preserves the existing allowlist (#264)', async () => {
+        const linkState = require('../link-state');
+
+        await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: true, tools: { write_memory: false } });
+        const updated = await linkState.upsertLink('Frog', { oc_agent_id: 'frog', active: false });
+
+        expect(updated.tools).toEqual({ write_memory: false });
+    });
+
     test('remove deletes existing links', async () => {
         const linkState = require('../link-state');
 

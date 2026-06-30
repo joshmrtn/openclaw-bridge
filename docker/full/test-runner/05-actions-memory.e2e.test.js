@@ -577,6 +577,64 @@ describe('send_message action and loop prevention (#111)', () => {
   }, 120000);
 });
 
+// ── #264: per-character tool allowlist ───────────────────────────────────────
+// A tool disabled in the character's link must NOT be injected into the prompt.
+// Driven through the REAL qa-bus path and asserted on fake-openai's verbatim
+// captured prompt — the same sanctioned /last-prompt style as the #234 channel-list
+// test, not a direct /generate call.
+describe('per-character tool allowlist (#264)', () => {
+  const OWNER_SENDER_ID = 'allowlist-owner';
+  const OWNER_USER_ID = 'qa:allowlist-owner';
+
+  beforeEach(async () => {
+    await post(`${QA_BUS_URL}/v1/reset`, {});
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({
+        oc_agent_id: 'default',
+        owner_user_ids: [OWNER_USER_ID],
+        tools: { write_memory: false },
+      }),
+    });
+  });
+
+  afterEach(async () => {
+    // Clear the allowlist so subsequent tests see the default (all tools enabled).
+    await stFetch('/characters/TestBot/link', {
+      method: 'POST',
+      body: JSON.stringify({ oc_agent_id: 'default', owner_user_ids: [OWNER_USER_ID], tools: null }),
+    });
+  });
+
+  test('a disabled tool is absent from the injected prompt while others remain', async () => {
+    await post(`${FAKE_OPENAI_URL}/reset`, {});
+    const sentinel = `allowlist-264-${Date.now()}`;
+    await post(`${FAKE_OPENAI_URL}/scenario`, { response: sentinel });
+    const marker = `Allowlist test ${sentinel}`;
+    await post(`${QA_BUS_URL}/v1/inbound/message`, {
+      conversation: { id: `dm-allow-${Date.now()}`, kind: 'direct' },
+      senderId: OWNER_SENDER_ID,
+      senderName: 'Allowlist Tester',
+      text: marker,
+    });
+
+    const raw = await waitFor(async () => {
+      const prompt = await fetch(`${FAKE_OPENAI_URL}/last-prompt`);
+      if (prompt.status === 200 && (prompt.body.raw || '').includes(marker)) {
+        return prompt.body.raw;
+      }
+      return null;
+    }, { timeoutMs: 60000, intervalMs: 1000, label: 'captured prompt for tool allowlist' });
+
+    // write_memory is disabled for TestBot → its tool block must be gone. Assert on the
+    // block header ("<type> — <description>"), which only ever comes from the prompt
+    // injection — so a stray mention of the word elsewhere (chat history, card) can't mask it.
+    expect(raw).not.toContain('write_memory —');
+    // …while other tools are unaffected.
+    expect(raw).toContain('send_message —');
+  }, 90000);
+});
+
 // ── R11: memory write on OC path ─────────────────────────────────────────────
 // Proves the full pipeline: OC message in → fake-openai returns response with a
 // write_memory <action> block → plugin parses/strips the block and writes the

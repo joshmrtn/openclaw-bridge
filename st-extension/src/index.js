@@ -371,6 +371,32 @@ function ensureManagementPanel() {
     channelWarning.style.display = 'none';
     channelsField.append(channelsLabel, channelsContainer, addChannelButton, channelsHint, channelWarning);
 
+    // #264: per-character tool allowlist — one checkbox per tool, derived from the shared
+    // tool defs so the panel stays in sync. Default-ticked; untick to disable a tool for this
+    // character (e.g. write_memory for users who manage memory with their own lorebook).
+    const toolsField = document.createElement('div');
+    toolsField.className = 'openclaw-bridge-field';
+    const toolsLabel = document.createElement('label');
+    toolsLabel.textContent = 'Tools';
+    const toolsContainer = document.createElement('div');
+    toolsContainer.className = 'openclaw-bridge-tools';
+    for (const def of [...ACTION_TOOL_DEFS, ...ST_SIDE_TOOL_DEFS]) {
+        const row = document.createElement('label');
+        row.className = 'openclaw-bridge-tool-row';
+        const toggle = document.createElement('input');
+        toggle.type = 'checkbox';
+        toggle.className = 'openclaw-bridge-tool-toggle';
+        toggle.dataset.tool = def.type;
+        toggle.checked = true;
+        const toggleText = document.createElement('span');
+        toggleText.textContent = def.displayName || def.type;
+        row.append(toggle, toggleText);
+        toolsContainer.append(row);
+    }
+    const toolsHint = document.createElement('small');
+    toolsHint.textContent = 'Untick a tool to stop this character from using it (e.g. disable Write Memory if you manage memory with your own lorebook).';
+    toolsField.append(toolsLabel, toolsContainer, toolsHint);
+
     const actions = document.createElement('div');
     actions.className = 'openclaw-bridge-actions';
     const saveButton = document.createElement('button');
@@ -391,7 +417,7 @@ function ensureManagementPanel() {
     authNote.className = 'openclaw-bridge-status is-muted';
     authNote.textContent = 'Uses current SillyTavern session for auth.';
 
-    body.append(agentField, ownerField, channelsField, actions, authNote, status);
+    body.append(agentField, ownerField, channelsField, toolsField, actions, authNote, status);
     root.append(header, body);
     container.append(root);
 
@@ -403,6 +429,7 @@ function ensureManagementPanel() {
         ownerIdsInput,
         channelsContainer,
         channelWarning,
+        toolsContainer,
         saveButton,
         testButton,
     };
@@ -421,6 +448,30 @@ function ensureManagementPanel() {
     });
 
     return root;
+}
+
+// #264: per-character tool allowlist. Default-ON: a checkbox is ticked unless the link
+// explicitly disabled that tool. Mirrors the server-side isToolEnabled semantics.
+function toolEnabledForUi(link, type) {
+    return !(link && link.tools && link.tools[type] === false);
+}
+
+// Read the panel's tool checkboxes into a flat { type: boolean } map for the save body.
+function collectToolToggles(toggleEls) {
+    const tools = {};
+    for (const el of toggleEls) {
+        const type = el && el.dataset && el.dataset.tool;
+        if (type) tools[type] = Boolean(el.checked);
+    }
+    return tools;
+}
+
+// Apply a link's allowlist to the panel checkboxes (all ticked when link is null/unset).
+function applyToolTogglesToPanel(container, link) {
+    if (!container) return;
+    for (const el of container.querySelectorAll('.openclaw-bridge-tool-toggle')) {
+        el.checked = toolEnabledForUi(link, el.dataset.tool);
+    }
 }
 
 async function loadLinkState(characterName) {
@@ -444,6 +495,7 @@ async function loadLinkState(characterName) {
             fields.ownerIdsInput.value = '';
             fields.toggleInput.checked = false;
             fields.channelsContainer.replaceChildren();
+            applyToolTogglesToPanel(fields.toolsContainer, null);
             setManagementStatus('Not linked yet.', 'muted');
             return;
         }
@@ -464,12 +516,14 @@ async function loadLinkState(characterName) {
             fields.channelsContainer.replaceChildren(
                 ...( Array.isArray(link.channels) ? link.channels : [] ).map(renderChannelRow)
             );
+            applyToolTogglesToPanel(fields.toolsContainer, link);
             setManagementStatus(`Linked as ${link.oc_agent_id || 'unknown'}.`, 'success');
         } else {
             fields.ocAgentInput.value = '';
             fields.ownerIdsInput.value = '';
             fields.toggleInput.checked = false;
             fields.channelsContainer.replaceChildren();
+            applyToolTogglesToPanel(fields.toolsContainer, null);
             setManagementStatus('Not linked yet.', 'muted');
         }
     } catch (error) {
@@ -512,6 +566,10 @@ async function saveLinkState() {
         channels.push({ name, channel_id: channelId, kind, id });
     }
 
+    const tools = collectToolToggles(
+        Array.from(fields.toolsContainer ? fields.toolsContainer.querySelectorAll('.openclaw-bridge-tool-toggle') : []),
+    );
+
     setManagementLoading(true);
     try {
         const response = await fetch(`/api/plugins/openclaw-bridge/characters/${encodeURIComponent(characterName)}/link`, {
@@ -522,6 +580,7 @@ async function saveLinkState() {
                 owner_user_ids: ownerIds,
                 active: Boolean(fields.toggleInput.checked),
                 channels,
+                tools,
             }),
         });
 

@@ -51,6 +51,14 @@ function buildActionPrompt(tools, options = {}) {
 
 const ST_SIDE_TOOLS = _toOcPathFormat(ST_SIDE_TOOL_DEFS);
 
+// Per-character tool allowlist (#264). Default-ON: a tool is enabled unless the character's
+// link explicitly sets `tools[type] === false`. Absent field / absent key ⇒ enabled, so existing
+// links (no `tools`) keep every tool and need no migration. Used to gate BOTH prompt injection
+// and server-side execution so a disabled tool can't be smuggled in via the response text.
+function isToolEnabled(link, type) {
+    return link?.tools?.[type] !== false;
+}
+
 const ACTION_BLOCK_RE = /<action>([\s\S]*?)<\/action>/g;
 
 function parseActionBlocks(text) {
@@ -71,4 +79,4 @@ function parseActionBlocks(text) {
     return { actions, text: cleanText };
 }
 
-module.exports = { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks };
+module.exports = { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks, isToolEnabled };

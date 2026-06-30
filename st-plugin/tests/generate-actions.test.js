@@ -76,6 +76,7 @@ describe('/generate action injection and parsing', () => {
             ST_SIDE_TOOLS: [],
             buildActionPrompt: jest.fn(() => ACTION_PROMPT_SENTINEL),
             parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+            isToolEnabled: jest.requireActual('../action-tools').isToolEnabled,
         }));
     }
 
@@ -317,6 +318,7 @@ describe('/generate action injection and parsing', () => {
             ST_SIDE_TOOLS: [{ type: 'write_memory', description: 'test', parameters: [] }],
             buildActionPrompt: jest.fn((tools) => { capturedArgs.push(tools); return ACTION_PROMPT_SENTINEL; }),
             parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+            isToolEnabled: jest.requireActual('../action-tools').isToolEnabled,
         }));
         jest.doMock('../link-state', () => ({
             getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'] })),
@@ -346,6 +348,7 @@ describe('/generate action injection and parsing', () => {
             ST_SIDE_TOOLS: [{ type: 'write_memory', description: 'test', parameters: [] }],
             buildActionPrompt: jest.fn((tools) => { capturedArgs.push(tools); return ACTION_PROMPT_SENTINEL; }),
             parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+            isToolEnabled: jest.requireActual('../action-tools').isToolEnabled,
         }));
         jest.doMock('../chat-history', () => {
             const actual = jest.requireActual('../chat-history');
@@ -377,6 +380,7 @@ describe('/generate action injection and parsing', () => {
                 ST_SIDE_TOOLS: [],
                 buildActionPrompt: jest.fn((tools, options) => { capturedOptions.push(options); return ACTION_PROMPT_SENTINEL; }),
                 parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+                isToolEnabled: jest.requireActual('../action-tools').isToolEnabled,
             }));
             jest.doMock('../chat-history', () => {
                 const actual = jest.requireActual('../chat-history');
@@ -473,6 +477,94 @@ describe('/generate action injection and parsing', () => {
         }));
     });
 
+    describe('per-character tool allowlist (#264)', () => {
+        test('disabled tool is filtered out of the injected prompt (main path)', async () => {
+            const capturedArgs = [];
+            const requestGenerate = jest.fn().mockResolvedValue({ response: 'Ribbit!', actions: [] });
+            makeBaseSetup(requestGenerate, jest.fn().mockResolvedValue());
+            jest.doMock('../action-tools', () => ({
+                ACTION_TOOLS: [{ type: 'discord_post', description: 'test', parameters: [] }],
+                ST_SIDE_TOOLS: [{ type: 'write_memory', description: 'test', parameters: [] }],
+                buildActionPrompt: jest.fn((tools) => { capturedArgs.push(tools); return ACTION_PROMPT_SENTINEL; }),
+                parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+                isToolEnabled: jest.requireActual('../action-tools').isToolEnabled,
+            }));
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], tools: { write_memory: false } })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+            const handler = router.postHandlers.get('/generate');
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Hi', user_id: 'discord:owner1' }), makeRes());
+
+            const allTypes = capturedArgs[0].map(t => t.type);
+            expect(allTypes).toContain('discord_post');
+            expect(allTypes).not.toContain('write_memory');
+        });
+
+        test('disabled write_memory is not executed even if emitted (main path)', async () => {
+            const rawResponse = 'Sure.<action>{"type":"write_memory","entry_key":"core_facts","content":"x","tier":1}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const upsertMemoryEntry = jest.fn();
+            makeRoutingSetup(requestGenerate, jest.fn().mockResolvedValue(), upsertMemoryEntry);
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], tools: { write_memory: false } })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Remember', user_id: 'discord:owner1' }), res);
+
+            expect(upsertMemoryEntry).not.toHaveBeenCalled();
+        });
+
+        test('disabled OC action is dropped from pending_actions even if emitted (main path)', async () => {
+            const rawResponse = 'Posting.<action>{"type":"discord_post","channel_id":"c","content":"hi"}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            makeRoutingSetup(requestGenerate, jest.fn().mockResolvedValue(), jest.fn());
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ owner_user_ids: ['discord:owner1'], tools: { discord_post: false } })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'Post', user_id: 'discord:owner1' }), res);
+
+            expect(res.body.actions).not.toContainEqual(expect.objectContaining({ type: 'discord_post' }));
+        });
+
+        test('disabled write_memory is not executed on the heartbeat path', async () => {
+            const rawResponse = 'Heartbeat.<action>{"type":"write_memory","entry_key":"hb","content":"x","tier":1}</action>';
+            const requestGenerate = jest.fn().mockResolvedValue({ response: rawResponse, actions: [] });
+            const upsertMemoryEntry = jest.fn();
+            makeRoutingSetup(requestGenerate, jest.fn().mockResolvedValue(), upsertMemoryEntry);
+            jest.doMock('../chat-history', () => {
+                const actual = jest.requireActual('../chat-history');
+                return { ...actual, appendExternalChatToHistory: jest.fn().mockResolvedValue(), appendMessage: jest.fn().mockResolvedValue() };
+            });
+            jest.doMock('../link-state', () => ({
+                getLink: jest.fn(() => ({ tools: { write_memory: false } })),
+            }));
+
+            const plugin = require('..');
+            const router = makeRouter();
+            await plugin.init(router);
+            const handler = router.postHandlers.get('/generate');
+            const res = makeRes();
+            await callRoute(router, handler, makeReq({ character: 'Frog', message: 'heartbeat', is_heartbeat: true }), res);
+
+            expect(upsertMemoryEntry).not.toHaveBeenCalled();
+        });
+    });
+
     function makeRoutingSetup(requestGenerate, appendExternalChatToHistory, upsertMemoryEntry) {
         makeBaseSetup(requestGenerate, appendExternalChatToHistory);
         jest.doMock('../action-tools', () => ({
@@ -480,6 +572,7 @@ describe('/generate action injection and parsing', () => {
             ST_SIDE_TOOLS: [{ type: 'write_memory', description: 'test', parameters: [] }],
             buildActionPrompt: jest.fn(() => ACTION_PROMPT_SENTINEL),
             parseActionBlocks: jest.requireActual('../action-tools').parseActionBlocks,
+            isToolEnabled: jest.requireActual('../action-tools').isToolEnabled,
         }));
         jest.doMock('../lorebook', () => ({ upsertMemoryEntry }));
     }

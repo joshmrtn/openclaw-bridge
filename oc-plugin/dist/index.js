@@ -1,6 +1,6 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -517,9 +517,42 @@ export function resolveSendTarget(action, ctx) {
     const to = action?.recipient ? String(action.recipient) : String(action?.target ?? "");
     return { channelId, to };
 }
+// Shared workspace path resolver + reader for the file tools (file_write / read_file).
+// Single source of truth for the sandbox so the two tools can't drift apart (#265).
+// `workspaceRoot` is passed in (not derived from homedir here) so it stays pure + unit-testable.
+export function resolveWorkspacePath(workspaceRoot, relPath) {
+    const target = resolve(workspaceRoot, String(relPath ?? ""));
+    const escaped = !target.startsWith(workspaceRoot + "/") && target !== workspaceRoot;
+    return { target, escaped };
+}
+// Read a workspace file for read_file (#265). Returns an outcome label plus the (possibly
+// truncated) content. Never throws on the expected cases (escape / missing) so a bad read
+// surfaces as a visible outcome instead of crashing action execution.
+export async function readWorkspaceFile(workspaceRoot, relPath, maxChars = 4000) {
+    const { target, escaped } = resolveWorkspacePath(workspaceRoot, relPath);
+    if (escaped) {
+        console.warn(`[openclaw-bridge] read_file blocked: path escapes workspace (${target})`);
+        return { outcome: "blocked", content: null };
+    }
+    try {
+        const raw = await readFile(target, "utf8");
+        const content = raw.length > maxChars ? `${raw.slice(0, maxChars)}\n…(truncated)` : raw;
+        return { outcome: "read", content };
+    }
+    catch (err) {
+        if (err?.code === "ENOENT")
+            return { outcome: "not found", content: null };
+        throw err;
+    }
+}
 async function executeCharacterActions(actions, character, token, api, ctx, linkEntry) {
     for (const action of actions) {
         let outcome = "ok";
+        // read_file surfaces the file content back to the model via the chat-history log entry
+        // below. The OC path is single-shot (Generate('quiet') has no tool-use loop) and the
+        // workspace is OC-host-local, so the content can't return into the same turn — it lands
+        // in history and the next generation picks it up (#265).
+        let readContent = null;
         try {
             switch (action.type) {
                 case "send_message": {
@@ -543,8 +576,8 @@ async function executeCharacterActions(actions, character, token, api, ctx, link
                 }
                 case "file_write": {
                     const workspace = resolve(homedir(), ".openclaw", "characters", character, "workspace");
-                    const target = resolve(workspace, String(action.path ?? ""));
-                    if (!target.startsWith(workspace + "/") && target !== workspace) {
+                    const { target, escaped } = resolveWorkspacePath(workspace, String(action.path ?? ""));
+                    if (escaped) {
                         console.warn(`[openclaw-bridge] file_write blocked: path escapes workspace (${target})`);
                         outcome = "blocked";
                         break;
@@ -552,6 +585,13 @@ async function executeCharacterActions(actions, character, token, api, ctx, link
                     await mkdir(resolve(target, ".."), { recursive: true });
                     await writeFile(target, String(action.content ?? ""), "utf8");
                     outcome = "written";
+                    break;
+                }
+                case "read_file": {
+                    const workspace = resolve(homedir(), ".openclaw", "characters", character, "workspace");
+                    const read = await readWorkspaceFile(workspace, String(action.path ?? ""));
+                    outcome = read.outcome;
+                    readContent = read.content;
                     break;
                 }
                 default:
@@ -563,11 +603,16 @@ async function executeCharacterActions(actions, character, token, api, ctx, link
             console.error(`[openclaw-bridge] Action execution failed (${action.type}): ${err.message}`);
             outcome = `error: ${err.message}`;
         }
-        // R5.5: confirm action outcome back to ST chat history
+        // R5.5: confirm action outcome back to ST chat history.
+        // For read_file the content IS the payload — write it in full(-ish) so the next
+        // generation can read it back (#265); other tools just note a short content preview.
+        const detail = readContent != null
+            ? ` →\n${readContent}`
+            : (action.content ? `: ${String(action.content).substring(0, 200)}` : "");
         try {
             await postJson(`${ST_BASE}/api/plugins/openclaw-bridge/log-action`, token, {
                 character,
-                action_description: `${action.type} (${outcome})${action.content ? `: ${String(action.content).substring(0, 200)}` : ""}`,
+                action_description: `${action.type} (${outcome})${detail}`,
             });
         }
         catch (logErr) {

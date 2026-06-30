@@ -166,3 +166,18 @@
     background: rgba(200, 40, 40, 0.25);
     border: 1px solid #ff9b9b;
 }
+
+.openclaw-bridge-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 4px 0;
+}
+
+.openclaw-bridge-tool-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    cursor: pointer;
+}

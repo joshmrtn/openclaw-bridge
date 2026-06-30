@@ -354,6 +354,61 @@ describe('plugin routes', () => {
         expect(res.body).toEqual({ character: 'Frog', removed: true });
     });
 
+    test('POST /characters/:name/link rejects a non-object tools field (#264)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        const upsertLink = jest.fn();
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', tools: ['write_memory'] },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/tools/i);
+        expect(upsertLink).not.toHaveBeenCalled();
+    });
+
+    test('POST /characters/:name/link saves a valid tools allowlist (#264)', async () => {
+        const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
+        jest.doMock('../ws-server', () => mockWsServer);
+        jest.doMock('../character-loader', () => ({
+            listCharacters: jest.fn().mockResolvedValue([{ name: 'Frog' }]),
+        }));
+        const upsertLink = jest.fn(() => ({ oc_agent_id: 'frog', active: true, owner_user_ids: [], tools: { write_memory: false } }));
+        jest.doMock('../link-state', () => ({ getLink: jest.fn(() => null), upsertLink }));
+
+        const plugin = require('..');
+        const router = makeRouter();
+        await plugin.init(router);
+
+        const handler = router.postHandlers.get('/characters/:name/link');
+        const res = makeRes();
+        const req = {
+            get(header) { return header.toLowerCase() === 'authorization' ? 'Bearer token' : ''; },
+            params: { name: 'Frog' },
+            body: { oc_agent_id: 'frog', tools: { write_memory: false } },
+        };
+
+        await callRoute(router, handler, req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(upsertLink).toHaveBeenCalledWith('Frog', expect.objectContaining({ tools: { write_memory: false } }));
+    });
+
     test('DELETE /characters/:name/link returns 404 when missing', async () => {
         const mockWsServer = { startWebSocketServer: jest.fn(() => ({ server: {}, close: async () => { } })) };
         jest.doMock('../ws-server', () => mockWsServer);

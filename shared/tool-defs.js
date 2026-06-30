@@ -23,10 +23,22 @@ const ACTION_TOOL_DEFS = [
     {
         type: 'file_write',
         displayName: 'Write File',
-        description: "Write content to a file in the character's OC workspace.",
+        description: "Save freeform text to a file in your private workspace — journals, notes, drafts, " +
+            "longer writing. Files are NOT injected into your prompt, so they don't bloat your context. " +
+            "Use this (not write_memory) for diary or journal entries. Read them back later with read_file.",
         parameters: [
             { name: 'path', type: 'string', description: 'Relative file path within the workspace.', required: true },
             { name: 'content', type: 'string', description: 'The text content to write.', required: true },
+        ],
+    },
+    {
+        type: 'read_file',
+        displayName: 'Read File',
+        description: "Read back a file you previously saved with file_write (journals, notes, drafts). " +
+            "The file content is added to your context on your NEXT message, not immediately — so reach for " +
+            "it a turn before you need it, e.g. \"let me check my notes\".",
+        parameters: [
+            { name: 'path', type: 'string', description: 'Relative file path within the workspace to read.', required: true },
         ],
     },
 ];
@@ -35,9 +47,10 @@ const ST_SIDE_TOOL_DEFS = [
     {
         type: 'write_memory',
         displayName: 'Write Memory',
-        description: "Write or update a persistent memory entry in this character's lorebook. " +
-            'Use entry_key="core_facts" for the always-active Tier 1 memory (injected every generation — keep it concise). ' +
-            'Use a descriptive key for Tier 2 episode memories that fire on keywords. ' +
+        description: "Store a SHORT, durable fact you must always recall (the user's name, key preferences). " +
+            'Use entry_key="core_facts" for the always-active Tier 1 memory — it is injected into EVERY ' +
+            'message, so keep it tiny. Use a descriptive key for Tier 2 episode memories that fire on keywords. ' +
+            'Do NOT use this for journaling or long notes — use file_write for those. ' +
             'Updates the existing entry in place; never creates duplicates.',
         parameters: [
             { name: 'entry_key', type: 'string', description: 'Unique identifier for this memory, e.g. "core_facts" or "conversation_bridge_project".', required: true },

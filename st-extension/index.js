@@ -46,10 +46,18 @@ var require_tool_defs = __commonJS({
       {
         type: "file_write",
         displayName: "Write File",
-        description: "Write content to a file in the character's OC workspace.",
+        description: "Save freeform text to a file in your private workspace \u2014 journals, notes, drafts, longer writing. Files are NOT injected into your prompt, so they don't bloat your context. Use this (not write_memory) for diary or journal entries. Read them back later with read_file.",
         parameters: [
           { name: "path", type: "string", description: "Relative file path within the workspace.", required: true },
           { name: "content", type: "string", description: "The text content to write.", required: true }
+        ]
+      },
+      {
+        type: "read_file",
+        displayName: "Read File",
+        description: 'Read back a file you previously saved with file_write (journals, notes, drafts). The file content is added to your context on your NEXT message, not immediately \u2014 so reach for it a turn before you need it, e.g. "let me check my notes".',
+        parameters: [
+          { name: "path", type: "string", description: "Relative file path within the workspace to read.", required: true }
         ]
       }
     ];
@@ -57,7 +65,7 @@ var require_tool_defs = __commonJS({
       {
         type: "write_memory",
         displayName: "Write Memory",
-        description: `Write or update a persistent memory entry in this character's lorebook. Use entry_key="core_facts" for the always-active Tier 1 memory (injected every generation \u2014 keep it concise). Use a descriptive key for Tier 2 episode memories that fire on keywords. Updates the existing entry in place; never creates duplicates.`,
+        description: `Store a SHORT, durable fact you must always recall (the user's name, key preferences). Use entry_key="core_facts" for the always-active Tier 1 memory \u2014 it is injected into EVERY message, so keep it tiny. Use a descriptive key for Tier 2 episode memories that fire on keywords. Do NOT use this for journaling or long notes \u2014 use file_write for those. Updates the existing entry in place; never creates duplicates.`,
         parameters: [
           { name: "entry_key", type: "string", description: 'Unique identifier for this memory, e.g. "core_facts" or "conversation_bridge_project".', required: true },
           { name: "content", type: "string", description: "The memory content to store. For core_facts: one subject per line with comma-separated facts.", required: true },
@@ -373,6 +381,28 @@ function ensureManagementPanel() {
   channelWarning.textContent = "No channels configured \u2014 this character can't send proactive messages. Add one below.";
   channelWarning.style.display = "none";
   channelsField.append(channelsLabel, channelsContainer, addChannelButton, channelsHint, channelWarning);
+  const toolsField = document.createElement("div");
+  toolsField.className = "openclaw-bridge-field";
+  const toolsLabel = document.createElement("label");
+  toolsLabel.textContent = "Tools";
+  const toolsContainer = document.createElement("div");
+  toolsContainer.className = "openclaw-bridge-tools";
+  for (const def of [...import_tool_defs.ACTION_TOOL_DEFS, ...import_tool_defs.ST_SIDE_TOOL_DEFS]) {
+    const row = document.createElement("label");
+    row.className = "openclaw-bridge-tool-row";
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.className = "openclaw-bridge-tool-toggle";
+    toggle.dataset.tool = def.type;
+    toggle.checked = true;
+    const toggleText2 = document.createElement("span");
+    toggleText2.textContent = def.displayName || def.type;
+    row.append(toggle, toggleText2);
+    toolsContainer.append(row);
+  }
+  const toolsHint = document.createElement("small");
+  toolsHint.textContent = "Untick a tool to stop this character from using it (e.g. disable Write Memory if you manage memory with your own lorebook).";
+  toolsField.append(toolsLabel, toolsContainer, toolsHint);
   const actions = document.createElement("div");
   actions.className = "openclaw-bridge-actions";
   const saveButton = document.createElement("button");
@@ -390,7 +420,7 @@ function ensureManagementPanel() {
   const authNote = document.createElement("small");
   authNote.className = "openclaw-bridge-status is-muted";
   authNote.textContent = "Uses current SillyTavern session for auth.";
-  body.append(agentField, ownerField, channelsField, actions, authNote, status);
+  body.append(agentField, ownerField, channelsField, toolsField, actions, authNote, status);
   root.append(header, body);
   container.append(root);
   STATE.managementRoot = root;
@@ -401,6 +431,7 @@ function ensureManagementPanel() {
     ownerIdsInput,
     channelsContainer,
     channelWarning,
+    toolsContainer,
     saveButton,
     testButton
   };
@@ -415,6 +446,23 @@ function ensureManagementPanel() {
     testConnection();
   });
   return root;
+}
+function toolEnabledForUi(link, type) {
+  return !(link && link.tools && link.tools[type] === false);
+}
+function collectToolToggles(toggleEls) {
+  const tools = {};
+  for (const el of toggleEls) {
+    const type = el && el.dataset && el.dataset.tool;
+    if (type) tools[type] = Boolean(el.checked);
+  }
+  return tools;
+}
+function applyToolTogglesToPanel(container, link) {
+  if (!container) return;
+  for (const el of container.querySelectorAll(".openclaw-bridge-tool-toggle")) {
+    el.checked = toolEnabledForUi(link, el.dataset.tool);
+  }
 }
 async function loadLinkState(characterName) {
   if (!characterName) {
@@ -434,6 +482,7 @@ async function loadLinkState(characterName) {
       fields.ownerIdsInput.value = "";
       fields.toggleInput.checked = false;
       fields.channelsContainer.replaceChildren();
+      applyToolTogglesToPanel(fields.toolsContainer, null);
       setManagementStatus("Not linked yet.", "muted");
       return;
     }
@@ -449,12 +498,14 @@ async function loadLinkState(characterName) {
       fields.channelsContainer.replaceChildren(
         ...(Array.isArray(link.channels) ? link.channels : []).map(renderChannelRow)
       );
+      applyToolTogglesToPanel(fields.toolsContainer, link);
       setManagementStatus(`Linked as ${link.oc_agent_id || "unknown"}.`, "success");
     } else {
       fields.ocAgentInput.value = "";
       fields.ownerIdsInput.value = "";
       fields.toggleInput.checked = false;
       fields.channelsContainer.replaceChildren();
+      applyToolTogglesToPanel(fields.toolsContainer, null);
       setManagementStatus("Not linked yet.", "muted");
     }
   } catch (error) {
@@ -490,6 +541,9 @@ async function saveLinkState() {
     }
     channels.push({ name, channel_id: channelId, kind, id });
   }
+  const tools = collectToolToggles(
+    Array.from(fields.toolsContainer ? fields.toolsContainer.querySelectorAll(".openclaw-bridge-tool-toggle") : [])
+  );
   setManagementLoading(true);
   try {
     const response = await fetch(`/api/plugins/openclaw-bridge/characters/${encodeURIComponent(characterName)}/link`, {
@@ -499,7 +553,8 @@ async function saveLinkState() {
         oc_agent_id: ocAgentId,
         owner_user_ids: ownerIds,
         active: Boolean(fields.toggleInput.checked),
-        channels
+        channels,
+        tools
       })
     });
     if (!response.ok) {
