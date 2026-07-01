@@ -790,6 +790,45 @@ describe('handleConfigWarning (#234)', () => {
     });
 });
 
+// #264: per-character tool allowlist toggles in the management panel.
+// Pure copies of the panel helpers (no browser globals), plus a source-presence guard.
+function toolEnabledForUi(link, type) {
+    return !(link && link.tools && link.tools[type] === false);
+}
+function collectToolToggles(toggleEls) {
+    const tools = {};
+    for (const el of toggleEls) {
+        const type = el && el.dataset && el.dataset.tool;
+        if (type) tools[type] = Boolean(el.checked);
+    }
+    return tools;
+}
+
+describe('management panel tool allowlist (#264)', () => {
+    test('default ON: a tool is enabled unless explicitly disabled', () => {
+        expect(toolEnabledForUi(null, 'write_memory')).toBe(true);
+        expect(toolEnabledForUi({ tools: {} }, 'write_memory')).toBe(true);
+        expect(toolEnabledForUi({ tools: { write_memory: true } }, 'write_memory')).toBe(true);
+        expect(toolEnabledForUi({ tools: { write_memory: false } }, 'write_memory')).toBe(false);
+    });
+
+    test('collectToolToggles builds a full type→boolean map from the checkboxes', () => {
+        const toggles = [
+            { dataset: { tool: 'send_message' }, checked: true },
+            { dataset: { tool: 'write_memory' }, checked: false },
+        ];
+        expect(collectToolToggles(toggles)).toEqual({ send_message: true, write_memory: false });
+    });
+
+    test('source builds tool toggles, derives them from the tool defs, and sends tools in the save body', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
+        expect(src).toContain('function toolEnabledForUi');
+        expect(src).toContain('function collectToolToggles');
+        expect(src).toContain('openclaw-bridge-tool-toggle');
+        expect(src).toMatch(/tools,/);
+    });
+});
+
 // #250: channel read-back builds { name, channel_id, kind, id } and requires all four.
 // Pure copy of the per-row build/validation logic in the management panel save handler.
 function buildChannelEntry(name, channelId, kind, id) {

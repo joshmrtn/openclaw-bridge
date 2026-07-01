@@ -14,7 +14,7 @@ const sessionManager = require('./session-manager');
 const { startWebSocketServer } = require('./ws-server');
 const headlessService = require('./headless-service');
 const lorebook = require('./lorebook');
-const { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks } = require('./action-tools');
+const { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks, isToolEnabled } = require('./action-tools');
 const ST_SIDE_TYPES = new Set(ST_SIDE_TOOLS.map(t => t.type));
 
 // Removes bracket-delimited trust tokens from user-supplied text so attacker content
@@ -37,6 +37,19 @@ function getConfiguredChannelNames(character) {
     } catch {
         return [];
     }
+}
+
+// Return the tool definitions enabled for this character (#264). Filters the full tool set by
+// the per-character allowlist so a disabled tool is never offered to the model. Never throws —
+// like getConfiguredChannelNames, a link-state read failure just yields the default (all tools).
+function getEnabledToolDefs(character) {
+    let link = null;
+    try {
+        link = linkState.getLink(character);
+    } catch {
+        link = null;
+    }
+    return [...ACTION_TOOLS, ...ST_SIDE_TOOLS].filter(tool => isToolEnabled(link, tool.type));
 }
 
 // Validate and resolve send_message actions against the character's configured channels.
@@ -343,7 +356,7 @@ async function init(router) {
         // (e.g. "discord:123456789", "telegram:42"), because that is exactly how OC labels the
         // user_id on each inbound /generate (oc-plugin/src/index.ts). A bare platform id will not
         // match at trust-label time and the owner is silently demoted to [GUEST].
-        const { oc_agent_id = null, owner_user_ids = null, heartbeat = undefined, channels = undefined } = request.body || {};
+        const { oc_agent_id = null, owner_user_ids = null, heartbeat = undefined, channels = undefined, tools = undefined } = request.body || {};
 
         if (!characterName) {
             response.status(400).json({ error: 'Character name is required' });
@@ -389,6 +402,20 @@ async function init(router) {
             }
         }
 
+        // #264: per-character tool allowlist — a flat map of tool type → boolean (enabled).
+        if (tools !== undefined && tools !== null) {
+            if (typeof tools !== 'object' || Array.isArray(tools)) {
+                response.status(400).json({ error: 'tools must be an object (tool name → boolean) or null' });
+                return;
+            }
+            for (const [name, enabled] of Object.entries(tools)) {
+                if (typeof enabled !== 'boolean') {
+                    response.status(400).json({ error: `tools.${name} must be a boolean` });
+                    return;
+                }
+            }
+        }
+
         try {
             const exists = await ensureCharacterExists(characterName);
             if (!exists) {
@@ -408,6 +435,9 @@ async function init(router) {
             }
             if (channels !== undefined) {
                 patch.channels = channels;
+            }
+            if (tools !== undefined) {
+                patch.tools = tools;
             }
             const link = await linkState.upsertLink(characterName, patch);
 
@@ -580,7 +610,7 @@ async function init(router) {
         // R10: heartbeat path — autonomous scheduled trigger, bypasses trust labels (R10.3)
         if (isHeartbeat) {
             try {
-                const heartbeatActionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS], { channels: getConfiguredChannelNames(character) });
+                const heartbeatActionPrompt = buildActionPrompt(getEnabledToolDefs(character), { channels: getConfiguredChannelNames(character) });
                 const safeHbMessage = sanitizeTrustTokens(message);
                 const heartbeatMessage = heartbeatActionPrompt
                     ? `[HEARTBEAT]\n${safeHbMessage}\n\n${heartbeatActionPrompt}`
@@ -597,9 +627,11 @@ async function init(router) {
                 const parsedHbOcActions = parsedHeartbeatActions.filter(a => !ST_SIDE_TYPES.has(a.type));
                 const parsedHbStActions = parsedHeartbeatActions.filter(a => ST_SIDE_TYPES.has(a.type));
                 const hbLink = (() => { try { return linkState.getLink(character); } catch { return null; } })();
-                const { actions, warnings: hbWarnings } = await resolveActions([...(genResult.actions || []), ...parsedHbOcActions], hbLink, character);
+                // #264: honor the per-character allowlist on the heartbeat path too.
+                const hbOcActions = [...(genResult.actions || []), ...parsedHbOcActions].filter(a => isToolEnabled(hbLink, a.type));
+                const { actions, warnings: hbWarnings } = await resolveActions(hbOcActions, hbLink, character);
                 emitConfigWarnings(character, hbWarnings);
-                const stSideActions = [...(genResult.st_side_actions || []), ...parsedHbStActions];
+                const stSideActions = [...(genResult.st_side_actions || []), ...parsedHbStActions].filter(a => isToolEnabled(hbLink, a.type));
 
                 // R11.6: process memory writes synchronously before returning
                 for (const action of stSideActions) {
@@ -661,7 +693,7 @@ async function init(router) {
             let pendingActions = [];
             let stSideActions = [];
 
-            const actionPrompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS], { channels: getConfiguredChannelNames(character) });
+            const actionPrompt = buildActionPrompt(getEnabledToolDefs(character), { channels: getConfiguredChannelNames(character) });
             const sanitizedMessage = sanitizeTrustTokens(message);
 
             // Try to label message with owner/guest if link exists.
@@ -690,8 +722,12 @@ async function init(router) {
                     generatedText = cleanText;
                     const parsedOcActions = parsedActions.filter(a => !ST_SIDE_TYPES.has(a.type));
                     const parsedStActions = parsedActions.filter(a => ST_SIDE_TYPES.has(a.type));
-                    // R5.4: only forward OC outbound actions for owner-initiated requests
-                    const rawPendingActions = isOwner ? [...(genResult.actions || []), ...parsedOcActions] : [];
+                    // R5.4: only forward OC outbound actions for owner-initiated requests.
+                    // #264: drop any tool the character's allowlist has disabled — server-side gate
+                    // so a disabled tool can't slip through via the response text.
+                    const rawPendingActions = isOwner
+                        ? [...(genResult.actions || []), ...parsedOcActions].filter(a => isToolEnabled(links, a.type))
+                        : [];
                     if (rawPendingActions.length > 0) {
                         const { actions: resolvedActions, warnings } = await resolveActions(rawPendingActions, links, character);
                         pendingActions = resolvedActions;
@@ -699,7 +735,10 @@ async function init(router) {
                     }
                     // R11: ST-side actions (memory writes) are processed by the plugin, not forwarded to OC.
                     // Only execute for owner-initiated requests — guests must not poison persistent memory (#169).
-                    stSideActions = isOwner ? [...(genResult.st_side_actions || []), ...parsedStActions] : [];
+                    // #264: also honor the per-character allowlist.
+                    stSideActions = isOwner
+                        ? [...(genResult.st_side_actions || []), ...parsedStActions].filter(a => isToolEnabled(links, a.type))
+                        : [];
                 } catch (wsError) {
                     if (!allowFallback) {
                         wsError.statusCode = 503;

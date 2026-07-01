@@ -98,6 +98,10 @@ function getLink(characterName) {
         result.channels = link.channels.map(ch => ({ ...ch }));
     }
 
+    if (link.tools && typeof link.tools === 'object' && !Array.isArray(link.tools)) {
+        result.tools = { ...link.tools };
+    }
+
     return result;
 }
 
@@ -128,6 +132,14 @@ function upsertLink(characterName, patch) {
                 delete next.channels;
             } else if (Array.isArray(patch.channels)) {
                 next.channels = patch.channels.map(ch => ({ ...ch }));
+            }
+        }
+
+        if ('tools' in patch) {
+            if (patch.tools === null) {
+                delete next.tools;
+            } else if (patch.tools && typeof patch.tools === 'object' && !Array.isArray(patch.tools)) {
+                next.tools = { ...patch.tools };
             }
         }
 

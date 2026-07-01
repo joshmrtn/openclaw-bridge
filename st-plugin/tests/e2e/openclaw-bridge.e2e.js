@@ -391,7 +391,7 @@ test('management panel active toggle persists via save', async ({ page, request,
     // Also wait for the checkbox itself to reflect the seeded active:true state.
     // The status text and checkbox are set in the same loadLinkState pass but the
     // DOM update for checked may settle slightly after the text, so we guard both.
-    await expect(page.locator('#openclaw-bridge-management input[type="checkbox"]'))
+    await expect(page.locator('#openclaw-bridge-management input.openclaw-bridge-toggle__input'))
         .toBeChecked({ timeout: 2000 });
 
     // Confirm the toggle loaded as checked, uncheck it, then click Save.
@@ -399,7 +399,7 @@ test('management panel active toggle persists via save', async ({ page, request,
     // briefly disabling the toggle between loadLinkState calls.
     const wasChecked = await page.evaluate(() => {
         const root = document.getElementById('openclaw-bridge-management');
-        const toggle = root.querySelector('input[type="checkbox"]');
+        const toggle = root.querySelector('input.openclaw-bridge-toggle__input');
         const checked = toggle.checked;
         toggle.checked = false;
         [...root.querySelectorAll('button')].find(b => b.textContent === 'Save link').click();

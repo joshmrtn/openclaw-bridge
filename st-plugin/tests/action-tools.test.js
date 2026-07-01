@@ -1,6 +1,6 @@
 'use strict';
 
-const { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks } = require('../action-tools');
+const { ACTION_TOOLS, ST_SIDE_TOOLS, buildActionPrompt, parseActionBlocks, isToolEnabled } = require('../action-tools');
 
 describe('ACTION_TOOLS registry', () => {
     test('is a non-empty array', () => {
@@ -211,6 +211,70 @@ describe('buildActionPrompt', () => {
         // write_memory and send_message should appear in the combined output
         expect(prompt).toContain('write_memory');
         expect(prompt).toContain('send_message');
+    });
+});
+
+describe('tool description disambiguation (#268)', () => {
+    test('file_write description steers journaling away from write_memory', () => {
+        const tool = ACTION_TOOLS.find(t => t.type === 'file_write');
+        expect(tool).toBeDefined();
+        expect(tool.description.toLowerCase()).toContain('journal');
+    });
+
+    test('write_memory description warns against journaling and points to file_write', () => {
+        const tool = ST_SIDE_TOOLS.find(t => t.type === 'write_memory');
+        expect(tool).toBeDefined();
+        expect(tool.description.toLowerCase()).toContain('do not use this for journaling');
+        expect(tool.description).toContain('file_write');
+    });
+
+    test('buildActionPrompt surfaces the disambiguation to the OC path', () => {
+        const prompt = buildActionPrompt([...ACTION_TOOLS, ...ST_SIDE_TOOLS]).toLowerCase();
+        expect(prompt).toContain('journal');
+        expect(prompt).toContain('do not use this for journaling');
+    });
+});
+
+describe('read_file tool (#265)', () => {
+    test('read_file is an OC-path action tool with a path parameter', () => {
+        const tool = ACTION_TOOLS.find(t => t.type === 'read_file');
+        expect(tool).toBeDefined();
+        const paramNames = tool.parameters.map(p => p.name);
+        expect(paramNames).toContain('path');
+    });
+
+    test('read_file description sets the next-turn expectation', () => {
+        const tool = ACTION_TOOLS.find(t => t.type === 'read_file');
+        expect(tool.description.toLowerCase()).toContain('next');
+    });
+
+    test('read_file appears in the OC-path prompt', () => {
+        const prompt = buildActionPrompt(ACTION_TOOLS);
+        expect(prompt).toContain('read_file');
+    });
+});
+
+describe('isToolEnabled — per-character allowlist (#264)', () => {
+    test('default ON: enabled when the link has no tools field', () => {
+        expect(isToolEnabled(null, 'write_memory')).toBe(true);
+        expect(isToolEnabled({}, 'write_memory')).toBe(true);
+        expect(isToolEnabled({ tools: {} }, 'write_memory')).toBe(true);
+    });
+
+    test('a tool is disabled ONLY when explicitly set to false', () => {
+        expect(isToolEnabled({ tools: { write_memory: false } }, 'write_memory')).toBe(false);
+    });
+
+    test('explicit true is enabled', () => {
+        expect(isToolEnabled({ tools: { write_memory: true } }, 'write_memory')).toBe(true);
+    });
+
+    test('disabling one tool does not affect others', () => {
+        const link = { tools: { write_memory: false } };
+        expect(isToolEnabled(link, 'write_memory')).toBe(false);
+        expect(isToolEnabled(link, 'send_message')).toBe(true);
+        expect(isToolEnabled(link, 'file_write')).toBe(true);
+        expect(isToolEnabled(link, 'read_file')).toBe(true);
     });
 });
 
